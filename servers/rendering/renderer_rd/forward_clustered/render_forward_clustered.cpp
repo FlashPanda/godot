@@ -1657,69 +1657,97 @@ void RenderForwardClustered::_process_sss(Ref<RenderSceneBuffersRD> p_render_buf
 }
 
 void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Color &p_default_bg_color) {
+	// 获取LightStorage单例，用于管理场景中的光源数据
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
+	// 检查渲染数据指针是否为空，如果为空则报错返回。
 	ERR_FAIL_NULL(p_render_data);
 
+	// 获取场景的渲染缓冲区
 	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
+	// 如果渲染缓冲区为空，则失败退出。
 	ERR_FAIL_COND(rb.is_null());
+	// 用于存储前向聚类的自定义数据
 	Ref<RenderBufferDataForwardClustered> rb_data;
+	// 如果当前渲染缓冲区有前向聚类的自定义数据，则获取它。
 	if (rb->has_custom_data(RB_SCOPE_FORWARD_CLUSTERED)) {
 		// Our forward clustered custom data buffer will only be available when we're rendering our normal view.
 		// This will not be available when rendering reflection probes.
+		// 只有在普通视图渲染时才会有此数据，在反射探针渲染时不可用。
 		rb_data = rb->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
 	}
+	// 判断当前是否在渲染反射探针
 	bool is_reflection_probe = p_render_data->reflection_probe.is_valid();
 
+	// 定义多重采样纹理样本数对应表
 	static const int texture_multisamples[RS::VIEWPORT_MSAA_MAX] = { 1, 2, 4, 8 };
 
 	//first of all, make a new render pass
 	//fill up ubo
 
+	// 捕获准备3D场景的时间戳
 	RENDER_TIMESTAMP("Prepare 3D Scene");
 
 	// get info about our rendering effects
+	// 检查渲染效果合成是否需要运动矢量
 	bool ce_needs_motion_vectors = _compositor_effects_has_flag(p_render_data, RS::COMPOSITOR_EFFECT_FLAG_NEEDS_MOTION_VECTORS);
+	// 检查渲染效果合成是否需要法线和粗糙度
 	bool ce_needs_normal_roughness = _compositor_effects_has_flag(p_render_data, RS::COMPOSITOR_EFFECT_FLAG_NEEDS_ROUGHNESS);
+	// 检查渲染效果合成是否需要单独的高光通道
 	bool ce_needs_separate_specular = _compositor_effects_has_flag(p_render_data, RS::COMPOSITOR_EFFECT_FLAG_NEEDS_SEPARATE_SPECULAR);
 
 	// sdfgi first
+	// 更新距离场全局照明（SDFGI）的状态
 	_update_sdfgi(p_render_data);
 
 	// assign render indices to voxel_gi_instances
+	// 为每个体素GI实例分配渲染索引
 	for (uint32_t i = 0; i < (uint32_t)p_render_data->voxel_gi_instances->size(); i++) {
 		RID voxel_gi_instance = (*p_render_data->voxel_gi_instances)[i];
 		gi.voxel_gi_instance_set_render_index(voxel_gi_instance, i);
 	}
 
 	// obtain cluster builder
+	// 获取当前的聚类构建起，用于光照聚类的构建。
 	if (light_storage->owns_reflection_probe_instance(p_render_data->reflection_probe)) {
+		// 如果当前渲染的是反射探针，则从LightStorage中获取聚类构建器。
 		current_cluster_builder = light_storage->reflection_probe_instance_get_cluster_builder(p_render_data->reflection_probe, &cluster_builder_shared);
 
+		// 如果相机属性有效，则设置反射探针的曝光值。
 		if (p_render_data->camera_attributes.is_valid()) {
 			light_storage->reflection_probe_set_baked_exposure(light_storage->reflection_probe_instance_get_probe(p_render_data->reflection_probe), RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes));
 		}
 	} else if (rb_data.is_valid()) {
+		// 如果不是反射探针，且存在前向聚类数据，则使用该数据的聚类构建器。
 		current_cluster_builder = rb_data->cluster_builder;
 
+		// 重置体素GI计数
 		p_render_data->voxel_gi_count = 0;
 
+		// 如果渲染缓冲区有SDFGI自定义数据，则进行相关更新。
 		if (rb->has_custom_data(RB_SCOPE_SDFGI)) {
+			// 获取自定义的SDFGI数据
 			Ref<RendererRD::GI::SDFGI> sdfgi = rb->get_custom_data(RB_SCOPE_SDFGI);
 			if (sdfgi.is_valid()) {
+				// 更新级联数据
 				sdfgi->update_cascades();
+				// 进行GI的预处理
 				sdfgi->pre_process_gi(p_render_data->scene_data->cam_transform, p_render_data);
+				// 更新光照数据
 				sdfgi->update_light();
 			}
 		}
 
+		// 设置体素GI实例，用于全局光照计算。
 		gi.setup_voxel_gi_instances(p_render_data, p_render_data->render_buffers, p_render_data->scene_data->cam_transform, *p_render_data->voxel_gi_instances, p_render_data->voxel_gi_count);
 	} else {
+		// 如果没有渲染缓冲区和反射探针数据，则报错并返回。
 		ERR_PRINT("No render buffer nor reflection atlas, bug"); // Should never happen!
 		current_cluster_builder = nullptr;
 		return; // No point in continuing, we'll just crash.
 	}
 
+	// 确保聚类构建器有效。
 	ERR_FAIL_NULL(current_cluster_builder);
 
 	p_render_data->cluster_buffer = current_cluster_builder->get_cluster_buffer();
