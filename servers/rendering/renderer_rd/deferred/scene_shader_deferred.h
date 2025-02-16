@@ -37,9 +37,9 @@
 
 namespace RendererSceneRenderImplementation {
 
-class SceneShaderForwardClustered {
+class SceneShaderDeferred {
 private:
-	static SceneShaderForwardClustered *singleton;
+	static SceneShaderDeferred*singleton;
 	static Mutex singleton_mutex;
 
 public:
@@ -293,7 +293,7 @@ public:
 
 	RendererRD::MaterialStorage::ShaderData *_create_shader_func();
 	static RendererRD::MaterialStorage::ShaderData *_create_shader_funcs() {
-		return static_cast<SceneShaderForwardClustered *>(singleton)->_create_shader_func();
+		return static_cast<SceneShaderDeferred*>(singleton)->_create_shader_func();
 	}
 
 	struct MaterialData : public RendererRD::MaterialStorage::MaterialData {
@@ -311,7 +311,7 @@ public:
 
 	RendererRD::MaterialStorage::MaterialData *_create_material_func(ShaderData *p_shader);
 	static RendererRD::MaterialStorage::MaterialData *_create_material_funcs(RendererRD::MaterialStorage::ShaderData *p_shader) {
-		return static_cast<SceneShaderForwardClustered *>(singleton)->_create_material_func(static_cast<ShaderData *>(p_shader));
+		return static_cast<SceneShaderDeferred*>(singleton)->_create_material_func(static_cast<ShaderData *>(p_shader));
 	}
 
 	SceneForwardClusteredShaderRD shader;
@@ -344,8 +344,8 @@ public:
 
 	uint32_t pipeline_compilations[RS::PIPELINE_SOURCE_MAX] = {};
 
-	SceneShaderForwardClustered();
-	~SceneShaderForwardClustered();
+	SceneShaderDeferred();
+	~SceneShaderDeferred();
 
 	void init(const String p_defines);
 	void set_default_specialization(const ShaderSpecialization &p_specialization);

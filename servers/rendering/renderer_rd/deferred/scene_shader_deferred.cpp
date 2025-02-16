@@ -37,7 +37,7 @@
 
 using namespace RendererSceneRenderImplementation;
 
-void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
+void SceneShaderDeferred::ShaderData::set_code(const String &p_code) {
 	//compile
 
 	code = p_code;
@@ -141,19 +141,19 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 
 	actions.uniforms = &uniforms;
 
-	MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
-	Error err = SceneShaderForwardClustered::singleton->compiler.compile(RS::SHADER_SPATIAL, code, &actions, path, gen_code);
+	MutexLock lock(SceneShaderDeferred::singleton_mutex);
+	Error err = SceneShaderDeferred::singleton->compiler.compile(RS::SHADER_SPATIAL, code, &actions, path, gen_code);
 
 	if (err != OK) {
 		if (version.is_valid()) {
-			SceneShaderForwardClustered::singleton->shader.version_free(version);
+			SceneShaderDeferred::singleton->shader.version_free(version);
 			version = RID();
 		}
 		ERR_FAIL_MSG("Shader compilation failed.");
 	}
 
 	if (version.is_null()) {
-		version = SceneShaderForwardClustered::singleton->shader.version_create();
+		version = SceneShaderDeferred::singleton->shader.version_create();
 	}
 
 	depth_draw = DepthDraw(depth_drawi);
@@ -185,7 +185,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	print_line("\n**vertex_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX]);
 	print_line("\n**fragment_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT]);
 #endif
-	SceneShaderForwardClustered::singleton->shader.version_set_code(version, gen_code.code, gen_code.uniforms, gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX], gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT], gen_code.defines);
+	SceneShaderDeferred::singleton->shader.version_set_code(version, gen_code.code, gen_code.uniforms, gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX], gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT], gen_code.defines);
 
 	ubo_size = gen_code.uniform_total_size;
 	ubo_offsets = gen_code.uniform_offsets;
@@ -201,11 +201,11 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	uses_blend_alpha = blend_mode_uses_blend_alpha(BlendMode(blend_mode));
 }
 
-bool SceneShaderForwardClustered::ShaderData::is_animated() const {
+bool SceneShaderDeferred::ShaderData::is_animated() const {
 	return (uses_fragment_time && uses_discard) || (uses_vertex_time && uses_vertex);
 }
 
-bool SceneShaderForwardClustered::ShaderData::casts_shadows() const {
+bool SceneShaderDeferred::ShaderData::casts_shadows() const {
 	bool has_read_screen_alpha = uses_screen_texture || uses_depth_texture || uses_normal_texture;
 	bool has_base_alpha = (uses_alpha && (!uses_alpha_clip || uses_alpha_antialiasing)) || has_read_screen_alpha;
 	bool has_alpha = has_base_alpha || uses_blend_alpha;
@@ -213,16 +213,16 @@ bool SceneShaderForwardClustered::ShaderData::casts_shadows() const {
 	return !has_alpha || (uses_depth_prepass_alpha && !(depth_draw == DEPTH_DRAW_DISABLED || depth_test == DEPTH_TEST_DISABLED));
 }
 
-RS::ShaderNativeSourceCode SceneShaderForwardClustered::ShaderData::get_native_source_code() const {
+RS::ShaderNativeSourceCode SceneShaderDeferred::ShaderData::get_native_source_code() const {
 	if (version.is_valid()) {
-		MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
-		return SceneShaderForwardClustered::singleton->shader.version_get_native_source_code(version);
+		MutexLock lock(SceneShaderDeferred::singleton_mutex);
+		return SceneShaderDeferred::singleton->shader.version_get_native_source_code(version);
 	} else {
 		return RS::ShaderNativeSourceCode();
 	}
 }
 
-uint16_t SceneShaderForwardClustered::ShaderData::_get_shader_version(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) const {
+uint16_t SceneShaderDeferred::ShaderData::_get_shader_version(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) const {
 	uint32_t ubershader_base = p_ubershader ? ShaderVersion::SHADER_VERSION_DEPTH_PASS_WITH_MATERIAL : 0;
 	switch (p_pipeline_version) {
 		case PIPELINE_VERSION_DEPTH_PASS:
@@ -275,7 +275,7 @@ uint16_t SceneShaderForwardClustered::ShaderData::_get_shader_version(PipelineVe
 	}
 }
 
-void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pipeline_key) {
+void SceneShaderDeferred::ShaderData::_create_pipeline(PipelineKey p_pipeline_key) {
 #if PRINT_PIPELINE_COMPILATION_KEYS
 	print_line(
 			"HASH:", p_pipeline_key.hash(),
@@ -394,7 +394,7 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
 	pipeline_hash_map.add_compiled_pipeline(p_pipeline_key.hash(), pipeline);
 }
 
-RD::PolygonCullMode SceneShaderForwardClustered::ShaderData::get_cull_mode_from_cull_variant(CullVariant p_cull_variant) {
+RD::PolygonCullMode SceneShaderDeferred::ShaderData::get_cull_mode_from_cull_variant(CullVariant p_cull_variant) {
 	const RD::PolygonCullMode cull_mode_rd_table[CULL_VARIANT_MAX][3] = {
 		{ RD::POLYGON_CULL_DISABLED, RD::POLYGON_CULL_FRONT, RD::POLYGON_CULL_BACK },
 		{ RD::POLYGON_CULL_DISABLED, RD::POLYGON_CULL_BACK, RD::POLYGON_CULL_FRONT },
@@ -404,27 +404,27 @@ RD::PolygonCullMode SceneShaderForwardClustered::ShaderData::get_cull_mode_from_
 	return cull_mode_rd_table[p_cull_variant][cull_mode];
 }
 
-RID SceneShaderForwardClustered::ShaderData::_get_shader_variant(uint16_t p_shader_version) const {
+RID SceneShaderDeferred::ShaderData::_get_shader_variant(uint16_t p_shader_version) const {
 	if (version.is_valid()) {
-		MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
-		ERR_FAIL_NULL_V(SceneShaderForwardClustered::singleton, RID());
-		return SceneShaderForwardClustered::singleton->shader.version_get_shader(version, p_shader_version);
+		MutexLock lock(SceneShaderDeferred::singleton_mutex);
+		ERR_FAIL_NULL_V(SceneShaderDeferred::singleton, RID());
+		return SceneShaderDeferred::singleton->shader.version_get_shader(version, p_shader_version);
 	} else {
 		return RID();
 	}
 }
 
-void SceneShaderForwardClustered::ShaderData::_clear_vertex_input_mask_cache() {
+void SceneShaderDeferred::ShaderData::_clear_vertex_input_mask_cache() {
 	for (uint32_t i = 0; i < VERTEX_INPUT_MASKS_SIZE; i++) {
 		vertex_input_masks[i].store(0);
 	}
 }
 
-RID SceneShaderForwardClustered::ShaderData::get_shader_variant(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) const {
+RID SceneShaderDeferred::ShaderData::get_shader_variant(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) const {
 	return _get_shader_variant(_get_shader_version(p_pipeline_version, p_color_pass_flags, p_ubershader));
 }
 
-uint64_t SceneShaderForwardClustered::ShaderData::get_vertex_input_mask(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) {
+uint64_t SceneShaderDeferred::ShaderData::get_vertex_input_mask(PipelineVersion p_pipeline_version, uint32_t p_color_pass_flags, bool p_ubershader) {
 	// Vertex input masks require knowledge of the shader. Since querying the shader can be expensive due to high contention and the necessary mutex, we cache the result instead.
 	uint16_t shader_version = _get_shader_version(p_pipeline_version, p_color_pass_flags, p_ubershader);
 	uint64_t input_mask = vertex_input_masks[shader_version].load(std::memory_order_relaxed);
@@ -439,76 +439,76 @@ uint64_t SceneShaderForwardClustered::ShaderData::get_vertex_input_mask(Pipeline
 	return input_mask;
 }
 
-bool SceneShaderForwardClustered::ShaderData::is_valid() const {
+bool SceneShaderDeferred::ShaderData::is_valid() const {
 	if (version.is_valid()) {
-		MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
-		ERR_FAIL_NULL_V(SceneShaderForwardClustered::singleton, false);
-		return SceneShaderForwardClustered::singleton->shader.version_is_valid(version);
+		MutexLock lock(SceneShaderDeferred::singleton_mutex);
+		ERR_FAIL_NULL_V(SceneShaderDeferred::singleton, false);
+		return SceneShaderDeferred::singleton->shader.version_is_valid(version);
 	} else {
 		return false;
 	}
 }
 
-SceneShaderForwardClustered::ShaderData::ShaderData() :
+SceneShaderDeferred::ShaderData::ShaderData() :
 		shader_list_element(this) {
 	pipeline_hash_map.set_creation_object_and_function(this, &ShaderData::_create_pipeline);
-	pipeline_hash_map.set_compilations(SceneShaderForwardClustered::singleton->pipeline_compilations, &SceneShaderForwardClustered::singleton_mutex);
+	pipeline_hash_map.set_compilations(SceneShaderDeferred::singleton->pipeline_compilations, &SceneShaderDeferred::singleton_mutex);
 }
 
-SceneShaderForwardClustered::ShaderData::~ShaderData() {
+SceneShaderDeferred::ShaderData::~ShaderData() {
 	pipeline_hash_map.clear_pipelines();
 
 	if (version.is_valid()) {
-		MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
-		ERR_FAIL_NULL(SceneShaderForwardClustered::singleton);
-		SceneShaderForwardClustered::singleton->shader.version_free(version);
+		MutexLock lock(SceneShaderDeferred::singleton_mutex);
+		ERR_FAIL_NULL(SceneShaderDeferred::singleton);
+		SceneShaderDeferred::singleton->shader.version_free(version);
 	}
 }
 
-RendererRD::MaterialStorage::ShaderData *SceneShaderForwardClustered::_create_shader_func() {
-	MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
+RendererRD::MaterialStorage::ShaderData * SceneShaderDeferred::_create_shader_func() {
+	MutexLock lock(SceneShaderDeferred::singleton_mutex);
 	ShaderData *shader_data = memnew(ShaderData);
 	singleton->shader_list.add(&shader_data->shader_list_element);
 	return shader_data;
 }
 
-void SceneShaderForwardClustered::MaterialData::set_render_priority(int p_priority) {
+void SceneShaderDeferred::MaterialData::set_render_priority(int p_priority) {
 	priority = p_priority - RS::MATERIAL_RENDER_PRIORITY_MIN; //8 bits
 }
 
-void SceneShaderForwardClustered::MaterialData::set_next_pass(RID p_pass) {
+void SceneShaderDeferred::MaterialData::set_next_pass(RID p_pass) {
 	next_pass = p_pass;
 }
 
-bool SceneShaderForwardClustered::MaterialData::update_parameters(const HashMap<StringName, Variant> &p_parameters, bool p_uniform_dirty, bool p_textures_dirty) {
+bool SceneShaderDeferred::MaterialData::update_parameters(const HashMap<StringName, Variant> &p_parameters, bool p_uniform_dirty, bool p_textures_dirty) {
 	if (shader_data->version.is_valid()) {
-		MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
-		return update_parameters_uniform_set(p_parameters, p_uniform_dirty, p_textures_dirty, shader_data->uniforms, shader_data->ubo_offsets.ptr(), shader_data->texture_uniforms, shader_data->default_texture_params, shader_data->ubo_size, uniform_set, SceneShaderForwardClustered::singleton->shader.version_get_shader(shader_data->version, 0), RenderForwardClustered::MATERIAL_UNIFORM_SET, true, true);
+		MutexLock lock(SceneShaderDeferred::singleton_mutex);
+		return update_parameters_uniform_set(p_parameters, p_uniform_dirty, p_textures_dirty, shader_data->uniforms, shader_data->ubo_offsets.ptr(), shader_data->texture_uniforms, shader_data->default_texture_params, shader_data->ubo_size, uniform_set, SceneShaderDeferred::singleton->shader.version_get_shader(shader_data->version, 0), RenderDeferred::MATERIAL_UNIFORM_SET, true, true);
 	} else {
 		return false;
 	}
 }
 
-SceneShaderForwardClustered::MaterialData::~MaterialData() {
+SceneShaderDeferred::MaterialData::~MaterialData() {
 	free_parameters_uniform_set(uniform_set);
 }
 
-RendererRD::MaterialStorage::MaterialData *SceneShaderForwardClustered::_create_material_func(ShaderData *p_shader) {
+RendererRD::MaterialStorage::MaterialData * SceneShaderDeferred::_create_material_func(ShaderData *p_shader) {
 	MaterialData *material_data = memnew(MaterialData);
 	material_data->shader_data = p_shader;
 	//update will happen later anyway so do nothing.
 	return material_data;
 }
 
-SceneShaderForwardClustered *SceneShaderForwardClustered::singleton = nullptr;
-Mutex SceneShaderForwardClustered::singleton_mutex;
+SceneShaderDeferred* SceneShaderDeferred::singleton = nullptr;
+Mutex SceneShaderDeferred::singleton_mutex;
 
-SceneShaderForwardClustered::SceneShaderForwardClustered() {
+SceneShaderDeferred::SceneShaderDeferred() {
 	// there should be only one of these, contained within our RenderFM singleton.
 	singleton = this;
 }
 
-SceneShaderForwardClustered::~SceneShaderForwardClustered() {
+SceneShaderDeferred::~SceneShaderDeferred() {
 	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 
 	RD::get_singleton()->free(default_vec4_xform_buffer);
@@ -523,7 +523,7 @@ SceneShaderForwardClustered::~SceneShaderForwardClustered() {
 	material_storage->material_free(debug_shadow_splits_material);
 }
 
-void SceneShaderForwardClustered::init(const String p_defines) {
+void SceneShaderDeferred::init(const String p_defines) {
 	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 
 	{
@@ -766,7 +766,7 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		actions.render_mode_defines["fog_disabled"] = "#define FOG_DISABLED\n";
 
 		actions.base_texture_binding_index = 1;
-		actions.texture_layout_set = RenderForwardClustered::MATERIAL_UNIFORM_SET;
+		actions.texture_layout_set = RenderDeferred::MATERIAL_UNIFORM_SET;
 		actions.base_uniform_string = "material.";
 		actions.base_varying_index = 14;
 
@@ -868,7 +868,7 @@ void fragment() {
 		u.binding = 0;
 		uniforms.push_back(u);
 
-		default_vec4_xform_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, default_shader_rd, RenderForwardClustered::TRANSFORMS_UNIFORM_SET);
+		default_vec4_xform_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, default_shader_rd, RenderDeferred::TRANSFORMS_UNIFORM_SET);
 	}
 	{
 		RD::SamplerState sampler;
@@ -880,7 +880,7 @@ void fragment() {
 	}
 }
 
-void SceneShaderForwardClustered::set_default_specialization(const ShaderSpecialization &p_specialization) {
+void SceneShaderDeferred::set_default_specialization(const ShaderSpecialization &p_specialization) {
 	default_specialization = p_specialization;
 
 	for (SelfList<ShaderData> *E = shader_list.first(); E; E = E->next()) {
@@ -888,18 +888,18 @@ void SceneShaderForwardClustered::set_default_specialization(const ShaderSpecial
 	}
 }
 
-void SceneShaderForwardClustered::enable_advanced_shader_group(bool p_needs_multiview) {
+void SceneShaderDeferred::enable_advanced_shader_group(bool p_needs_multiview) {
 	if (p_needs_multiview || RendererCompositorRD::get_singleton()->is_xr_enabled()) {
 		shader.enable_group(SHADER_GROUP_ADVANCED_MULTIVIEW);
 	}
 	shader.enable_group(SHADER_GROUP_ADVANCED);
 }
 
-bool SceneShaderForwardClustered::is_multiview_shader_group_enabled() const {
+bool SceneShaderDeferred::is_multiview_shader_group_enabled() const {
 	return shader.is_group_enabled(SHADER_GROUP_MULTIVIEW);
 }
 
-bool SceneShaderForwardClustered::is_advanced_shader_group_enabled(bool p_multiview) const {
+bool SceneShaderDeferred::is_advanced_shader_group_enabled(bool p_multiview) const {
 	if (p_multiview) {
 		return shader.is_group_enabled(SHADER_GROUP_ADVANCED_MULTIVIEW);
 	} else {
@@ -907,7 +907,7 @@ bool SceneShaderForwardClustered::is_advanced_shader_group_enabled(bool p_multiv
 	}
 }
 
-uint32_t SceneShaderForwardClustered::get_pipeline_compilations(RS::PipelineSource p_source) {
-	MutexLock lock(SceneShaderForwardClustered::singleton_mutex);
+uint32_t SceneShaderDeferred::get_pipeline_compilations(RS::PipelineSource p_source) {
+	MutexLock lock(SceneShaderDeferred::singleton_mutex);
 	return pipeline_compilations[p_source];
 }

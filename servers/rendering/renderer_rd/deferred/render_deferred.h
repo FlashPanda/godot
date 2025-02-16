@@ -28,8 +28,8 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef RENDER_FORWARD_CLUSTERED_H
-#define RENDER_FORWARD_CLUSTERED_H
+#ifndef RENDER_DEFERRED_H
+#define RENDER_DEFERRED_H
 
 #include "core/templates/paged_allocator.h"
 #include "servers/rendering/renderer_rd/cluster_builder_rd.h"
@@ -56,8 +56,8 @@
 
 namespace RendererSceneRenderImplementation {
 
-class RenderForwardClustered : public RendererSceneRenderRD {
-	friend SceneShaderForwardClustered;
+class RenderDeferred : public RendererSceneRenderRD {
+	friend SceneShaderDeferred;
 
 	enum {
 		SCENE_UNIFORM_SET = 0,
@@ -84,13 +84,13 @@ class RenderForwardClustered : public RendererSceneRenderRD {
 
 	/* Scene Shader */
 
-	SceneShaderForwardClustered scene_shader;
+	SceneShaderDeferred scene_shader;
 
 public:
 	/* Framebuffer */
 
-	class RenderBufferDataForwardClustered : public RenderBufferCustomDataRD {
-		GDCLASS(RenderBufferDataForwardClustered, RenderBufferCustomDataRD)
+	class RenderBufferDataDeferred : public RenderBufferCustomDataRD {
+		GDCLASS(RenderBufferDataDeferred, RenderBufferCustomDataRD)
 
 	private:
 		RenderSceneBuffersRD *render_buffers = nullptr;
@@ -220,9 +220,9 @@ private:
 		RD::FramebufferFormatID framebuffer_format = 0;
 		uint32_t element_offset = 0;
 		bool use_directional_soft_shadow = false;
-		SceneShaderForwardClustered::ShaderSpecialization base_specialization = {};
+		SceneShaderDeferred::ShaderSpecialization base_specialization = {};
 
-		RenderListParameters(GeometryInstanceSurfaceDataCache **p_elements, RenderElementInfo *p_element_info, int p_element_count, bool p_reverse_cull, PassMode p_pass_mode, uint32_t p_color_pass_flags, bool p_no_gi, bool p_use_directional_soft_shadows, RID p_render_pass_uniform_set, bool p_force_wireframe = false, const Vector2 &p_uv_offset = Vector2(), float p_lod_distance_multiplier = 0.0, float p_screen_mesh_lod_threshold = 0.0, uint32_t p_view_count = 1, uint32_t p_element_offset = 0, SceneShaderForwardClustered::ShaderSpecialization p_base_specialization = {}) {
+		RenderListParameters(GeometryInstanceSurfaceDataCache **p_elements, RenderElementInfo *p_element_info, int p_element_count, bool p_reverse_cull, PassMode p_pass_mode, uint32_t p_color_pass_flags, bool p_no_gi, bool p_use_directional_soft_shadows, RID p_render_pass_uniform_set, bool p_force_wireframe = false, const Vector2 &p_uv_offset = Vector2(), float p_lod_distance_multiplier = 0.0, float p_screen_mesh_lod_threshold = 0.0, uint32_t p_view_count = 1, uint32_t p_element_offset = 0, SceneShaderDeferred::ShaderSpecialization p_base_specialization = {}) {
 			elements = p_elements;
 			element_info = p_element_info;
 			element_count = p_element_count;
@@ -302,8 +302,8 @@ private:
 		};
 
 		struct PushConstantUbershader {
-			SceneShaderForwardClustered::ShaderSpecialization specialization;
-			SceneShaderForwardClustered::UbershaderConstants constants;
+			SceneShaderDeferred::ShaderSpecialization specialization;
+			SceneShaderDeferred::UbershaderConstants constants;
 		};
 
 		struct PushConstant {
@@ -375,7 +375,7 @@ private:
 
 	} scene_state;
 
-	static RenderForwardClustered *singleton;
+	static RenderDeferred *singleton;
 
 	void _setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Color &p_default_bg_color, bool p_opaque_render_buffers = false, bool p_apply_alpha_multiplier = false, bool p_pancake_shadows = false, int p_index = 0);
 	void _setup_voxelgis(const PagedArray<RID> &p_voxelgis);
@@ -403,7 +403,7 @@ private:
 	HashMap<Size2i, RID> sdfgi_framebuffer_size_cache;
 
 	struct GeometryInstanceData;
-	class GeometryInstanceForwardClustered;
+	class GeometryInstanceDeferred;
 
 	struct GeometryInstanceLightmapSH {
 		Color sh[9];
@@ -455,15 +455,15 @@ private:
 
 		void *surface = nullptr;
 		RID material_uniform_set;
-		SceneShaderForwardClustered::ShaderData *shader = nullptr;
-		SceneShaderForwardClustered::MaterialData *material = nullptr;
+		SceneShaderDeferred::ShaderData *shader = nullptr;
+		SceneShaderDeferred::MaterialData *material = nullptr;
 
 		void *surface_shadow = nullptr;
 		RID material_uniform_set_shadow;
-		SceneShaderForwardClustered::ShaderData *shader_shadow = nullptr;
+		SceneShaderDeferred::ShaderData *shader_shadow = nullptr;
 
 		GeometryInstanceSurfaceDataCache *next = nullptr;
-		GeometryInstanceForwardClustered *owner = nullptr;
+		GeometryInstanceDeferred *owner = nullptr;
 		SelfList<GeometryInstanceSurfaceDataCache> compilation_dirty_element;
 		SelfList<GeometryInstanceSurfaceDataCache> compilation_all_element;
 
@@ -471,7 +471,7 @@ private:
 				compilation_dirty_element(this), compilation_all_element(this) {}
 	};
 
-	class GeometryInstanceForwardClustered : public RenderGeometryInstanceBase {
+	class GeometryInstanceDeferred : public RenderGeometryInstanceBase {
 	public:
 		// lightmap
 		RID lightmap_instance;
@@ -496,9 +496,9 @@ private:
 		Transform3D prev_transform;
 		RID voxel_gi_instances[MAX_VOXEL_GI_INSTANCESS_PER_INSTANCE];
 		GeometryInstanceSurfaceDataCache *surface_caches = nullptr;
-		SelfList<GeometryInstanceForwardClustered> dirty_list_element;
+		SelfList<GeometryInstanceDeferred> dirty_list_element;
 
-		GeometryInstanceForwardClustered() :
+		GeometryInstanceDeferred() :
 				dirty_list_element(this) {}
 
 		virtual void _mark_dirty() override;
@@ -518,19 +518,19 @@ private:
 	static void _geometry_instance_dependency_changed(Dependency::DependencyChangedNotification p_notification, DependencyTracker *p_tracker);
 	static void _geometry_instance_dependency_deleted(const RID &p_dependency, DependencyTracker *p_tracker);
 
-	SelfList<GeometryInstanceForwardClustered>::List geometry_instance_dirty_list;
+	SelfList<GeometryInstanceDeferred>::List geometry_instance_dirty_list;
 	SelfList<GeometryInstanceSurfaceDataCache>::List geometry_surface_compilation_dirty_list;
 	SelfList<GeometryInstanceSurfaceDataCache>::List geometry_surface_compilation_all_list;
 
-	PagedAllocator<GeometryInstanceForwardClustered> geometry_instance_alloc;
+	PagedAllocator<GeometryInstanceDeferred> geometry_instance_alloc;
 	PagedAllocator<GeometryInstanceSurfaceDataCache> geometry_instance_surface_alloc;
 	PagedAllocator<GeometryInstanceLightmapSH> geometry_instance_lightmap_sh;
 
 	struct SurfacePipelineData {
 		void *mesh_surface = nullptr;
 		void *mesh_surface_shadow = nullptr;
-		SceneShaderForwardClustered::ShaderData *shader = nullptr;
-		SceneShaderForwardClustered::ShaderData *shader_shadow = nullptr;
+		SceneShaderDeferred::ShaderData *shader = nullptr;
+		SceneShaderDeferred::ShaderData *shader_shadow = nullptr;
 		bool instanced = false;
 		bool uses_opaque = false;
 		bool uses_transparent = false;
@@ -563,15 +563,15 @@ private:
 	GlobalPipelineData global_pipeline_data_compiled = {};
 	GlobalPipelineData global_pipeline_data_required = {};
 
-	typedef Pair<SceneShaderForwardClustered::ShaderData *, SceneShaderForwardClustered::ShaderData::PipelineKey> ShaderPipelinePair;
+	typedef Pair<SceneShaderDeferred::ShaderData *, SceneShaderDeferred::ShaderData::PipelineKey> ShaderPipelinePair;
 
 	void _update_global_pipeline_data_requirements_from_project();
 	void _update_global_pipeline_data_requirements_from_light_storage();
-	void _geometry_instance_add_surface_with_material(GeometryInstanceForwardClustered *ginstance, uint32_t p_surface, SceneShaderForwardClustered::MaterialData *p_material, uint32_t p_material_id, uint32_t p_shader_id, RID p_mesh);
-	void _geometry_instance_add_surface_with_material_chain(GeometryInstanceForwardClustered *ginstance, uint32_t p_surface, SceneShaderForwardClustered::MaterialData *p_material, RID p_mat_src, RID p_mesh);
-	void _geometry_instance_add_surface(GeometryInstanceForwardClustered *ginstance, uint32_t p_surface, RID p_material, RID p_mesh);
+	void _geometry_instance_add_surface_with_material(GeometryInstanceDeferred *ginstance, uint32_t p_surface, SceneShaderDeferred::MaterialData *p_material, uint32_t p_material_id, uint32_t p_shader_id, RID p_mesh);
+	void _geometry_instance_add_surface_with_material_chain(GeometryInstanceDeferred*ginstance, uint32_t p_surface, SceneShaderDeferred::MaterialData *p_material, RID p_mat_src, RID p_mesh);
+	void _geometry_instance_add_surface(GeometryInstanceDeferred*ginstance, uint32_t p_surface, RID p_material, RID p_mesh);
 	void _geometry_instance_update(RenderGeometryInstance *p_geometry_instance);
-	void _mesh_compile_pipeline_for_surface(SceneShaderForwardClustered::ShaderData *p_shader, void *p_mesh_surface, bool p_ubershader, bool p_instanced_surface, RS::PipelineSource p_source, SceneShaderForwardClustered::ShaderData::PipelineKey &r_pipeline_key, Vector<ShaderPipelinePair> *r_pipeline_pairs = nullptr);
+	void _mesh_compile_pipeline_for_surface(SceneShaderDeferred::ShaderData *p_shader, void *p_mesh_surface, bool p_ubershader, bool p_instanced_surface, RS::PipelineSource p_source, SceneShaderDeferred::ShaderData::PipelineKey &r_pipeline_key, Vector<ShaderPipelinePair> *r_pipeline_pairs = nullptr);
 	void _mesh_compile_pipelines_for_surface(const SurfacePipelineData &p_surface, const GlobalPipelineData &p_global, RS::PipelineSource p_source, Vector<ShaderPipelinePair> *r_pipeline_pairs = nullptr);
 	void _mesh_generate_all_pipelines_for_surface_cache(GeometryInstanceSurfaceDataCache *p_surface_cache, const GlobalPipelineData &p_global);
 	void _update_dirty_geometry_instances();
@@ -707,7 +707,7 @@ protected:
 	virtual void _render_particle_collider_heightfield(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances) override;
 
 public:
-	static RenderForwardClustered *get_singleton() { return singleton; }
+	static RenderDeferred *get_singleton() { return singleton; }
 
 	ClusterBuilderSharedDataRD *get_cluster_builder_shared() { return &cluster_builder_shared; }
 	RendererRD::SSEffects *get_ss_effects() { return ss_effects; }
@@ -743,8 +743,8 @@ public:
 
 	virtual void update() override;
 
-	RenderForwardClustered();
-	~RenderForwardClustered();
+	RenderDeferred();
+	~RenderDeferred();
 };
 } // namespace RendererSceneRenderImplementation
 

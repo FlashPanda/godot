@@ -796,7 +796,7 @@ void main() {
 #define SHADER_IS_SRGB false
 #define SHADER_SPACE_FAR 0.0
 
-#include "scene_forward_clustered_inc.glsl"
+#include "scene_deferred_inc.glsl"
 
 /* Varyings */
 
