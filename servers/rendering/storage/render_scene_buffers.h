@@ -98,6 +98,14 @@ public:
 	virtual ~RenderSceneBuffersConfiguration() {}
 };
 
+/**
+ * Abstract scene buffers object, created for each viewport for which 3D rendering is done. It manages any additional buffers used during rendering and will discard buffers when the viewport is resized.
+ * 抽象场景缓冲对象，会为每个需要进行 3D 渲染的视口创建。
+ * 它会管理所有在渲染过程中用到的额外的缓冲区，并且会在视口大小改变的时候丢弃缓冲区。
+ *
+ * Note: This is an internal rendering server object, do not instantiate this from script.
+ * 注意：这事内部的渲染服务对象，不要在脚本中实例化它。
+ */
 class RenderSceneBuffers : public RefCounted {
 	GDCLASS(RenderSceneBuffers, RefCounted);
 
@@ -111,6 +119,7 @@ public:
 	virtual void configure(const RenderSceneBuffersConfiguration *p_config) = 0;
 
 	// for those settings that are unlikely to require buffers to be recreated, we'll add setters
+	// 对于那些更改后几乎不需要重新分配或重建缓冲区的配置项，我们可以通过添加 setter 方法来更新它们
 	virtual void set_fsr_sharpness(float p_fsr_sharpness) = 0;
 	virtual void set_texture_mipmap_bias(float p_texture_mipmap_bias) = 0;
 	virtual void set_anisotropic_filtering_level(RS::ViewportAnisotropicFiltering p_anisotropic_filtering_level) = 0;

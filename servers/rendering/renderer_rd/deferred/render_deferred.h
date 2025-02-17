@@ -67,18 +67,18 @@ class RenderDeferred : public RendererSceneRenderRD {
 	};
 
 	enum {
-		SDFGI_MAX_CASCADES = 8,
-		MAX_VOXEL_GI_INSTANCESS = 8,
-		MAX_LIGHTMAPS = 8,
-		MAX_VOXEL_GI_INSTANCESS_PER_INSTANCE = 2,
-		INSTANCE_DATA_BUFFER_MIN_SIZE = 4096
+		SDFGI_MAX_CASCADES = 8,				// SDFGI支持的最大的级联数量
+		MAX_VOXEL_GI_INSTANCESS = 8,		// 最大可用的体素GI实例（Ｖｏｘｅｌ　ＧＩ）数量
+		MAX_LIGHTMAPS = 8,					// 最大可用的光照贴图数量
+		MAX_VOXEL_GI_INSTANCESS_PER_INSTANCE = 2,	// 对于单个对象可使用的体素GI实例数量上限
+		INSTANCE_DATA_BUFFER_MIN_SIZE = 4096		// 用于存储实例化数据的缓冲区最小大小。
 	};
 
 	enum RenderListType {
-		RENDER_LIST_OPAQUE, //used for opaque objects
-		RENDER_LIST_MOTION, //used for opaque objects with motion
-		RENDER_LIST_ALPHA, //used for transparent objects
-		RENDER_LIST_SECONDARY, //used for shadows and other objects
+		RENDER_LIST_OPAQUE, //used for opaque objects，不透明物体渲染列表
+		RENDER_LIST_MOTION, //used for opaque objects with motion，带运动模糊的不透明物体渲染列表
+		RENDER_LIST_ALPHA, //used for transparent objects，透明物体渲染列表
+		RENDER_LIST_SECONDARY, //used for shadows and other objects，阴影与其他物体渲染列表
 		RENDER_LIST_MAX
 	};
 

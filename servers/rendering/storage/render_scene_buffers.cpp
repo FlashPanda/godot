@@ -73,6 +73,7 @@ void RenderSceneBuffersConfiguration::_bind_methods() {
 }
 
 void RenderSceneBuffers::_bind_methods() {
+	// 绑定到脚本层
 	ClassDB::bind_method(D_METHOD("configure", "config"), &RenderSceneBuffers::configure);
 }
 
