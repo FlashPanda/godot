@@ -54,6 +54,12 @@
 #define FSR2_UBO_RING_BUFFER_SIZE (FSR2_MAX_BUFFERED_DESCRIPTORS * FSR2_MAX_UNIFORM_BUFFERS)
 
 namespace RendererRD {
+/**
+ * 封装了 FSR2（FidelityFX Super Resolution 2）在 Godot 中所需资源与上下文的管理类，用来与 AMD 提供的 FSR2 库进行交互。
+ *
+ * FSR（FidelityFX™ Super Resolution） 是 AMD 推出的图像空间放大（超分辨率）技术，旨在以较低的渲染分辨率进行绘制后，
+ * 通过先进的重建和锐化算法将画面放大到更高分辨率，从而在尽量保证画面质量的同时，显著提升游戏或实时应用的渲染性能。
+ */
 class FSR2Context {
 public:
 	enum ResourceID : uint32_t {

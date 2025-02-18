@@ -61,6 +61,22 @@
 #define RB_TEX_BACK_COLOR SNAME("back_color")
 #define RB_TEX_BACK_DEPTH SNAME("back_depth")
 
+/**
+ * Render scene buffer implementation for the RenderingDevice based renderers.
+ * This object manages all 3D rendering buffers for the rendering device based renderers. An instance of this object is created for every viewport that has 3D rendering enabled.
+ * 基于RD的渲染器的渲染场景缓冲实现。
+ * 这个对象管理了所有的3D渲染缓冲。此对象的实例基于视口创建。
+ *
+ * All buffers are organized in contexts. The default context is called render_buffers and can contain amongst others the color buffer, depth buffer, velocity buffers, VRS density map and MSAA variants of these buffers.
+ * 所有缓冲都组织在上下文中。默认的上下文是render_buffers，基本上能包含所有其他的缓冲，包括
+ * 颜色缓冲，深度缓冲，速度缓冲，VRS密度图，MSAA及其变种。
+ *
+ * Buffers are only guaranteed to exist during rendering of the viewport.
+ * 缓冲只能保证在视口渲染的期间，它是存在的。
+ *
+ * Note: This is an internal rendering server object, do not instantiate this from script.
+ * 注意：这事内部的渲染服务对象，不要在脚本中实例化它。
+ */
 class RenderSceneBuffersRD : public RenderSceneBuffers {
 	GDCLASS(RenderSceneBuffersRD, RenderSceneBuffers);
 

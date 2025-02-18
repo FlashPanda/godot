@@ -129,6 +129,11 @@ public:
 	~ClusterBuilderSharedDataRD();
 };
 
+/**
+ * 负责将场景中的灯光、探针、Decal 等数据按分簇渲染所需的格式进行收集、组织和处理，
+ * 生成可供 GPU 快速索引和渲染用的结构化数据，从而在 Godot 的分簇光照系统中实现高效的批量光照、反射与体块类效果。
+ */
+
 class ClusterBuilderRD {
 public:
 	static constexpr float WIDE_SPOT_ANGLE_THRESHOLD_DEG = 60.0f;

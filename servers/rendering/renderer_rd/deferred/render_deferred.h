@@ -45,7 +45,7 @@
 #include "servers/rendering/renderer_rd/renderer_scene_render_rd.h"
 #include "servers/rendering/renderer_rd/shaders/deferred/best_fit_normal.glsl.gen.h"
 
-#define RB_SCOPE_FORWARD_CLUSTERED SNAME("deferred")
+#define RB_SCOPE_DEFERRED SNAME("deferred")
 
 #define RB_TEX_SPECULAR SNAME("specular")
 #define RB_TEX_SPECULAR_MSAA SNAME("specular_msaa")
@@ -67,18 +67,18 @@ class RenderDeferred : public RendererSceneRenderRD {
 	};
 
 	enum {
-		SDFGI_MAX_CASCADES = 8,
-		MAX_VOXEL_GI_INSTANCESS = 8,
-		MAX_LIGHTMAPS = 8,
-		MAX_VOXEL_GI_INSTANCESS_PER_INSTANCE = 2,
-		INSTANCE_DATA_BUFFER_MIN_SIZE = 4096
+		SDFGI_MAX_CASCADES = 8,				// SDFGI支持的最大的级联数量
+		MAX_VOXEL_GI_INSTANCESS = 8,		// 最大可用的体素GI实例（Ｖｏｘｅｌ　ＧＩ）数量
+		MAX_LIGHTMAPS = 8,					// 最大可用的光照贴图数量
+		MAX_VOXEL_GI_INSTANCESS_PER_INSTANCE = 2,	// 对于单个对象可使用的体素GI实例数量上限
+		INSTANCE_DATA_BUFFER_MIN_SIZE = 4096		// 用于存储实例化数据的缓冲区最小大小。
 	};
 
 	enum RenderListType {
-		RENDER_LIST_OPAQUE, //used for opaque objects
-		RENDER_LIST_MOTION, //used for opaque objects with motion
-		RENDER_LIST_ALPHA, //used for transparent objects
-		RENDER_LIST_SECONDARY, //used for shadows and other objects
+		RENDER_LIST_OPAQUE, //used for opaque objects，不透明物体渲染列表
+		RENDER_LIST_MOTION, //used for opaque objects with motion，带运动模糊的不透明物体渲染列表
+		RENDER_LIST_ALPHA, //used for transparent objects，透明物体渲染列表
+		RENDER_LIST_SECONDARY, //used for shadows and other objects，阴影与其他物体渲染列表
 		RENDER_LIST_MAX
 	};
 
@@ -94,7 +94,7 @@ public:
 
 	private:
 		RenderSceneBuffersRD *render_buffers = nullptr;
-		RendererRD::FSR2Context *fsr2_context = nullptr;
+		RendererRD::FSR2Context *fsr2_context = nullptr;	// AMD FSR2 library
 #ifdef METAL_ENABLED
 		RendererRD::MFXTemporalContext *mfx_temporal_context = nullptr;
 #endif
@@ -102,6 +102,7 @@ public:
 	public:
 		ClusterBuilderRD *cluster_builder = nullptr;
 
+		// SS (screenspace effects data)
 		struct SSEffectsData {
 			Projection last_frame_projections[RendererSceneRender::MAX_RENDER_VIEWS];
 			Transform3D last_frame_transform;
@@ -120,23 +121,23 @@ public:
 		RID render_sdfgi_uniform_set;
 
 		void ensure_specular();
-		bool has_specular() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_SPECULAR); }
-		RID get_specular() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_SPECULAR); }
-		RID get_specular(uint32_t p_layer) { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_SPECULAR, p_layer, 0); }
-		RID get_specular_msaa(uint32_t p_layer) { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_SPECULAR_MSAA, p_layer, 0); }
+		bool has_specular() const { return render_buffers->has_texture(RB_SCOPE_DEFERRED, RB_TEX_SPECULAR); }
+		RID get_specular() const { return render_buffers->get_texture(RB_SCOPE_DEFERRED, RB_TEX_SPECULAR); }
+		RID get_specular(uint32_t p_layer) { return render_buffers->get_texture_slice(RB_SCOPE_DEFERRED, RB_TEX_SPECULAR, p_layer, 0); }
+		RID get_specular_msaa(uint32_t p_layer) { return render_buffers->get_texture_slice(RB_SCOPE_DEFERRED, RB_TEX_SPECULAR_MSAA, p_layer, 0); }
 
 		void ensure_normal_roughness_texture();
-		bool has_normal_roughness() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS); }
-		RID get_normal_roughness() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS); }
-		RID get_normal_roughness(uint32_t p_layer) { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS, p_layer, 0); }
-		RID get_normal_roughness_msaa() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS_MSAA); }
-		RID get_normal_roughness_msaa(uint32_t p_layer) { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS_MSAA, p_layer, 0); }
+		bool has_normal_roughness() const { return render_buffers->has_texture(RB_SCOPE_DEFERRED, RB_TEX_NORMAL_ROUGHNESS); }
+		RID get_normal_roughness() const { return render_buffers->get_texture(RB_SCOPE_DEFERRED, RB_TEX_NORMAL_ROUGHNESS); }
+		RID get_normal_roughness(uint32_t p_layer) { return render_buffers->get_texture_slice(RB_SCOPE_DEFERRED, RB_TEX_NORMAL_ROUGHNESS, p_layer, 0); }
+		RID get_normal_roughness_msaa() const { return render_buffers->get_texture(RB_SCOPE_DEFERRED, RB_TEX_NORMAL_ROUGHNESS_MSAA); }
+		RID get_normal_roughness_msaa(uint32_t p_layer) { return render_buffers->get_texture_slice(RB_SCOPE_DEFERRED, RB_TEX_NORMAL_ROUGHNESS_MSAA, p_layer, 0); }
 
 		void ensure_voxelgi();
-		bool has_voxelgi() const { return render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_VOXEL_GI); }
-		RID get_voxelgi() const { return render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_VOXEL_GI); }
-		RID get_voxelgi(uint32_t p_layer) { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_VOXEL_GI, p_layer, 0); }
-		RID get_voxelgi_msaa(uint32_t p_layer) { return render_buffers->get_texture_slice(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_VOXEL_GI_MSAA, p_layer, 0); }
+		bool has_voxelgi() const { return render_buffers->has_texture(RB_SCOPE_DEFERRED, RB_TEX_VOXEL_GI); }
+		RID get_voxelgi() const { return render_buffers->get_texture(RB_SCOPE_DEFERRED, RB_TEX_VOXEL_GI); }
+		RID get_voxelgi(uint32_t p_layer) { return render_buffers->get_texture_slice(RB_SCOPE_DEFERRED, RB_TEX_VOXEL_GI, p_layer, 0); }
+		RID get_voxelgi_msaa(uint32_t p_layer) { return render_buffers->get_texture_slice(RB_SCOPE_DEFERRED, RB_TEX_VOXEL_GI_MSAA, p_layer, 0); }
 
 		void ensure_fsr2(RendererRD::FSR2Effect *p_effect);
 		RendererRD::FSR2Context *get_fsr2_context() const { return fsr2_context; }
