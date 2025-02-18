@@ -276,6 +276,7 @@ private:
 
 	struct SceneState {
 		// This struct is loaded into Set 1 - Binding 1, populated at start of rendering a frame, must match with shader code
+		// 该结构体被加载到图形管线的 Set 1 - Binding 1 中，并且在每帧的渲染开始时被填充。
 		struct UBO {
 			uint32_t cluster_shift;
 			uint32_t cluster_width;
@@ -318,8 +319,8 @@ private:
 			float transform[16];
 			float prev_transform[16];
 			uint32_t flags;
-			uint32_t instance_uniforms_ofs; //base offset in global buffer for instance variables
-			uint32_t gi_offset; //GI information when using lightmapping (VCT or lightmap index)
+			uint32_t instance_uniforms_ofs; //base offset in global buffer for instance variables，实例变量在全局缓冲中的基础偏移
+			uint32_t gi_offset; //GI information when using lightmapping (VCT or lightmap index)，使用光照贴图的GI信息（VCT或光照贴图索引）
 			uint32_t layer_mask;
 			float lightmap_uv_scale[4];
 			float compressed_aabb_position[4];
@@ -362,8 +363,8 @@ private:
 			PassMode pass_mode;
 
 			RID rp_uniform_set;
-			float lod_distance_multiplier;
-			float screen_mesh_lod_threshold;
+			float lod_distance_multiplier;		// LOD距离缩放因子
+			float screen_mesh_lod_threshold;	// 屏幕空间网格LOD阈值
 
 			RID framebuffer;
 			Rect2i rect;
