@@ -734,6 +734,7 @@ void RenderDeferred::_setup_environment(const RenderDataRD *p_render_data,
 		scene_state.ubo.cluster_width = cluster_screen_width;
 	}
 
+	// scene_state大部分是一种控制的状态。
 	scene_state.ubo.gi_upscale_for_msaa = false;
 	scene_state.ubo.volumetric_fog_enabled = false;
 
@@ -785,6 +786,7 @@ void RenderDeferred::_setup_environment(const RenderDataRD *p_render_data,
 		}
 	}
 
+	// 这里，是将数据推送到缓冲中
 	RD::get_singleton()->buffer_update(scene_state.implementation_uniform_buffers[p_index], 0, sizeof(SceneState::UBO), &scene_state.ubo);
 }
 
