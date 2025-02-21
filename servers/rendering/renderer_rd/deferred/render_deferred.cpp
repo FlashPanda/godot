@@ -49,11 +49,13 @@ using namespace RendererSceneRenderImplementation;
 void RenderDeferred::RenderBufferDataDeferred::ensure_specular() {
 	ERR_FAIL_NULL(render_buffers);
 
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_SPECULAR)) {
+	// render buffer 用名字来区分不同的缓冲作用。
+	// 确保高光、高光MSAA的纹理存在。没有就创建。
+	if (!render_buffers->has_texture(RB_SCOPE_DEFERRED, RB_TEX_SPECULAR)) {
 		bool msaa = render_buffers->get_msaa_3d() != RS::VIEWPORT_MSAA_DISABLED;
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_SPECULAR, get_specular_format(), get_specular_usage_bits(msaa, false, render_buffers->get_can_be_storage()));
+		render_buffers->create_texture(RB_SCOPE_DEFERRED, RB_TEX_SPECULAR, get_specular_format(), get_specular_usage_bits(msaa, false, render_buffers->get_can_be_storage()));
 		if (msaa) {
-			render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_SPECULAR_MSAA, get_specular_format(), get_specular_usage_bits(false, msaa, render_buffers->get_can_be_storage()), render_buffers->get_texture_samples());
+			render_buffers->create_texture(RB_SCOPE_DEFERRED, RB_TEX_SPECULAR_MSAA, get_specular_format(), get_specular_usage_bits(false, msaa, render_buffers->get_can_be_storage()), render_buffers->get_texture_samples());
 		}
 	}
 }
@@ -61,11 +63,12 @@ void RenderDeferred::RenderBufferDataDeferred::ensure_specular() {
 void RenderDeferred::RenderBufferDataDeferred::ensure_normal_roughness_texture() {
 	ERR_FAIL_NULL(render_buffers);
 
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS)) {
+	// 确认法线粗糙度纹理存在。没有就创建。
+	if (!render_buffers->has_texture(RB_SCOPE_DEFERRED, RB_TEX_NORMAL_ROUGHNESS)) {
 		bool msaa = render_buffers->get_msaa_3d() != RS::VIEWPORT_MSAA_DISABLED;
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS, get_normal_roughness_format(), get_normal_roughness_usage_bits(msaa, false, render_buffers->get_can_be_storage()));
+		render_buffers->create_texture(RB_SCOPE_DEFERRED, RB_TEX_NORMAL_ROUGHNESS, get_normal_roughness_format(), get_normal_roughness_usage_bits(msaa, false, render_buffers->get_can_be_storage()));
 		if (msaa) {
-			render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS_MSAA, get_normal_roughness_format(), get_normal_roughness_usage_bits(false, msaa, render_buffers->get_can_be_storage()), render_buffers->get_texture_samples());
+			render_buffers->create_texture(RB_SCOPE_DEFERRED, RB_TEX_NORMAL_ROUGHNESS_MSAA, get_normal_roughness_format(), get_normal_roughness_usage_bits(false, msaa, render_buffers->get_can_be_storage()), render_buffers->get_texture_samples());
 		}
 	}
 }
@@ -73,16 +76,18 @@ void RenderDeferred::RenderBufferDataDeferred::ensure_normal_roughness_texture()
 void RenderDeferred::RenderBufferDataDeferred::ensure_voxelgi() {
 	ERR_FAIL_NULL(render_buffers);
 
-	if (!render_buffers->has_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_VOXEL_GI)) {
+	// 确认体素GI纹理存在。没有就创建。
+	if (!render_buffers->has_texture(RB_SCOPE_DEFERRED, RB_TEX_VOXEL_GI)) {
 		bool msaa = render_buffers->get_msaa_3d() != RS::VIEWPORT_MSAA_DISABLED;
-		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_VOXEL_GI, get_voxelgi_format(), get_voxelgi_usage_bits(msaa, false, render_buffers->get_can_be_storage()));
+		render_buffers->create_texture(RB_SCOPE_DEFERRED, RB_TEX_VOXEL_GI, get_voxelgi_format(), get_voxelgi_usage_bits(msaa, false, render_buffers->get_can_be_storage()));
 		if (msaa) {
-			render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_VOXEL_GI_MSAA, get_voxelgi_format(), get_voxelgi_usage_bits(false, msaa, render_buffers->get_can_be_storage()), render_buffers->get_texture_samples());
+			render_buffers->create_texture(RB_SCOPE_DEFERRED, RB_TEX_VOXEL_GI_MSAA, get_voxelgi_format(), get_voxelgi_usage_bits(false, msaa, render_buffers->get_can_be_storage()), render_buffers->get_texture_samples());
 		}
 	}
 }
 
 void RenderDeferred::RenderBufferDataDeferred::ensure_fsr2(RendererRD::FSR2Effect *p_effect) {
+	// 确认FSR2上下文存在，没有就创建。
 	if (fsr2_context == nullptr) {
 		fsr2_context = p_effect->create_context(render_buffers->get_internal_size(), render_buffers->get_target_size());
 	}
@@ -109,8 +114,9 @@ bool RenderDeferred::RenderBufferDataDeferred::ensure_mfx_temporal(RendererRD::M
 
 void RenderDeferred::RenderBufferDataDeferred::free_data() {
 	// JIC, should already have been cleared
+	// just in case（以防万一）
 	if (render_buffers) {
-		render_buffers->clear_context(RB_SCOPE_FORWARD_CLUSTERED);
+		render_buffers->clear_context(RB_SCOPE_DEFERRED);
 		render_buffers->clear_context(RB_SCOPE_SSDS);
 		render_buffers->clear_context(RB_SCOPE_SSIL);
 		render_buffers->clear_context(RB_SCOPE_SSAO);
@@ -139,22 +145,28 @@ void RenderDeferred::RenderBufferDataDeferred::free_data() {
 	}
 }
 
+// 使用渲染场景缓冲来配置渲染缓冲数据类。
 void RenderDeferred::RenderBufferDataDeferred::configure(RenderSceneBuffersRD *p_render_buffers) {
 	if (render_buffers) {
 		// JIC
 		free_data();
 	}
 
-	render_buffers = p_render_buffers;
+	render_buffers = p_render_buffers;	// 保留渲染场景缓冲的指针。
 	ERR_FAIL_NULL(render_buffers);
 
+	// 创建簇构建器。
 	if (cluster_builder == nullptr) {
 		cluster_builder = memnew(ClusterBuilderRD);
 	}
 	cluster_builder->set_shared(RenderDeferred::get_singleton()->get_cluster_builder_shared());
 
 	RID sampler = RendererRD::MaterialStorage::get_singleton()->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_NEAREST, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
-	cluster_builder->setup(p_render_buffers->get_internal_size(), p_render_buffers->get_max_cluster_elements(), p_render_buffers->get_depth_texture(), sampler, p_render_buffers->get_internal_texture());
+	cluster_builder->setup(p_render_buffers->get_internal_size(),
+		p_render_buffers->get_max_cluster_elements(),
+		p_render_buffers->get_depth_texture(),
+		sampler,
+		p_render_buffers->get_internal_texture());
 }
 
 RID RenderDeferred::RenderBufferDataDeferred::get_color_only_fb() {
@@ -184,7 +196,7 @@ RID RenderDeferred::RenderBufferDataDeferred::get_color_pass_fb(uint32_t p_color
 	RID specular;
 	if (p_color_pass_flags & COLOR_PASS_FLAG_SEPARATE_SPECULAR) {
 		ensure_specular();
-		specular = render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, use_msaa ? RB_TEX_SPECULAR_MSAA : RB_TEX_SPECULAR);
+		specular = render_buffers->get_texture(RB_SCOPE_DEFERRED, use_msaa ? RB_TEX_SPECULAR_MSAA : RB_TEX_SPECULAR);
 	}
 
 	RID velocity_buffer;
@@ -217,7 +229,8 @@ RID RenderDeferred::RenderBufferDataDeferred::get_depth_fb(DepthFrameBufferType 
 		case DEPTH_FB_ROUGHNESS: {
 			ensure_normal_roughness_texture();
 
-			RID normal_roughness_buffer = render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, use_msaa ? RB_TEX_NORMAL_ROUGHNESS_MSAA : RB_TEX_NORMAL_ROUGHNESS);
+			RID normal_roughness_buffer = render_buffers->get_texture(RB_SCOPE_DEFERRED,
+				use_msaa ? RB_TEX_NORMAL_ROUGHNESS_MSAA : RB_TEX_NORMAL_ROUGHNESS);
 
 			return FramebufferCacheRD::get_singleton()->get_cache_multiview(render_buffers->get_view_count(), depth, normal_roughness_buffer);
 		} break;
@@ -225,8 +238,8 @@ RID RenderDeferred::RenderBufferDataDeferred::get_depth_fb(DepthFrameBufferType 
 			ensure_normal_roughness_texture();
 			ensure_voxelgi();
 
-			RID normal_roughness_buffer = render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, use_msaa ? RB_TEX_NORMAL_ROUGHNESS_MSAA : RB_TEX_NORMAL_ROUGHNESS);
-			RID voxelgi_buffer = render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, use_msaa ? RB_TEX_VOXEL_GI_MSAA : RB_TEX_VOXEL_GI);
+			RID normal_roughness_buffer = render_buffers->get_texture(RB_SCOPE_DEFERRED, use_msaa ? RB_TEX_NORMAL_ROUGHNESS_MSAA : RB_TEX_NORMAL_ROUGHNESS);
+			RID voxelgi_buffer = render_buffers->get_texture(RB_SCOPE_DEFERRED, use_msaa ? RB_TEX_VOXEL_GI_MSAA : RB_TEX_VOXEL_GI);
 
 			return FramebufferCacheRD::get_singleton()->get_cache_multiview(render_buffers->get_view_count(), depth, normal_roughness_buffer, voxelgi_buffer);
 		} break;
@@ -239,7 +252,7 @@ RID RenderDeferred::RenderBufferDataDeferred::get_depth_fb(DepthFrameBufferType 
 RID RenderDeferred::RenderBufferDataDeferred::get_specular_only_fb() {
 	bool use_msaa = render_buffers->get_msaa_3d() != RS::VIEWPORT_MSAA_DISABLED;
 
-	RID specular = render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, use_msaa ? RB_TEX_SPECULAR_MSAA : RB_TEX_SPECULAR);
+	RID specular = render_buffers->get_texture(RB_SCOPE_DEFERRED, use_msaa ? RB_TEX_SPECULAR_MSAA : RB_TEX_SPECULAR);
 
 	return FramebufferCacheRD::get_singleton()->get_cache_multiview(render_buffers->get_view_count(), specular);
 }
@@ -279,7 +292,7 @@ uint32_t RenderDeferred::RenderBufferDataDeferred::get_voxelgi_usage_bits(bool p
 void RenderDeferred::setup_render_buffer_data(Ref<RenderSceneBuffersRD> p_render_buffers) {
 	Ref<RenderBufferDataDeferred> data;
 	data.instantiate();
-	p_render_buffers->set_custom_data(RB_SCOPE_FORWARD_CLUSTERED, data);
+	p_render_buffers->set_custom_data(RB_SCOPE_DEFERRED, data);
 
 	Ref<RendererRD::GI::RenderBuffersGI> rbgi;
 	rbgi.instantiate();
@@ -295,8 +308,8 @@ bool RenderDeferred::free(RID p_rid) {
 
 void RenderDeferred::update() {
 	RendererSceneRenderRD::update();
-	_update_global_pipeline_data_requirements_from_project();
-	_update_global_pipeline_data_requirements_from_light_storage();
+	_update_global_pipeline_data_requirements_from_project();	// 根据当前项目配置，更新全局设置。
+	_update_global_pipeline_data_requirements_from_light_storage();	// 根据光照信息，更新全局管线数据。
 }
 
 /// RENDERING ///
@@ -309,9 +322,9 @@ void RenderDeferred::_render_list_template(RenderingDevice::DrawListID p_draw_li
 	RD::FramebufferFormatID framebuffer_format = p_framebuffer_Format;
 
 	//global scope bindings
-	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, render_base_uniform_set, SCENE_UNIFORM_SET);
-	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, p_params->render_pass_uniform_set, RENDER_PASS_UNIFORM_SET);
-	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, scene_shader.default_vec4_xform_uniform_set, TRANSFORMS_UNIFORM_SET);
+	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, render_base_uniform_set, SCENE_UNIFORM_SET);		// 场景
+	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, p_params->render_pass_uniform_set, RENDER_PASS_UNIFORM_SET);	// 通道
+	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, scene_shader.default_vec4_xform_uniform_set, TRANSFORMS_UNIFORM_SET);	// 转换
 
 	RID prev_material_uniform_set;
 
@@ -321,7 +334,7 @@ void RenderDeferred::_render_list_template(RenderingDevice::DrawListID p_draw_li
 
 	SceneShaderDeferred::ShaderData *shader = nullptr;
 	SceneShaderDeferred::ShaderData *prev_shader = nullptr;
-	SceneShaderDeferred::ShaderData::PipelineKey pipeline_key;
+	SceneShaderDeferred::ShaderData::PipelineKey pipeline_key;	// 管线键
 	uint32_t pipeline_hash = 0;
 	uint32_t prev_pipeline_hash = 0;
 
@@ -338,6 +351,7 @@ void RenderDeferred::_render_list_template(RenderingDevice::DrawListID p_draw_li
 
 	bool should_request_redraw = false;
 
+	// 逐元素遍历
 	for (uint32_t i = p_from_element; i < p_to_element; i++) {
 		const GeometryInstanceSurfaceDataCache *surf = p_params->elements[i];
 		const RenderElementInfo &element_info = p_params->element_info[i];
@@ -345,6 +359,8 @@ void RenderDeferred::_render_list_template(RenderingDevice::DrawListID p_draw_li
 		if (p_pass_mode == PASS_MODE_COLOR && surf->color_pass_inclusion_mask && (p_color_pass_flags & surf->color_pass_inclusion_mask) == 0) {
 			// Some surfaces can be repeated in multiple render lists. We exclude them from being rendered on the color pass based on the
 			// features supported by the pass compared to the exclusion mask.
+			// 有些表面可能会在多个渲染列表中重复出现。我们会根据颜色 pass 支持的特性与排除掩码进行比较，
+			// 将这些表面从颜色 pass 的渲染中剔除。
 			continue;
 		}
 
@@ -394,6 +410,7 @@ void RenderDeferred::_render_list_template(RenderingDevice::DrawListID p_draw_li
 		}
 
 		// Determine the cull variant.
+		// 剔除选项
 		SceneShaderDeferred::ShaderData::CullVariant cull_variant = SceneShaderDeferred::ShaderData::CULL_VARIANT_MAX;
 		if constexpr (p_pass_mode == PASS_MODE_DEPTH_MATERIAL || p_pass_mode == PASS_MODE_SDF) {
 			cull_variant = SceneShaderDeferred::ShaderData::CULL_VARIANT_DOUBLE_SIDED;
@@ -491,14 +508,15 @@ void RenderDeferred::_render_list_template(RenderingDevice::DrawListID p_draw_li
 		RID vertex_array_rd;
 		RID index_array_rd;
 		RID pipeline_rd;
-		uint32_t ubershader_iterations = 2;
+		uint32_t ubershader_iterations = 2;	// 为什么要迭代2次？
 		if constexpr (p_pass_mode == PASS_MODE_DEPTH_MATERIAL || p_pass_mode == PASS_MODE_SDF) {
-			ubershader_iterations = 1;
+			ubershader_iterations = 1;	// 深度材质或者SDF为什么只需要迭代一次？
 		}
 
 		bool pipeline_valid = false;
 		while (pipeline_key.ubershader < ubershader_iterations) {
 			// Skeleton and blend shape.
+			// 骨骼和混合形状
 			RD::VertexFormatID vertex_format = -1;
 			bool pipeline_motion_vectors = pipeline_key.color_pass_flags & SceneShaderDeferred::PIPELINE_COLOR_PASS_FLAG_MOTION_VECTORS;
 			uint64_t input_mask = shader->get_vertex_input_mask(pipeline_key.version, pipeline_key.color_pass_flags, pipeline_key.ubershader);
@@ -535,6 +553,7 @@ void RenderDeferred::_render_list_template(RenderingDevice::DrawListID p_draw_li
 				}
 			} else {
 				// The same pipeline is bound already.
+				// 着色器和管线哈希值判定是不是相同的管线。
 				pipeline_valid = true;
 				break;
 			}
@@ -543,11 +562,13 @@ void RenderDeferred::_render_list_template(RenderingDevice::DrawListID p_draw_li
 		if (pipeline_valid) {
 			index_array_rd = mesh_storage->mesh_surface_get_index_array(mesh_surface, element_info.lod_index);
 
+			// 更新顶点数组
 			if (prev_vertex_array_rd != vertex_array_rd) {
 				RD::get_singleton()->draw_list_bind_vertex_array(draw_list, vertex_array_rd);
 				prev_vertex_array_rd = vertex_array_rd;
 			}
 
+			// 更新索引数组
 			if (prev_index_array_rd != index_array_rd) {
 				if (index_array_rd.is_valid()) {
 					RD::get_singleton()->draw_list_bind_index_array(draw_list, index_array_rd);
@@ -555,6 +576,7 @@ void RenderDeferred::_render_list_template(RenderingDevice::DrawListID p_draw_li
 				prev_index_array_rd = index_array_rd;
 			}
 
+			// 绘制列表绑定渲染管线
 			if (!pipeline_rd.is_null()) {
 				RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, pipeline_rd);
 			}
@@ -676,7 +698,14 @@ void RenderDeferred::_render_list_with_draw_list(RenderListParameters *p_params,
 	RD::get_singleton()->draw_list_end();
 }
 
-void RenderDeferred::_setup_environment(const RenderDataRD *p_render_data, bool p_no_fog, const Size2i &p_screen_size, const Color &p_default_bg_color, bool p_opaque_render_buffers, bool p_apply_alpha_multiplier, bool p_pancake_shadows, int p_index) {
+void RenderDeferred::_setup_environment(const RenderDataRD *p_render_data,
+	bool p_no_fog,
+	const Size2i &p_screen_size,
+	const Color &p_default_bg_color,
+	bool p_opaque_render_buffers,
+	bool p_apply_alpha_multiplier,
+	bool p_pancake_shadows,
+	int p_index) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
 	Ref<RenderSceneBuffersRD> rd = p_render_data->render_buffers;

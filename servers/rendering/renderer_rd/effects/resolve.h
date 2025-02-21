@@ -35,6 +35,7 @@
 
 namespace RendererRD {
 
+// 将多采样结果整合成单采样结果，有时还需要进行滤波操作。
 class Resolve {
 private:
 	struct ResolvePushConstant {

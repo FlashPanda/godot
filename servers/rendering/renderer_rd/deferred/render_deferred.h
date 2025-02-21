@@ -473,6 +473,7 @@ private:
 				compilation_dirty_element(this), compilation_all_element(this) {}
 	};
 
+	// 渲染器侧的几何实例
 	class GeometryInstanceDeferred : public RenderGeometryInstanceBase {
 	public:
 		// lightmap
@@ -509,6 +510,7 @@ private:
 		virtual void set_use_lightmap(RID p_lightmap_instance, const Rect2 &p_lightmap_uv_scale, int p_lightmap_slice_index) override;
 		virtual void set_lightmap_capture(const Color *p_sh9) override;
 
+		// “告诉”或“配对”当前帧中，参与渲染的各种场景资源实例
 		virtual void pair_light_instances(const RID *p_light_instances, uint32_t p_light_instance_count) override {}
 		virtual void pair_reflection_probe_instances(const RID *p_reflection_probe_instances, uint32_t p_reflection_probe_instance_count) override {}
 		virtual void pair_decal_instances(const RID *p_decal_instances, uint32_t p_decal_instance_count) override {}
@@ -517,17 +519,23 @@ private:
 		virtual void set_softshadow_projector_pairing(bool p_softshadow, bool p_projector) override;
 	};
 
+	// 依赖性？什么依赖性？
 	static void _geometry_instance_dependency_changed(Dependency::DependencyChangedNotification p_notification, DependencyTracker *p_tracker);
 	static void _geometry_instance_dependency_deleted(const RID &p_dependency, DependencyTracker *p_tracker);
 
+	// 几何实例的脏数据列表
 	SelfList<GeometryInstanceDeferred>::List geometry_instance_dirty_list;
+	// 几何表面缓存的脏数据列表
 	SelfList<GeometryInstanceSurfaceDataCache>::List geometry_surface_compilation_dirty_list;
+	// 几何表面缓存的完整数据列表
 	SelfList<GeometryInstanceSurfaceDataCache>::List geometry_surface_compilation_all_list;
 
+	// 页分配器
 	PagedAllocator<GeometryInstanceDeferred> geometry_instance_alloc;
 	PagedAllocator<GeometryInstanceSurfaceDataCache> geometry_instance_surface_alloc;
 	PagedAllocator<GeometryInstanceLightmapSH> geometry_instance_lightmap_sh;
 
+	// 表面的管线数据，数据与控制都有
 	struct SurfacePipelineData {
 		void *mesh_surface = nullptr;
 		void *mesh_surface_shadow = nullptr;
@@ -540,6 +548,7 @@ private:
 		bool can_use_lightmap = false;
 	};
 
+	// 全局管线数据，从数据上来看只是控制用的
 	struct GlobalPipelineData {
 		union {
 			struct {
@@ -562,17 +571,25 @@ private:
 		};
 	};
 
+	// 避免反复编译或频繁更新。
+	// complied代表当前系统已经实际使用，或者已经生效的。
+	// required代表系统下一步想要切换到的状态。
 	GlobalPipelineData global_pipeline_data_compiled = {};
 	GlobalPipelineData global_pipeline_data_required = {};
 
 	typedef Pair<SceneShaderDeferred::ShaderData *, SceneShaderDeferred::ShaderData::PipelineKey> ShaderPipelinePair;
 
+	// 数据更新
 	void _update_global_pipeline_data_requirements_from_project();
 	void _update_global_pipeline_data_requirements_from_light_storage();
+	// 几何实例更新
 	void _geometry_instance_add_surface_with_material(GeometryInstanceDeferred *ginstance, uint32_t p_surface, SceneShaderDeferred::MaterialData *p_material, uint32_t p_material_id, uint32_t p_shader_id, RID p_mesh);
 	void _geometry_instance_add_surface_with_material_chain(GeometryInstanceDeferred*ginstance, uint32_t p_surface, SceneShaderDeferred::MaterialData *p_material, RID p_mat_src, RID p_mesh);
 	void _geometry_instance_add_surface(GeometryInstanceDeferred*ginstance, uint32_t p_surface, RID p_material, RID p_mesh);
 	void _geometry_instance_update(RenderGeometryInstance *p_geometry_instance);
+	// compile的意思是为网格表面生成或准备GPU渲染管线状态（pipeline state），就是PSO
+	// 分析网格表面数据、分析材质需求、综合全局渲染设置，然后成成一个GPU管线对象（PSO）
+	// 将“网格表面+材质+渲染配置”这些信息打包成一个或一组可直接用于GPU的渲染管线状态
 	void _mesh_compile_pipeline_for_surface(SceneShaderDeferred::ShaderData *p_shader, void *p_mesh_surface, bool p_ubershader, bool p_instanced_surface, RS::PipelineSource p_source, SceneShaderDeferred::ShaderData::PipelineKey &r_pipeline_key, Vector<ShaderPipelinePair> *r_pipeline_pairs = nullptr);
 	void _mesh_compile_pipelines_for_surface(const SurfacePipelineData &p_surface, const GlobalPipelineData &p_global, RS::PipelineSource p_source, Vector<ShaderPipelinePair> *r_pipeline_pairs = nullptr);
 	void _mesh_generate_all_pipelines_for_surface_cache(GeometryInstanceSurfaceDataCache *p_surface_cache, const GlobalPipelineData &p_global);
@@ -582,6 +599,8 @@ private:
 	/* Render List */
 
 	struct RenderList {
+		// Vector这个名字不好。在标准库中，这个名字是容器的意思。但是在渲染领域，最先的反应是向量。
+		// 所以我认为不用Vector这个名字更好。哪怕你用个Container也行。
 		LocalVector<GeometryInstanceSurfaceDataCache *> elements;
 		LocalVector<RenderElementInfo> element_info;
 
@@ -635,9 +654,9 @@ private:
 		_FORCE_INLINE_ void add_element(GeometryInstanceSurfaceDataCache *p_element) {
 			elements.push_back(p_element);
 		}
-	};
+	};	//	根据不同的需求，有不同的排序功能。
 
-	RenderList render_list[RENDER_LIST_MAX];
+	RenderList render_list[RENDER_LIST_MAX];	// 4个默认列表
 
 	virtual void _update_shader_quality_settings() override;
 
@@ -654,7 +673,7 @@ private:
 	RendererRD::MotionVectorsStore *motion_vectors_store = nullptr;
 
 	/* Cluster builder */
-
+	// 聚类构建
 	ClusterBuilderSharedDataRD cluster_builder_shared;
 	ClusterBuilderRD *current_cluster_builder = nullptr;
 
@@ -667,7 +686,12 @@ private:
 	void _update_volumetric_fog(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_environment, const Projection &p_cam_projection, const Transform3D &p_cam_transform, const Transform3D &p_prev_cam_inv_transform, RID p_shadow_atlas, int p_directional_light_count, bool p_use_directional_shadows, int p_positional_light_count, int p_voxel_gi_count, const PagedArray<RID> &p_fog_volumes);
 
 	/* Render shadows */
-
+	/**
+	 * 从表面上来看，确实可以用“一个函数”来完成全部的阴影渲染流程。
+	 * 但是分段函数会带来更好的可扩展性、灵活性、以及性能上的优势。
+	 * _render_shadow_pass是一个对外的更高层的“一站式”调用，它在内部会按需调用begin->append->process->end的逻辑。
+	 * 这样既满足外层简单场景的直接使用，也支持底层做更精细的控制和扩展。
+	 */
 	void _render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_pass, const PagedArray<RenderGeometryInstance *> &p_instances, float p_lod_distance_multiplier = 0, float p_screen_mesh_lod_threshold = 0.0, bool p_open_pass = true, bool p_close_pass = true, bool p_clear_region = true, RenderingMethod::RenderInfo *p_render_info = nullptr, const Size2i &p_viewport_size = Size2i(1, 1), const Transform3D &p_main_cam_transform = Transform3D());
 	void _render_shadow_begin();
 	void _render_shadow_append(RID p_framebuffer, const PagedArray<RenderGeometryInstance *> &p_instances, const Projection &p_projection, const Transform3D &p_transform, float p_zfar, float p_bias, float p_normal_bias, bool p_reverse_cull_face, bool p_use_dp, bool p_use_dp_flip, bool p_use_pancake, float p_lod_distance_multiplier = 0.0, float p_screen_mesh_lod_threshold = 0.0, const Rect2i &p_rect = Rect2i(), bool p_flip_y = false, bool p_clear_region = true, bool p_begin = true, bool p_end = true, RenderingMethod::RenderInfo *p_render_info = nullptr, const Size2i &p_viewport_size = Size2i(1, 1), const Transform3D &p_main_cam_transform = Transform3D());
@@ -676,6 +700,7 @@ private:
 
 	/* Render Scene */
 	void _process_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_environment, const RID *p_normal_buffers, const Projection *p_projections);
+	// 屏幕空间间接光照
 	void _process_ssil(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_environment, const RID *p_normal_buffers, const Projection *p_projections, const Transform3D &p_transform);
 	void _copy_framebuffer_to_ssil(Ref<RenderSceneBuffersRD> p_render_buffers);
 	void _pre_opaque_render(RenderDataRD *p_render_data, bool p_use_ssao, bool p_use_ssil, bool p_use_gi, const RID *p_normal_roughness_slices, RID p_voxel_gi_buffer);
