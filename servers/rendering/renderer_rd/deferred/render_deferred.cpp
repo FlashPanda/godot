@@ -1102,7 +1102,11 @@ void RenderDeferred::_fill_render_list(RenderListType p_render_list, const Rende
 			// LOD
 			if (p_render_data->scene_data->screen_mesh_lod_threshold > 0.0 && mesh_storage->mesh_surface_has_lod(surf->surface)) {
 				uint32_t indices = 0;
-				surf->sort.lod_index = mesh_storage->mesh_surface_get_lod(surf->surface, inst->lod_model_scale * inst->lod_bias, lod_distance * p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, indices);
+				surf->sort.lod_index = mesh_storage->mesh_surface_get_lod(surf->surface,
+					inst->lod_model_scale * inst->lod_bias,
+					lod_distance * p_render_data->scene_data->lod_distance_multiplier,
+					p_render_data->scene_data->screen_mesh_lod_threshold,
+					indices);
 				if (p_render_data->render_info) {
 					indices = _indices_to_primitives(surf->primitive, indices);
 					if (p_render_list == RENDER_LIST_OPAQUE) { //opaque
@@ -1192,7 +1196,10 @@ void RenderDeferred::_fill_render_list(RenderListType p_render_list, const Rende
 	}
 
 	if (p_render_list == RENDER_LIST_OPAQUE && lightmap_captures_used) {
-		RD::get_singleton()->buffer_update(scene_state.lightmap_capture_buffer, 0, sizeof(LightmapCaptureData) * lightmap_captures_used, scene_state.lightmap_captures);
+		RD::get_singleton()->buffer_update(scene_state.lightmap_capture_buffer,
+			0,
+			sizeof(LightmapCaptureData) * lightmap_captures_used,
+			scene_state.lightmap_captures);
 	}
 }
 
@@ -1239,7 +1246,10 @@ void RenderDeferred::_setup_lightmaps(const RenderDataRD *p_render_data, const P
 		scene_state.lightmaps_used++;
 	}
 	if (scene_state.lightmaps_used > 0) {
-		RD::get_singleton()->buffer_update(scene_state.lightmap_buffer, 0, sizeof(LightmapData) * scene_state.lightmaps_used, scene_state.lightmaps);
+		RD::get_singleton()->buffer_update(scene_state.lightmap_buffer,
+			0,
+			sizeof(LightmapData) * scene_state.lightmaps_used,
+			scene_state.lightmaps);
 	}
 }
 
@@ -1264,10 +1274,17 @@ void RenderDeferred::_update_sdfgi(RenderDataRD *p_render_data) {
 			exposure_normalization = RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes);
 		}
 		for (int i = 0; i < p_render_data->render_sdfgi_region_count; i++) {
-			sdfgi->render_region(rb, p_render_data->render_sdfgi_regions[i].region, p_render_data->render_sdfgi_regions[i].instances, exposure_normalization);
+			sdfgi->render_region(rb,
+				p_render_data->render_sdfgi_regions[i].region,
+				p_render_data->render_sdfgi_regions[i].instances,
+				exposure_normalization);
 		}
 		if (p_render_data->sdfgi_update_data->update_static) {
-			sdfgi->render_static_lights(p_render_data, rb, p_render_data->sdfgi_update_data->static_cascade_count, p_render_data->sdfgi_update_data->static_cascade_indices, p_render_data->sdfgi_update_data->static_positional_lights);
+			sdfgi->render_static_lights(p_render_data,
+				rb,
+				p_render_data->sdfgi_update_data->static_cascade_count,
+				p_render_data->sdfgi_update_data->static_cascade_indices,
+				p_render_data->sdfgi_update_data->static_positional_lights);
 		}
 	}
 }
@@ -1307,7 +1324,7 @@ void RenderDeferred::_debug_draw_cluster(Ref<RenderSceneBuffersRD> p_render_buff
 void RenderDeferred::_update_volumetric_fog(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_environment, const Projection &p_cam_projection, const Transform3D &p_cam_transform, const Transform3D &p_prev_cam_inv_transform, RID p_shadow_atlas, int p_directional_light_count, bool p_use_directional_shadows, int p_positional_light_count, int p_voxel_gi_count, const PagedArray<RID> &p_fog_volumes) {
 	ERR_FAIL_COND(p_render_buffers.is_null());
 
-	Ref<RenderBufferDataDeferred> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+	Ref<RenderBufferDataDeferred> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_DEFERRED);
 	ERR_FAIL_COND(rb_data.is_null());
 
 	ERR_FAIL_COND(!p_render_buffers->has_custom_data(RB_SCOPE_GI));
@@ -1326,7 +1343,11 @@ void RenderDeferred::_update_volumetric_fog(Ref<RenderSceneBuffersRD> p_render_b
 	if (p_render_buffers->has_custom_data(RB_SCOPE_FOG)) {
 		Ref<RendererRD::Fog::VolumetricFog> fog = p_render_buffers->get_custom_data(RB_SCOPE_FOG);
 		//validate
-		if (p_environment.is_null() || !environment_get_volumetric_fog_enabled(p_environment) || fog->width != target_width || fog->height != target_height || fog->depth != get_volumetric_fog_depth()) {
+		if (p_environment.is_null() ||
+			!environment_get_volumetric_fog_enabled(p_environment) ||
+			fog->width != target_width ||
+			fog->height != target_height ||
+			fog->depth != get_volumetric_fog_depth()) {
 			p_render_buffers->set_custom_data(RB_SCOPE_FOG, Ref<RenderBufferCustomDataRD>());
 		}
 	}
@@ -1336,12 +1357,15 @@ void RenderDeferred::_update_volumetric_fog(Ref<RenderSceneBuffersRD> p_render_b
 		return;
 	}
 
-	if (p_environment.is_valid() && environment_get_volumetric_fog_enabled(p_environment) && !p_render_buffers->has_custom_data(RB_SCOPE_FOG)) {
+	if (p_environment.is_valid() &&
+		environment_get_volumetric_fog_enabled(p_environment) &&
+		!p_render_buffers->has_custom_data(RB_SCOPE_FOG)) {
 		//required volumetric fog but not existing, create
 		Ref<RendererRD::Fog::VolumetricFog> fog;
 
 		fog.instantiate();
-		fog->init(Vector3i(target_width, target_height, get_volumetric_fog_depth()), sky.sky_shader.default_shader_rd);
+		fog->init(Vector3i(target_width, target_height, get_volumetric_fog_depth()),
+			sky.sky_shader.default_shader_rd);
 
 		p_render_buffers->set_custom_data(RB_SCOPE_FOG, fog);
 	}
@@ -1372,7 +1396,16 @@ void RenderDeferred::_update_volumetric_fog(Ref<RenderSceneBuffersRD> p_render_b
 		settings.sky = &sky;
 		settings.gi = &gi;
 
-		RendererRD::Fog::get_singleton()->volumetric_fog_update(settings, p_cam_projection, p_cam_transform, p_prev_cam_inv_transform, p_shadow_atlas, p_directional_light_count, p_use_directional_shadows, p_positional_light_count, p_voxel_gi_count, p_fog_volumes);
+		RendererRD::Fog::get_singleton()->volumetric_fog_update(settings,
+			p_cam_projection,
+			p_cam_transform,
+			p_prev_cam_inv_transform,
+			p_shadow_atlas,
+			p_directional_light_count,
+			p_use_directional_shadows,
+			p_positional_light_count,
+			p_voxel_gi_count,
+			p_fog_volumes);
 	}
 }
 
@@ -1403,7 +1436,7 @@ void RenderDeferred::_process_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, R
 	ERR_FAIL_COND(p_render_buffers.is_null());
 	ERR_FAIL_COND(p_environment.is_null());
 
-	Ref<RenderBufferDataDeferred> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+	Ref<RenderBufferDataDeferred> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_DEFERRED);
 	ERR_FAIL_COND(rb_data.is_null());
 
 	RENDER_TIMESTAMP("Process SSAO");
@@ -1420,16 +1453,26 @@ void RenderDeferred::_process_ssao(Ref<RenderSceneBuffersRD> p_render_buffers, R
 	ss_effects->ssao_allocate_buffers(p_render_buffers, rb_data->ss_effects_data.ssao, settings);
 
 	for (uint32_t v = 0; v < p_render_buffers->get_view_count(); v++) {
-		ss_effects->generate_ssao(p_render_buffers, rb_data->ss_effects_data.ssao, v, p_normal_buffers[v], p_projections[v], settings);
+		ss_effects->generate_ssao(p_render_buffers,
+			rb_data->ss_effects_data.ssao,
+			v,
+			p_normal_buffers[v],
+			p_projections[v],
+			settings);
 	}
 }
 
-void RenderDeferred::_process_ssil(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_environment, const RID *p_normal_buffers, const Projection *p_projections, const Transform3D &p_transform) {
+void RenderDeferred::_process_ssil(Ref<RenderSceneBuffersRD> p_render_buffers,
+	RID p_environment,
+	const RID *p_normal_buffers,
+	const Projection *p_projections,
+	const Transform3D &p_transform)
+{
 	ERR_FAIL_NULL(ss_effects);
 	ERR_FAIL_COND(p_render_buffers.is_null());
 	ERR_FAIL_COND(p_environment.is_null());
 
-	Ref<RenderBufferDataDeferred> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+	Ref<RenderBufferDataDeferred> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_DEFERRED);
 	ERR_FAIL_COND(rb_data.is_null());
 
 	RENDER_TIMESTAMP("Process SSIL");
@@ -1452,14 +1495,21 @@ void RenderDeferred::_process_ssil(Ref<RenderSceneBuffersRD> p_render_buffers, R
 		Projection projection = correction * p_projections[v];
 		Projection last_frame_projection = rb_data->ss_effects_data.last_frame_projections[v] * Projection(rb_data->ss_effects_data.last_frame_transform.affine_inverse()) * Projection(transform) * projection.inverse();
 
-		ss_effects->screen_space_indirect_lighting(p_render_buffers, rb_data->ss_effects_data.ssil, v, p_normal_buffers[v], p_projections[v], last_frame_projection, settings);
+		ss_effects->screen_space_indirect_lighting(p_render_buffers,
+			rb_data->ss_effects_data.ssil,
+			v,
+			p_normal_buffers[v],
+			p_projections[v],
+			last_frame_projection,
+			settings);
 
 		rb_data->ss_effects_data.last_frame_projections[v] = projection;
 	}
 	rb_data->ss_effects_data.last_frame_transform = transform;
 }
 
-void RenderDeferred::_copy_framebuffer_to_ssil(Ref<RenderSceneBuffersRD> p_render_buffers) {
+void RenderDeferred::_copy_framebuffer_to_ssil(Ref<RenderSceneBuffersRD> p_render_buffers)
+{
 	ERR_FAIL_COND(p_render_buffers.is_null());
 
 	if (p_render_buffers->has_texture(RB_SCOPE_SSIL, RB_LAST_FRAME)) {
@@ -1485,17 +1535,24 @@ void RenderDeferred::_copy_framebuffer_to_ssil(Ref<RenderSceneBuffersRD> p_rende
 	}
 }
 
-void RenderDeferred::_pre_opaque_render(RenderDataRD *p_render_data, bool p_use_ssao, bool p_use_ssil, bool p_use_gi, const RID *p_normal_roughness_slices, RID p_voxel_gi_buffer) {
-	// Render shadows while GI is rendering, due to how barriers are handled, this should happen at the same time
+void RenderDeferred::_pre_opaque_render(RenderDataRD *p_render_data,
+	bool p_use_ssao,
+	bool p_use_ssil,
+	bool p_use_gi,
+	const RID *p_normal_roughness_slices,
+	RID p_voxel_gi_buffer)
+{
+	// Render shadows while GI is rendering, due to how barriers are handled,
+	// this should happen at the same time
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
 	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
 	Ref<RenderBufferDataDeferred> rb_data;
-	if (rb.is_valid() && rb->has_custom_data(RB_SCOPE_FORWARD_CLUSTERED)) {
+	if (rb.is_valid() && rb->has_custom_data(RB_SCOPE_DEFERRED)) {
 		// Our forward clustered custom data buffer will only be available when we're rendering our normal view.
 		// This will not be available when rendering reflection probes.
-		rb_data = rb->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+		rb_data = rb->get_custom_data(RB_SCOPE_DEFERRED);
 	}
 
 	if (rb.is_valid() && p_use_gi && rb->has_custom_data(RB_SCOPE_SDFGI)) {
@@ -1530,20 +1587,35 @@ void RenderDeferred::_pre_opaque_render(RenderDataRD *p_render_data, bool p_use_
 		RENDER_TIMESTAMP("Render OmniLight Shadows");
 		// Cube shadows are rendered in their own way.
 		for (const int &index : p_render_data->cube_shadows) {
-			_render_shadow_pass(p_render_data->render_shadows[index].light, p_render_data->shadow_atlas, p_render_data->render_shadows[index].pass, p_render_data->render_shadows[index].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, true, true, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
+			_render_shadow_pass(p_render_data->render_shadows[index].light,
+				p_render_data->shadow_atlas,
+				p_render_data->render_shadows[index].pass,
+				p_render_data->render_shadows[index].instances,
+				lod_distance_multiplier,
+				p_render_data->scene_data->screen_mesh_lod_threshold,
+				true,
+				true,
+				true,
+				p_render_data->render_info,
+				viewport_size,
+				p_render_data->scene_data->cam_transform);
 		}
 
 		if (p_render_data->directional_shadows.size()) {
 			//open the pass for directional shadows
 			light_storage->update_directional_shadow_atlas();
-			RD::get_singleton()->draw_list_begin(light_storage->direction_shadow_get_fb(), RD::DRAW_CLEAR_DEPTH, Vector<Color>(), 0.0f);
+			RD::get_singleton()->draw_list_begin(light_storage->direction_shadow_get_fb(),
+				RD::DRAW_CLEAR_DEPTH,
+				Vector<Color>(),
+				0.0f);
 			RD::get_singleton()->draw_list_end();
 		}
 	}
 
 	// Render GI
 
-	bool render_shadows = p_render_data->directional_shadows.size() || p_render_data->shadows.size();
+	bool render_shadows = p_render_data->directional_shadows.size() ||
+		p_render_data->shadows.size();
 	bool render_gi = rb.is_valid() && p_use_gi;
 
 	if (render_shadows && render_gi) {
@@ -1560,18 +1632,49 @@ void RenderDeferred::_pre_opaque_render(RenderDataRD *p_render_data, bool p_use_
 
 		//render directional shadows
 		for (uint32_t i = 0; i < p_render_data->directional_shadows.size(); i++) {
-			_render_shadow_pass(p_render_data->render_shadows[p_render_data->directional_shadows[i]].light, p_render_data->shadow_atlas, p_render_data->render_shadows[p_render_data->directional_shadows[i]].pass, p_render_data->render_shadows[p_render_data->directional_shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, false, i == p_render_data->directional_shadows.size() - 1, false, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
+			_render_shadow_pass(
+				p_render_data->render_shadows[p_render_data->directional_shadows[i]].light,
+				p_render_data->shadow_atlas,
+				p_render_data->render_shadows[p_render_data->directional_shadows[i]].pass,
+				p_render_data->render_shadows[p_render_data->directional_shadows[i]].instances,
+				lod_distance_multiplier,
+				p_render_data->scene_data->screen_mesh_lod_threshold,
+				false,
+				i == p_render_data->directional_shadows.size() - 1,
+				false,
+				p_render_data->render_info,
+				viewport_size,
+				p_render_data->scene_data->cam_transform);
 		}
 		//render positional shadows
 		for (uint32_t i = 0; i < p_render_data->shadows.size(); i++) {
-			_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light, p_render_data->shadow_atlas, p_render_data->render_shadows[p_render_data->shadows[i]].pass, p_render_data->render_shadows[p_render_data->shadows[i]].instances, lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, i == 0, i == p_render_data->shadows.size() - 1, true, p_render_data->render_info, viewport_size, p_render_data->scene_data->cam_transform);
+			_render_shadow_pass(p_render_data->render_shadows[p_render_data->shadows[i]].light,
+				p_render_data->shadow_atlas,
+				p_render_data->render_shadows[p_render_data->shadows[i]].pass,
+				p_render_data->render_shadows[p_render_data->shadows[i]].instances,
+				lod_distance_multiplier,
+				p_render_data->scene_data->screen_mesh_lod_threshold,
+				i == 0,
+				i == p_render_data->shadows.size() - 1,
+				true,
+				p_render_data->render_info,
+				viewport_size,
+				p_render_data->scene_data->cam_transform);
 		}
 
 		_render_shadow_process();
 	}
 
 	if (render_gi) {
-		gi.process_gi(rb, p_normal_roughness_slices, p_voxel_gi_buffer, p_render_data->environment, p_render_data->scene_data->view_count, p_render_data->scene_data->view_projection, p_render_data->scene_data->view_eye_offset, p_render_data->scene_data->cam_transform, *p_render_data->voxel_gi_instances);
+		gi.process_gi(rb,
+			p_normal_roughness_slices,
+			p_voxel_gi_buffer,
+			p_render_data->environment,
+			p_render_data->scene_data->view_count,
+			p_render_data->scene_data->view_projection,
+			p_render_data->scene_data->view_eye_offset,
+			p_render_data->scene_data->cam_transform,
+			*p_render_data->voxel_gi_instances);
 	}
 
 	if (render_shadows) {
@@ -1587,15 +1690,24 @@ void RenderDeferred::_pre_opaque_render(RenderDataRD *p_render_data, bool p_use_
 			RENDER_TIMESTAMP("Prepare Depth for SSAO/SSIL");
 			// Convert our depth buffer data to linear data in
 			for (uint32_t v = 0; v < rb->get_view_count(); v++) {
-				ss_effects->downsample_depth(rb, v, p_render_data->scene_data->view_projection[v]);
+				ss_effects->downsample_depth(rb,
+					v,
+					p_render_data->scene_data->view_projection[v]);
 			}
 
 			if (p_use_ssao) {
-				_process_ssao(rb, p_render_data->environment, p_normal_roughness_slices, p_render_data->scene_data->view_projection);
+				_process_ssao(rb,
+					p_render_data->environment,
+					p_normal_roughness_slices,
+					p_render_data->scene_data->view_projection);
 			}
 
 			if (p_use_ssil) {
-				_process_ssil(rb, p_render_data->environment, p_normal_roughness_slices, p_render_data->scene_data->view_projection, p_render_data->scene_data->cam_transform);
+				_process_ssil(rb,
+					p_render_data->environment,
+					p_normal_roughness_slices,
+					p_render_data->scene_data->view_projection,
+					p_render_data->scene_data->cam_transform);
 			}
 		}
 	}
