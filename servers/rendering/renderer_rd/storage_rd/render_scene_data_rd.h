@@ -36,6 +36,7 @@
 
 // This is a container for data related to rendering a single frame of a viewport where we load this data into a UBO
 // that can be used by the main scene shader but also by various effects.
+// 这是一个与渲染视口单帧数据相关的容器，在这里我们将这些数据加载到一个可被主场景着色器以及各种特效使用的 UBO 中。
 
 class RenderSceneDataRD : public RenderSceneData {
 	GDCLASS(RenderSceneDataRD, RenderSceneData);
@@ -56,6 +57,7 @@ public:
 	Transform3D main_cam_transform;
 
 	// For stereo rendering
+	// 立体渲染，左右两个眼睛的那种，就是有两个视图。
 	uint32_t view_count = 1;
 	Vector3 view_eye_offset[RendererSceneRender::MAX_RENDER_VIEWS];
 	Projection view_projection[RendererSceneRender::MAX_RENDER_VIEWS];

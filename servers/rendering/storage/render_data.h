@@ -35,6 +35,10 @@
 #include "render_scene_buffers.h"
 #include "render_scene_data.h"
 
+/**
+ * Abstract render data object, holds frame data related to rendering a single frame of a viewport.
+ * 抽象的渲染数据对象，持有帧数据，与一个视口的一帧有关。
+ */
 class RenderData : public Object {
 	GDCLASS(RenderData, Object);
 

@@ -36,6 +36,13 @@
 #include "core/object/object.h"
 #include "core/object/script_language.h"
 
+/**
+ * Abstract render data object, holds scene data related to rendering a single frame of a viewport.
+ * 抽象的渲染数据对象，持有场景数据，和一个视口的一帧的渲染相关。
+ *
+ * 和RenderData相比，我是不是可以认为它是只有场景数据，其他的数据都是RenderData持有的。
+ * 看上去似乎是的。因为RenderData里有RenderSceneData的指针。
+ */
 class RenderSceneData : public Object {
 	GDCLASS(RenderSceneData, Object);
 

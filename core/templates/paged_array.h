@@ -133,6 +133,9 @@ public:
 // PageArray is a local array that is optimized to grow in place, then be cleared often.
 // It does so by allocating pages from a PagedArrayPool.
 // It is safe to use multiple PagedArrays from different threads, sharing a single PagedArrayPool
+// PageArray是一个本地数组，经过优化可以就地扩容，并且能够频繁地被清理。
+// 它通过PagedArrayPool分配页面来实现这个功能。
+// 多个线程可以安全使用多个PagedArray，并且共享同一个PagedArrayPool
 
 template <typename T>
 class PagedArray {

@@ -35,11 +35,21 @@
 #include "servers/rendering/renderer_rd/storage_rd/render_scene_data_rd.h"
 #include "servers/rendering/storage/render_data.h"
 
+/**
+ * Render data implementation for the RenderingDevice based renderers.
+ * 这个名字就是为渲染设备（RD）所准备的渲染数据的实现
+ *
+ * Note: This is an internal rendering server object, do not instantiate this from script.
+ * 注意：这是内部渲染服务器对象，不要从脚本中实例化它。
+ * 
+ */
+
 class RenderDataRD : public RenderData {
 	GDCLASS(RenderDataRD, RenderData);
 
 public:
 	// Access methods to expose data externally
+	// 给外部暴露的数据访问接口
 	virtual Ref<RenderSceneBuffers> get_render_scene_buffers() const override;
 	virtual RenderSceneData *get_render_scene_data() const override;
 
