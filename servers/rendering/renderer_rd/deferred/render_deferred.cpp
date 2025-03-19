@@ -1535,6 +1535,7 @@ void RenderDeferred::_copy_framebuffer_to_ssil(Ref<RenderSceneBuffersRD> p_rende
 	}
 }
 
+// 在绘制不透明物体之前的操作。
 void RenderDeferred::_pre_opaque_render(RenderDataRD *p_render_data,
 	bool p_use_ssao,
 	bool p_use_ssil,
@@ -1544,6 +1545,7 @@ void RenderDeferred::_pre_opaque_render(RenderDataRD *p_render_data,
 {
 	// Render shadows while GI is rendering, due to how barriers are handled,
 	// this should happen at the same time
+	// 在渲染全局光照（GI）的同时渲染阴影，由于屏障（barrier）处理机制的限制，这二者需要同步进行。
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
@@ -1614,8 +1616,7 @@ void RenderDeferred::_pre_opaque_render(RenderDataRD *p_render_data,
 
 	// Render GI
 
-	bool render_shadows = p_render_data->directional_shadows.size() ||
-		p_render_data->shadows.size();
+	bool render_shadows = p_render_data->directional_shadows.size() || p_render_data->shadows.size();
 	bool render_gi = rb.is_valid() && p_use_gi;
 
 	if (render_shadows && render_gi) {
@@ -1685,6 +1686,8 @@ void RenderDeferred::_pre_opaque_render(RenderDataRD *p_render_data,
 		// Note, in multiview we're allocating buffers for each eye/view we're rendering.
 		// This should allow most of the processing to happen in parallel even if we're doing
 		// drawcalls per eye/view. It will all sync up at the barrier.
+		// 注意，在多视图的情况下，我们需要为每个视图分配缓存。这要求允许并行的进行处理，尽管我们是逐个处理drawcall的。
+		// 所有这些操作会在障碍处同步。
 
 		if (p_use_ssao || p_use_ssil) {
 			RENDER_TIMESTAMP("Prepare Depth for SSAO/SSIL");
@@ -1736,27 +1739,58 @@ void RenderDeferred::_pre_opaque_render(RenderDataRD *p_render_data,
 
 	uint32_t directional_light_count = 0;
 	uint32_t positional_light_count = 0;
-	light_storage->update_light_buffers(p_render_data, *p_render_data->lights, p_render_data->scene_data->cam_transform, p_render_data->shadow_atlas, using_shadows, directional_light_count, positional_light_count, p_render_data->directional_light_soft_shadows);
+	// 更新光照缓存
+	light_storage->update_light_buffers(p_render_data,
+		*p_render_data->lights,
+		p_render_data->scene_data->cam_transform,
+		p_render_data->shadow_atlas,
+		using_shadows,
+		directional_light_count,
+		positional_light_count,
+		p_render_data->directional_light_soft_shadows);
+	// 更新贴花缓存
 	texture_storage->update_decal_buffer(*p_render_data->decals, p_render_data->scene_data->cam_transform);
 
 	p_render_data->directional_light_count = directional_light_count;
 
 	if (current_cluster_builder) {
+		// 烘焙簇
 		current_cluster_builder->bake_cluster();
 	}
 
 	if (rb_data.is_valid()) {
 		RENDER_TIMESTAMP("Update Volumetric Fog");
 		bool directional_shadows = RendererRD::LightStorage::get_singleton()->has_directional_shadows(directional_light_count);
-		_update_volumetric_fog(rb, p_render_data->environment, p_render_data->scene_data->cam_projection, p_render_data->scene_data->cam_transform, p_render_data->scene_data->prev_cam_transform.affine_inverse(), p_render_data->shadow_atlas, directional_light_count, directional_shadows, positional_light_count, p_render_data->voxel_gi_count, *p_render_data->fog_volumes);
+		// 更新体积雾
+		_update_volumetric_fog(rb,
+			p_render_data->environment,
+			p_render_data->scene_data->cam_projection,
+			p_render_data->scene_data->cam_transform,
+			p_render_data->scene_data->prev_cam_transform.affine_inverse(),
+			p_render_data->shadow_atlas,
+			directional_light_count,
+			directional_shadows,
+			positional_light_count,
+			p_render_data->voxel_gi_count,
+			*p_render_data->fog_volumes);
 	}
 }
 
-void RenderDeferred::_process_ssr(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_dest_framebuffer, const RID *p_normal_slices, RID p_specular_buffer, const RID *p_metallic_slices, RID p_environment, const Projection *p_projections, const Vector3 *p_eye_offsets, bool p_use_additive) {
+// 处理屏幕空间反射
+void RenderDeferred::_process_ssr(	Ref<RenderSceneBuffersRD> p_render_buffers,		// 渲染缓冲
+									RID p_dest_framebuffer,		// 目标帧缓冲
+									const RID *p_normal_slices,		// 法线切片
+									RID p_specular_buffer,		// 高光缓冲
+									const RID *p_metallic_slices,	// 金属度切片
+									RID p_environment,		// 环境
+									const Projection *p_projections,	// 投影
+									const Vector3 *p_eye_offsets,	// 眼睛偏移
+									bool p_use_additive)	// 是否使用累加
+{
 	ERR_FAIL_NULL(ss_effects);
 	ERR_FAIL_COND(p_render_buffers.is_null());
 
-	Ref<RenderBufferDataDeferred> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+	Ref<RenderBufferDataDeferred> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_DEFERRED);
 	ERR_FAIL_COND(rb_data.is_null());
 
 	Size2i internal_size = p_render_buffers->get_internal_size();
@@ -1765,18 +1799,37 @@ void RenderDeferred::_process_ssr(Ref<RenderSceneBuffersRD> p_render_buffers, RI
 
 	if (!can_use_effects) {
 		//just copy
-		copy_effects->merge_specular(p_dest_framebuffer, p_specular_buffer, p_use_additive ? RID() : p_render_buffers->get_internal_texture(), RID(), view_count);
+		copy_effects->merge_specular(p_dest_framebuffer,
+			p_specular_buffer,
+			p_use_additive ? RID() : p_render_buffers->get_internal_texture(),
+			RID(),
+			view_count);
 		return;
 	}
 
 	ERR_FAIL_COND(p_environment.is_null());
 	ERR_FAIL_COND(!environment_get_ssr_enabled(p_environment));
 
-	ss_effects->ssr_allocate_buffers(p_render_buffers, rb_data->ss_effects_data.ssr, _render_buffers_get_color_format());
-	ss_effects->screen_space_reflection(p_render_buffers, rb_data->ss_effects_data.ssr, p_normal_slices, p_metallic_slices, environment_get_ssr_max_steps(p_environment), environment_get_ssr_fade_in(p_environment), environment_get_ssr_fade_out(p_environment), environment_get_ssr_depth_tolerance(p_environment), p_projections, p_eye_offsets);
+	ss_effects->ssr_allocate_buffers(p_render_buffers,
+		rb_data->ss_effects_data.ssr,
+		_render_buffers_get_color_format());
+	ss_effects->screen_space_reflection(p_render_buffers,
+		rb_data->ss_effects_data.ssr,
+		p_normal_slices,
+		p_metallic_slices,
+		environment_get_ssr_max_steps(p_environment),
+		environment_get_ssr_fade_in(p_environment),
+		environment_get_ssr_fade_out(p_environment),
+		environment_get_ssr_depth_tolerance(p_environment),
+		p_projections,
+		p_eye_offsets);
 
 	RID output = p_render_buffers->get_texture(RB_SCOPE_SSR, RB_OUTPUT);
-	copy_effects->merge_specular(p_dest_framebuffer, p_specular_buffer, p_use_additive ? RID() : p_render_buffers->get_internal_texture(), output, view_count);
+	copy_effects->merge_specular(p_dest_framebuffer,
+		p_specular_buffer,
+		p_use_additive ? RID() : p_render_buffers->get_internal_texture(),
+		output,
+		view_count);
 }
 
 void RenderDeferred::_process_sss(Ref<RenderSceneBuffersRD> p_render_buffers, const Projection &p_camera) {
@@ -1795,7 +1848,11 @@ void RenderDeferred::_process_sss(Ref<RenderSceneBuffersRD> p_render_buffers, co
 	for (uint32_t v = 0; v < p_render_buffers->get_view_count(); v++) {
 		RID internal_texture = p_render_buffers->get_internal_texture(v);
 		RID depth_texture = p_render_buffers->get_depth_texture(v);
-		ss_effects->sub_surface_scattering(p_render_buffers, internal_texture, depth_texture, p_camera, internal_size);
+		ss_effects->sub_surface_scattering(p_render_buffers,
+			internal_texture,
+			depth_texture,
+			p_camera,
+			internal_size);
 	}
 }
 
@@ -1813,11 +1870,11 @@ void RenderDeferred::_render_scene(RenderDataRD *p_render_data, const Color &p_d
 	// 用于存储前向聚类的自定义数据
 	Ref<RenderBufferDataDeferred> rb_data;
 	// 如果当前渲染缓冲区有前向聚类的自定义数据，则获取它。
-	if (rb->has_custom_data(RB_SCOPE_FORWARD_CLUSTERED)) {
+	if (rb->has_custom_data(RB_SCOPE_DEFERRED)) {
 		// Our forward clustered custom data buffer will only be available when we're rendering our normal view.
 		// This will not be available when rendering reflection probes.
 		// 只有在普通视图渲染时才会有此数据，在反射探针渲染时不可用。
-		rb_data = rb->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+		rb_data = rb->get_custom_data(RB_SCOPE_DEFERRED);
 	}
 	// 判断当前是否在渲染反射探针
 	bool is_reflection_probe = p_render_data->reflection_probe.is_valid();
@@ -1827,6 +1884,7 @@ void RenderDeferred::_render_scene(RenderDataRD *p_render_data, const Color &p_d
 
 	//first of all, make a new render pass
 	//fill up ubo
+	// 首先，创建一个新的渲染通道，并填充ubo
 
 	// 捕获准备3D场景的时间戳
 	RENDER_TIMESTAMP("Prepare 3D Scene");
@@ -1851,14 +1909,16 @@ void RenderDeferred::_render_scene(RenderDataRD *p_render_data, const Color &p_d
 	}
 
 	// obtain cluster builder
-	// 获取当前的聚类构建起，用于光照聚类的构建。
+	// 获取当前的聚类构建器，用于光照聚类的构建。
 	if (light_storage->owns_reflection_probe_instance(p_render_data->reflection_probe)) {
 		// 如果当前渲染的是反射探针，则从LightStorage中获取聚类构建器。
 		current_cluster_builder = light_storage->reflection_probe_instance_get_cluster_builder(p_render_data->reflection_probe, &cluster_builder_shared);
 
 		// 如果相机属性有效，则设置反射探针的曝光值。
 		if (p_render_data->camera_attributes.is_valid()) {
-			light_storage->reflection_probe_set_baked_exposure(light_storage->reflection_probe_instance_get_probe(p_render_data->reflection_probe), RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes));
+			light_storage->reflection_probe_set_baked_exposure(
+				light_storage->reflection_probe_instance_get_probe(p_render_data->reflection_probe),
+				RSG::camera_attributes->camera_attributes_get_exposure_normalization_factor(p_render_data->camera_attributes));
 		}
 	} else if (rb_data.is_valid()) {
 		// 如果不是反射探针，且存在前向聚类数据，则使用该数据的聚类构建器。
@@ -1882,7 +1942,11 @@ void RenderDeferred::_render_scene(RenderDataRD *p_render_data, const Color &p_d
 		}
 
 		// 设置体素GI实例，用于全局光照计算。
-		gi.setup_voxel_gi_instances(p_render_data, p_render_data->render_buffers, p_render_data->scene_data->cam_transform, *p_render_data->voxel_gi_instances, p_render_data->voxel_gi_count);
+		gi.setup_voxel_gi_instances(p_render_data,
+			p_render_data->render_buffers,
+			p_render_data->scene_data->cam_transform,
+			*p_render_data->voxel_gi_instances,
+			p_render_data->voxel_gi_count);
 	} else {
 		// 如果没有渲染缓冲区和反射探针数据，则报错并返回。
 		ERR_PRINT("No render buffer nor reflection atlas, bug"); // Should never happen!
@@ -1990,9 +2054,11 @@ void RenderDeferred::_render_scene(RenderDataRD *p_render_data, const Color &p_d
 		screen_size.y = resolution;
 
 		// 获取反射探针的颜色和深度帧缓冲区
-		color_framebuffer = light_storage->reflection_probe_instance_get_framebuffer(p_render_data->reflection_probe, p_render_data->reflection_probe_pass);
+		color_framebuffer = light_storage->reflection_probe_instance_get_framebuffer(p_render_data->reflection_probe,
+			p_render_data->reflection_probe_pass);
 		color_only_framebuffer = color_framebuffer;
-		depth_framebuffer = light_storage->reflection_probe_instance_get_depth_framebuffer(p_render_data->reflection_probe, p_render_data->reflection_probe_pass);
+		depth_framebuffer = light_storage->reflection_probe_instance_get_depth_framebuffer(p_render_data->reflection_probe,
+			p_render_data->reflection_probe_pass);
 
 		// 如果反射探针位于室内，则清除环境设置
 		if (light_storage->reflection_probe_is_interior(light_storage->reflection_probe_instance_get_probe(p_render_data->reflection_probe))) {
@@ -2017,6 +2083,7 @@ void RenderDeferred::_render_scene(RenderDataRD *p_render_data, const Color &p_d
 			scene_shader.enable_advanced_shader_group();
 
 			// Indicate pipelines for motion vectors are required.
+			// 设置管线，表明需要运动向量。
 			global_pipeline_data_required.use_motion_vectors = true;
 		}
 
@@ -2027,7 +2094,8 @@ void RenderDeferred::_render_scene(RenderDataRD *p_render_data, const Color &p_d
 
 		// 如果环境存在，则检查并设置环境相关的功能标志，比如SDFGI，SSR等。
 		if (p_render_data->environment.is_valid()) {
-			if (environment_get_sdfgi_enabled(p_render_data->environment) && get_debug_draw_mode() != RS::VIEWPORT_DEBUG_DRAW_UNSHADED) {
+			if (environment_get_sdfgi_enabled(p_render_data->environment)
+				&& get_debug_draw_mode() != RS::VIEWPORT_DEBUG_DRAW_UNSHADED) {
 				using_sdfgi = true;
 			}
 			if (environment_get_ssr_enabled(p_render_data->environment)) {
@@ -2131,7 +2199,10 @@ void RenderDeferred::_render_scene(RenderDataRD *p_render_data, const Color &p_d
 	}
 
 	// 检查是否使用次表面散射（SSS）
-	bool using_sss = rb_data.is_valid() && !is_reflection_probe && scene_state.used_sss && ss_effects->sss_get_quality() != RS::SUB_SURFACE_SCATTERING_QUALITY_DISABLED;
+	bool using_sss = rb_data.is_valid() &&
+		!is_reflection_probe &&
+		scene_state.used_sss &&
+		ss_effects->sss_get_quality() != RS::SUB_SURFACE_SCATTERING_QUALITY_DISABLED;
 
 	// 如果启用了SSS，或者需要独立高光反射但是还没启用，则启用独立高光反射
 	if ((using_sss || ce_needs_separate_specular) && !using_separate_specular) {
@@ -2151,6 +2222,7 @@ void RenderDeferred::_render_scene(RenderDataRD *p_render_data, const Color &p_d
 		global_pipeline_data_required.use_normal_and_roughness = true;
 	}
 
+	// 配制全局管线中的设置
 	if (scene_state.used_lightmap) {
 		global_pipeline_data_required.use_lightmaps = true;
 	}
@@ -2905,7 +2977,7 @@ void RenderDeferred::_render_buffers_debug_draw(const RenderDataRD *p_render_dat
 	Ref<RenderSceneBuffersRD> rb = p_render_data->render_buffers;
 	ERR_FAIL_COND(rb.is_null());
 
-	Ref<RenderBufferDataDeferred> rb_data = rb->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+	Ref<RenderBufferDataDeferred> rb_data = rb->get_custom_data(RB_SCOPE_DEFERRED);
 	ERR_FAIL_COND(rb_data.is_null());
 
 	RendererSceneRenderRD::_render_buffers_debug_draw(p_render_data);
@@ -2932,7 +3004,18 @@ void RenderDeferred::_render_buffers_debug_draw(const RenderDataRD *p_render_dat
 	}
 }
 
-void RenderDeferred::_render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_pass, const PagedArray<RenderGeometryInstance *> &p_instances, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, bool p_open_pass, bool p_close_pass, bool p_clear_region, RenderingMethod::RenderInfo *p_render_info, const Size2i &p_viewport_size, const Transform3D &p_main_cam_transform) {
+void RenderDeferred::_render_shadow_pass(RID p_light,
+	RID p_shadow_atlas,
+	int p_pass,
+	const PagedArray<RenderGeometryInstance *> &p_instances,
+	float p_lod_distance_multiplier,
+	float p_screen_mesh_lod_threshold,
+	bool p_open_pass,
+	bool p_close_pass,
+	bool p_clear_region,
+	RenderingMethod::RenderInfo *p_render_info,
+	const Size2i &p_viewport_size,
+	const Transform3D &p_main_cam_transform) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 
 	ERR_FAIL_COND(!light_storage->owns_light_instance(p_light));
@@ -3019,6 +3102,7 @@ void RenderDeferred::_render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_
 
 		uint32_t quadrant = (key >> RendererRD::LightStorage::QUADRANT_SHIFT) & 0x3;
 		uint32_t shadow = key & RendererRD::LightStorage::SHADOW_INDEX_MASK;
+		// 查找阴影图集指定象限的细分级别。
 		uint32_t subdivision = light_storage->shadow_atlas_get_quadrant_subdivision(p_shadow_atlas, quadrant);
 
 		ERR_FAIL_INDEX((int)shadow, light_storage->shadow_atlas_get_quadrant_shadow_size(p_shadow_atlas, quadrant));
@@ -3026,6 +3110,7 @@ void RenderDeferred::_render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_
 		uint32_t shadow_atlas_size = light_storage->shadow_atlas_get_size(p_shadow_atlas);
 		uint32_t quadrant_size = shadow_atlas_size >> 1;
 
+		// 先定位到象限，再定位到具体的位置
 		atlas_rect.position.x = (quadrant & 1) * quadrant_size;
 		atlas_rect.position.y = (quadrant >> 1) * quadrant_size;
 
@@ -3038,11 +3123,13 @@ void RenderDeferred::_render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_
 
 		zfar = light_storage->light_get_param(base, RS::LIGHT_PARAM_RANGE);
 
-		if (light_storage->light_get_type(base) == RS::LIGHT_OMNI) {
+		if (light_storage->light_get_type(base) == RS::LIGHT_OMNI) {	// 如果是点光源
+			// 定位图块的位置
 			bool wrap = (shadow + 1) % subdivision == 0;
 			dual_paraboloid_offset = wrap ? Vector2i(1 - subdivision, 1) : Vector2i(1, 0);
 
 			if (light_storage->light_omni_get_shadow_mode(base) == RS::LIGHT_OMNI_SHADOW_CUBE) {
+				// 阴影模式是立方体阴影
 				render_texture = light_storage->get_cubemap(shadow_size / 2);
 				render_fb = light_storage->get_cubemap_fb(shadow_size / 2, p_pass);
 
@@ -3050,7 +3137,7 @@ void RenderDeferred::_render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_
 				light_transform = light_storage->light_instance_get_shadow_transform(p_light, p_pass);
 				render_cubemap = true;
 				finalize_cubemap = p_pass == 5;
-				atlas_fb = light_storage->shadow_atlas_get_fb(p_shadow_atlas);
+				atlas_fb = light_storage->shadow_atlas_get_fb(p_shadow_atlas);	// 获取阴影图集的帧缓存
 
 				atlas_size = shadow_atlas_size;
 
@@ -3075,7 +3162,8 @@ void RenderDeferred::_render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_
 				flip_y = true;
 			}
 
-		} else if (light_storage->light_get_type(base) == RS::LIGHT_SPOT) {
+		}
+		else if (light_storage->light_get_type(base) == RS::LIGHT_SPOT) {
 			light_projection = light_storage->light_instance_get_shadow_camera(p_light, 0);
 			light_transform = light_storage->light_instance_get_shadow_transform(p_light, 0);
 
@@ -3087,41 +3175,115 @@ void RenderDeferred::_render_shadow_pass(RID p_light, RID p_shadow_atlas, int p_
 
 	if (render_cubemap) {
 		//rendering to cubemap
-		_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, false, false, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, Rect2(), false, true, true, true, p_render_info, p_viewport_size, p_main_cam_transform);
-		if (finalize_cubemap) {
+		// 追加的阴影绘制
+		_render_shadow_append(render_fb,
+			p_instances,
+			light_projection,
+			light_transform,
+			zfar,
+			0, 0,
+			reverse_cull_face,
+			false, false,
+			use_pancake,
+			p_lod_distance_multiplier,
+			p_screen_mesh_lod_threshold,
+			Rect2(),
+			false, true,
+			true, true,
+			p_render_info,
+			p_viewport_size,
+			p_main_cam_transform);
+
+		if (finalize_cubemap) {	// 最后一张图之后还需要做一些处理工作。
 			_render_shadow_process();
 			_render_shadow_end();
 			//reblit
 			Rect2 atlas_rect_norm = atlas_rect;
 			atlas_rect_norm.position /= float(atlas_size);
 			atlas_rect_norm.size /= float(atlas_size);
-			copy_effects->copy_cubemap_to_dp(render_texture, atlas_fb, atlas_rect_norm, atlas_rect.size, light_projection.get_z_near(), zfar, false);
+			copy_effects->copy_cubemap_to_dp(render_texture,
+				atlas_fb,
+				atlas_rect_norm,
+				atlas_rect.size,
+				light_projection.get_z_near(),
+				zfar,
+				false);
 			atlas_rect_norm.position += Vector2(dual_paraboloid_offset) * atlas_rect_norm.size;
-			copy_effects->copy_cubemap_to_dp(render_texture, atlas_fb, atlas_rect_norm, atlas_rect.size, light_projection.get_z_near(), zfar, true);
+			copy_effects->copy_cubemap_to_dp(render_texture,
+				atlas_fb,
+				atlas_rect_norm,
+				atlas_rect.size,
+				light_projection.get_z_near(),
+				zfar,
+				true);
 
 			//restore transform so it can be properly used
-			light_storage->light_instance_set_shadow_transform(p_light, Projection(), light_storage->light_instance_get_base_transform(p_light), zfar, 0, 0, 0);
+			light_storage->light_instance_set_shadow_transform(p_light,
+				Projection(),
+				light_storage->light_instance_get_base_transform(p_light),
+				zfar,
+				0, 0, 0);
 		}
 
-	} else {
+	}
+	else {
 		//render shadow
-		_render_shadow_append(render_fb, p_instances, light_projection, light_transform, zfar, 0, 0, reverse_cull_face, using_dual_paraboloid, using_dual_paraboloid_flip, use_pancake, p_lod_distance_multiplier, p_screen_mesh_lod_threshold, atlas_rect, flip_y, p_clear_region, p_open_pass, p_close_pass, p_render_info, p_viewport_size, p_main_cam_transform);
+		_render_shadow_append(render_fb,
+			p_instances,
+			light_projection,
+			light_transform,
+			zfar,
+			0, 0,
+			reverse_cull_face,
+			using_dual_paraboloid,
+			using_dual_paraboloid_flip,
+			use_pancake,
+			p_lod_distance_multiplier,
+			p_screen_mesh_lod_threshold,
+			atlas_rect,
+			flip_y,
+			p_clear_region,
+			p_open_pass,
+			p_close_pass,
+			p_render_info,
+			p_viewport_size,
+			p_main_cam_transform);
 	}
 }
 
 void RenderDeferred::_render_shadow_begin() {
 	scene_state.shadow_passes.clear();
 	RD::get_singleton()->draw_command_begin_label("Shadow Setup");
-	_update_render_base_uniform_set();
+	_update_render_base_uniform_set();	// 更新基础的统一变量集
 
 	render_list[RENDER_LIST_SECONDARY].clear();
 	scene_state.instance_data[RENDER_LIST_SECONDARY].clear();
 }
 
-void RenderDeferred::_render_shadow_append(RID p_framebuffer, const PagedArray<RenderGeometryInstance *> &p_instances, const Projection &p_projection, const Transform3D &p_transform, float p_zfar, float p_bias, float p_normal_bias, bool p_reverse_cull_face, bool p_use_dp, bool p_use_dp_flip, bool p_use_pancake, float p_lod_distance_multiplier, float p_screen_mesh_lod_threshold, const Rect2i &p_rect, bool p_flip_y, bool p_clear_region, bool p_begin, bool p_end, RenderingMethod::RenderInfo *p_render_info, const Size2i &p_viewport_size, const Transform3D &p_main_cam_transform) {
-	uint32_t shadow_pass_index = scene_state.shadow_passes.size();
+void RenderDeferred::_render_shadow_append(RID p_framebuffer,
+	const PagedArray<RenderGeometryInstance *> &p_instances,
+	const Projection &p_projection,
+	const Transform3D &p_transform,
+	float p_zfar,
+	float p_bias,
+	float p_normal_bias,
+	bool p_reverse_cull_face,
+	bool p_use_dp,
+	bool p_use_dp_flip,
+	bool p_use_pancake,
+	float p_lod_distance_multiplier,
+	float p_screen_mesh_lod_threshold,
+	const Rect2i &p_rect,
+	bool p_flip_y,
+	bool p_clear_region,
+	bool p_begin, bool p_end,
+	RenderingMethod::RenderInfo *p_render_info,
+	const Size2i &p_viewport_size,
+	const Transform3D &p_main_cam_transform)
+{
+	uint32_t shadow_pass_index = scene_state.shadow_passes.size();	// 阴影pass的索引，说明不止一个阴影pass
 
-	SceneState::ShadowPass shadow_pass;
+	SceneState::ShadowPass shadow_pass;	// 创建一个新的阴影通道
 
 	RenderSceneDataRD scene_data;
 	scene_data.flip_y = !p_flip_y; // Q: Why is this inverted? Do we assume flip in shadow logic?
@@ -3144,7 +3306,14 @@ void RenderDeferred::_render_shadow_append(RID p_framebuffer, const PagedArray<R
 	render_data.instances = &p_instances;
 	render_data.render_info = p_render_info;
 
-	_setup_environment(&render_data, true, p_viewport_size, Color(), false, false, p_use_pancake, shadow_pass_index);
+	// 环境设置
+	_setup_environment(&render_data,
+		true,
+		p_viewport_size,
+		Color(),
+		false, false,
+		p_use_pancake,
+		shadow_pass_index);
 
 	if (get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_DISABLE_LOD) {
 		scene_data.screen_mesh_lod_threshold = 0.0;
@@ -3154,11 +3323,16 @@ void RenderDeferred::_render_shadow_append(RID p_framebuffer, const PagedArray<R
 
 	PassMode pass_mode = p_use_dp ? PASS_MODE_SHADOW_DP : PASS_MODE_SHADOW;
 
+	// 确定渲染列表的数据
 	uint32_t render_list_from = render_list[RENDER_LIST_SECONDARY].elements.size();
 	_fill_render_list(RENDER_LIST_SECONDARY, &render_data, pass_mode, false, false, false, true);
 	uint32_t render_list_size = render_list[RENDER_LIST_SECONDARY].elements.size() - render_list_from;
 	render_list[RENDER_LIST_SECONDARY].sort_by_key_range(render_list_from, render_list_size);
-	_fill_instance_data(RENDER_LIST_SECONDARY, p_render_info ? p_render_info->info[RS::VIEWPORT_RENDER_INFO_TYPE_SHADOW] : (int *)nullptr, render_list_from, render_list_size, false);
+	_fill_instance_data(RENDER_LIST_SECONDARY,
+		p_render_info ? p_render_info->info[RS::VIEWPORT_RENDER_INFO_TYPE_SHADOW] : (int *)nullptr,
+		render_list_from,
+		render_list_size,
+		false);
 
 	{
 		//regular forward for now
@@ -3189,13 +3363,20 @@ void RenderDeferred::_render_shadow_append(RID p_framebuffer, const PagedArray<R
 }
 
 void RenderDeferred::_render_shadow_process() {
-	_update_instance_data_buffer(RENDER_LIST_SECONDARY);
+	_update_instance_data_buffer(RENDER_LIST_SECONDARY);	// 更新缓冲的实例数据
 	//render shadows one after the other, so this can be done un-barriered and the driver can optimize (as well as allow us to run compute at the same time)
+	// 逐个渲染阴影，这样可以在无同步屏障的情况下完成，驱动程序可进行优化（同时允许我们并行运行计算任务）
 
 	for (uint32_t i = 0; i < scene_state.shadow_passes.size(); i++) {
 		//render passes need to be configured after instance buffer is done, since they need the latest version
+		// 实例缓冲处理完成后，渲染列表需要配制。因为它们需要最新的版本。
 		SceneState::ShadowPass &shadow_pass = scene_state.shadow_passes[i];
-		shadow_pass.rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY, nullptr, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default(), false, i);
+		shadow_pass.rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY,
+			nullptr,
+			RID(),
+			RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default(),
+			false,
+			i);
 	}
 
 	RD::get_singleton()->draw_command_end_label();
@@ -3203,15 +3384,41 @@ void RenderDeferred::_render_shadow_process() {
 void RenderDeferred::_render_shadow_end() {
 	RD::get_singleton()->draw_command_begin_label("Shadow Render");
 
+	// 逐个绘制阴影通道
 	for (SceneState::ShadowPass &shadow_pass : scene_state.shadow_passes) {
-		RenderListParameters render_list_parameters(render_list[RENDER_LIST_SECONDARY].elements.ptr() + shadow_pass.element_from, render_list[RENDER_LIST_SECONDARY].element_info.ptr() + shadow_pass.element_from, shadow_pass.element_count, shadow_pass.flip_cull, shadow_pass.pass_mode, 0, true, false, shadow_pass.rp_uniform_set, false, Vector2(), shadow_pass.lod_distance_multiplier, shadow_pass.screen_mesh_lod_threshold, 1, shadow_pass.element_from);
-		_render_list_with_draw_list(&render_list_parameters, shadow_pass.framebuffer, shadow_pass.clear_depth ? RD::DRAW_CLEAR_DEPTH : RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0, shadow_pass.rect);
+		RenderListParameters render_list_parameters(
+			render_list[RENDER_LIST_SECONDARY].elements.ptr() + shadow_pass.element_from,
+			render_list[RENDER_LIST_SECONDARY].element_info.ptr() + shadow_pass.element_from,
+			shadow_pass.element_count,
+			shadow_pass.flip_cull,
+			shadow_pass.pass_mode,
+			0,
+			true, false,
+			shadow_pass.rp_uniform_set,
+			false,
+			Vector2(),
+			shadow_pass.lod_distance_multiplier,
+			shadow_pass.screen_mesh_lod_threshold,
+			1,
+			shadow_pass.element_from);
+		_render_list_with_draw_list(&render_list_parameters,
+			shadow_pass.framebuffer,
+			shadow_pass.clear_depth ? RD::DRAW_CLEAR_DEPTH : RD::DRAW_DEFAULT_ALL,
+			Vector<Color>(),
+			0.0f,
+			0,
+			shadow_pass.rect);
 	}
 
 	RD::get_singleton()->draw_command_end_label();
 }
 
-void RenderDeferred::_render_particle_collider_heightfield(RID p_fb, const Transform3D &p_cam_transform, const Projection &p_cam_projection, const PagedArray<RenderGeometryInstance *> &p_instances) {
+// 渲染粒子与高度场碰撞
+void RenderDeferred::_render_particle_collider_heightfield(RID p_fb,
+	const Transform3D &p_cam_transform,
+	const Projection &p_cam_projection,
+	const PagedArray<RenderGeometryInstance *> &p_instances)
+{
 	RENDER_TIMESTAMP("Setup GPUParticlesCollisionHeightField3D");
 
 	RD::get_singleton()->draw_command_begin_label("Render Collider Heightfield");
@@ -3239,7 +3446,7 @@ void RenderDeferred::_render_particle_collider_heightfield(RID p_fb, const Trans
 
 	_setup_environment(&render_data, true, Vector2(1, 1), Color(), false, false, false);
 
-	PassMode pass_mode = PASS_MODE_SHADOW;
+	PassMode pass_mode = PASS_MODE_SHADOW;	// 奇怪，为啥是阴影类型的通道类型？
 
 	_fill_render_list(RENDER_LIST_SECONDARY, &render_data, pass_mode);
 	render_list[RENDER_LIST_SECONDARY].sort_by_key();
@@ -3257,11 +3464,19 @@ void RenderDeferred::_render_particle_collider_heightfield(RID p_fb, const Trans
 	RD::get_singleton()->draw_command_end_label();
 }
 
-void RenderDeferred::_render_material(const Transform3D &p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, const PagedArray<RenderGeometryInstance *> &p_instances, RID p_framebuffer, const Rect2i &p_region, float p_exposure_normalization) {
+void RenderDeferred::_render_material(const Transform3D &p_cam_transform,
+	const Projection &p_cam_projection,
+	bool p_cam_orthogonal,
+	const PagedArray<RenderGeometryInstance *> &p_instances,
+	RID p_framebuffer,
+	const Rect2i &p_region,
+	float p_exposure_normalization)
+{
 	RENDER_TIMESTAMP("Setup Rendering 3D Material");
 
 	RD::get_singleton()->draw_command_begin_label("Render 3D Material");
 
+	// 准备渲染场景数据
 	RenderSceneDataRD scene_data;
 	scene_data.cam_projection = p_cam_projection;
 	scene_data.cam_transform = p_cam_transform;
@@ -3274,29 +3489,45 @@ void RenderDeferred::_render_material(const Transform3D &p_cam_transform, const 
 	scene_data.time_step = time_step;
 	scene_data.main_cam_transform = p_cam_transform;
 
+	// 渲染数据结构的填充（包含场景数据和实例集合）
 	RenderDataRD render_data;
 	render_data.scene_data = &scene_data;
 	render_data.cluster_size = 1;
 	render_data.cluster_max_elements = 32;
-	render_data.instances = &p_instances;
+	render_data.instances = &p_instances;		// 指向渲染实例集合
 
+	// 启用高级着色器组（如PBR材质需要复杂的着色器）
 	scene_shader.enable_advanced_shader_group();
 
+	// 更新基础的uniform set
 	_update_render_base_uniform_set();
 
+	// 设置渲染环境
 	_setup_environment(&render_data, true, Vector2(1, 1), Color());
 
+	// 通道模式为深度材质模式
 	PassMode pass_mode = PASS_MODE_DEPTH_MATERIAL;
 	_fill_render_list(RENDER_LIST_SECONDARY, &render_data, pass_mode);
 	render_list[RENDER_LIST_SECONDARY].sort_by_key();
+	// 填充实例数据
 	_fill_instance_data(RENDER_LIST_SECONDARY);
 
-	RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY, nullptr, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default());
+	RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY,
+		nullptr,
+		RID(),
+		RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default());
 
 	RENDER_TIMESTAMP("Render 3D Material");
 
 	{
-		RenderListParameters render_list_params(render_list[RENDER_LIST_SECONDARY].elements.ptr(), render_list[RENDER_LIST_SECONDARY].element_info.ptr(), render_list[RENDER_LIST_SECONDARY].elements.size(), true, pass_mode, 0, true, false, rp_uniform_set);
+		RenderListParameters render_list_params(render_list[RENDER_LIST_SECONDARY].elements.ptr(),
+			render_list[RENDER_LIST_SECONDARY].element_info.ptr(),
+			render_list[RENDER_LIST_SECONDARY].elements.size(),
+			true,
+			pass_mode,
+			0,
+			true, false,
+			rp_uniform_set);
 		//regular forward for now
 		Vector<Color> clear = {
 			Color(0, 0, 0, 0),
@@ -3306,8 +3537,19 @@ void RenderDeferred::_render_material(const Transform3D &p_cam_transform, const 
 			Color(0, 0, 0, 0)
 		};
 
-		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, RD::DRAW_CLEAR_ALL, clear, 0.0f, 0, p_region);
-		_render_list(draw_list, RD::get_singleton()->framebuffer_get_format(p_framebuffer), &render_list_params, 0, render_list_params.element_count);
+		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer,
+			RD::DRAW_CLEAR_ALL,
+			clear,
+			0.0f,
+			0,
+			p_region);
+
+		_render_list(draw_list,
+			RD::get_singleton()->framebuffer_get_format(p_framebuffer),
+			&render_list_params,
+			0,
+			render_list_params.element_count);
+
 		RD::get_singleton()->draw_list_end();
 	}
 
@@ -3342,12 +3584,23 @@ void RenderDeferred::_render_uv2(const PagedArray<RenderGeometryInstance *> &p_i
 	render_list[RENDER_LIST_SECONDARY].sort_by_key();
 	_fill_instance_data(RENDER_LIST_SECONDARY);
 
-	RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY, nullptr, RID(), RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default());
+	RID rp_uniform_set = _setup_render_pass_uniform_set(RENDER_LIST_SECONDARY,
+		nullptr,
+		RID(),
+		RendererRD::MaterialStorage::get_singleton()->samplers_rd_get_default());
 
 	RENDER_TIMESTAMP("Render 3D Material");
 
 	{
-		RenderListParameters render_list_params(render_list[RENDER_LIST_SECONDARY].elements.ptr(), render_list[RENDER_LIST_SECONDARY].element_info.ptr(), render_list[RENDER_LIST_SECONDARY].elements.size(), true, pass_mode, 0, true, false, rp_uniform_set, true);
+		RenderListParameters render_list_params(render_list[RENDER_LIST_SECONDARY].elements.ptr(),
+			render_list[RENDER_LIST_SECONDARY].element_info.ptr(),
+			render_list[RENDER_LIST_SECONDARY].elements.size(),
+			true,
+			pass_mode,
+			0,
+			true, false,
+			rp_uniform_set,
+			true);
 		//regular forward for now
 		Vector<Color> clear = {
 			Color(0, 0, 0, 0),
@@ -3372,16 +3625,25 @@ void RenderDeferred::_render_uv2(const PagedArray<RenderGeometryInstance *> &p_i
 
 		};
 
+		// 没看懂，这里为什么要绘制多次？
 		for (int i = 0; i < uv_offset_count; i++) {
 			Vector2 ofs = uv_offsets[i];
 			ofs.x /= p_region.size.width;
 			ofs.y /= p_region.size.height;
 			render_list_params.uv_offset = ofs;
-			_render_list(draw_list, RD::get_singleton()->framebuffer_get_format(p_framebuffer), &render_list_params, 0, render_list_params.element_count); //first wireframe, for pseudo conservative
+			_render_list(draw_list,
+				RD::get_singleton()->framebuffer_get_format(p_framebuffer),
+				&render_list_params,
+				0,
+				render_list_params.element_count); //first wireframe, for pseudo conservative
 		}
 		render_list_params.uv_offset = Vector2();
 		render_list_params.force_wireframe = false;
-		_render_list(draw_list, RD::get_singleton()->framebuffer_get_format(p_framebuffer), &render_list_params, 0, render_list_params.element_count); //second regular triangles
+		_render_list(draw_list,
+			RD::get_singleton()->framebuffer_get_format(p_framebuffer),
+			&render_list_params,
+			0,
+			render_list_params.element_count); //second regular triangles
 
 		RD::get_singleton()->draw_list_end();
 	}
@@ -3389,7 +3651,17 @@ void RenderDeferred::_render_uv2(const PagedArray<RenderGeometryInstance *> &p_i
 	RD::get_singleton()->draw_command_end_label();
 }
 
-void RenderDeferred::_render_sdfgi(Ref<RenderSceneBuffersRD> p_render_buffers, const Vector3i &p_from, const Vector3i &p_size, const AABB &p_bounds, const PagedArray<RenderGeometryInstance *> &p_instances, const RID &p_albedo_texture, const RID &p_emission_texture, const RID &p_emission_aniso_texture, const RID &p_geom_facing_texture, float p_exposure_normalization) {
+void RenderDeferred::_render_sdfgi(Ref<RenderSceneBuffersRD> p_render_buffers,
+	const Vector3i &p_from,
+	const Vector3i &p_size,
+	const AABB &p_bounds,
+	const PagedArray<RenderGeometryInstance *> &p_instances,
+	const RID &p_albedo_texture,
+	const RID &p_emission_texture,
+	const RID &p_emission_aniso_texture,
+	const RID &p_geom_facing_texture,
+	float p_exposure_normalization)
+{
 	RENDER_TIMESTAMP("Render SDFGI");
 
 	RD::get_singleton()->draw_command_begin_label("Render SDFGI Voxel");
@@ -4230,13 +4502,14 @@ void RenderDeferred::sdfgi_update(const Ref<RenderSceneBuffers> &p_render_buffer
 
 	if (sdfgi.is_valid() && (sdfgi->num_cascades != environment_get_sdfgi_cascades(p_environment) || sdfgi->min_cell_size != environment_get_sdfgi_min_cell_size(p_environment) || requested_history_size != sdfgi->history_size || sdfgi->uses_occlusion != environment_get_sdfgi_use_occlusion(p_environment) || sdfgi->y_scale_mode != environment_get_sdfgi_y_scale(p_environment))) {
 		//configuration changed, erase
+		// 配置修改了，删除
 		sdfgi.unref();
 		rb->set_custom_data(RB_SCOPE_SDFGI, sdfgi);
 	}
 
 	if (sdfgi.is_null()) {
 		// re-create
-		sdfgi = gi.create_sdfgi(p_environment, p_world_position, requested_history_size);
+		sdfgi = gi.create_sdfgi(p_environment, p_world_position, requested_history_size);	// 重新创建sdfgi对象
 		rb->set_custom_data(RB_SCOPE_SDFGI, sdfgi);
 	} else {
 		//check for updates
@@ -4244,6 +4517,7 @@ void RenderDeferred::sdfgi_update(const Ref<RenderSceneBuffers> &p_render_buffer
 	}
 }
 
+// 获取sdfgi待更新的脏区域
 int RenderDeferred::sdfgi_get_pending_region_count(const Ref<RenderSceneBuffers> &p_render_buffers) const {
 	Ref<RenderSceneBuffersRD> rb = p_render_buffers;
 	ERR_FAIL_COND_V(rb.is_null(), 0);
@@ -4254,6 +4528,7 @@ int RenderDeferred::sdfgi_get_pending_region_count(const Ref<RenderSceneBuffers>
 	Ref<RendererRD::GI::SDFGI> sdfgi = rb->get_custom_data(RB_SCOPE_SDFGI);
 
 	int dirty_count = 0;
+	// sdfgi的级联数据
 	for (const RendererRD::GI::SDFGI::Cascade &c : sdfgi->cascades) {
 		if (c.dirty_regions == RendererRD::GI::SDFGI::Cascade::DIRTY_ALL) {
 			dirty_count++;
@@ -4269,6 +4544,7 @@ int RenderDeferred::sdfgi_get_pending_region_count(const Ref<RenderSceneBuffers>
 	return dirty_count;
 }
 
+// 获取sdfgi待更新的脏区域的边界框
 AABB RenderDeferred::sdfgi_get_pending_region_bounds(const Ref<RenderSceneBuffers> &p_render_buffers, int p_region) const {
 	AABB bounds;
 	Vector3i from;
@@ -4284,6 +4560,7 @@ AABB RenderDeferred::sdfgi_get_pending_region_bounds(const Ref<RenderSceneBuffer
 	return bounds;
 }
 
+// 获取sdfgi待更新脏区域的级联数据
 uint32_t RenderDeferred::sdfgi_get_pending_region_cascade(const Ref<RenderSceneBuffers> &p_render_buffers, int p_region) const {
 	AABB bounds;
 	Vector3i from;
@@ -4303,9 +4580,11 @@ void RenderDeferred::GeometryInstanceDeferred::_mark_dirty() {
 	}
 
 	//clear surface caches
+	// 清除表面缓存
 	GeometryInstanceSurfaceDataCache *surf = surface_caches;
 
 	while (surf) {
+		// 逐个遍历表面缓存并清除
 		GeometryInstanceSurfaceDataCache *next = surf->next;
 		RenderDeferred::get_singleton()->geometry_instance_surface_alloc.free(surf);
 		surf = next;
@@ -4313,50 +4592,60 @@ void RenderDeferred::GeometryInstanceDeferred::_mark_dirty() {
 
 	surface_caches = nullptr;
 
+	// 添加到脏的实例列表中
 	RenderDeferred::get_singleton()->geometry_instance_dirty_list.add(&dirty_list_element);
 }
 
+// 从项目配置中更新全局的管线数据
 void RenderDeferred::_update_global_pipeline_data_requirements_from_project() {
-	const int msaa_3d_mode = GLOBAL_GET("rendering/anti_aliasing/quality/msaa_3d");
-	const bool directional_shadow_16_bits = GLOBAL_GET("rendering/lights_and_shadows/directional_shadow/16_bits");
-	const bool positional_shadow_16_bits = GLOBAL_GET("rendering/lights_and_shadows/positional_shadow/atlas_16_bits");
+	const int msaa_3d_mode = GLOBAL_GET("rendering/anti_aliasing/quality/msaa_3d");	// msaa的模式
+	const bool directional_shadow_16_bits = GLOBAL_GET("rendering/lights_and_shadows/directional_shadow/16_bits");	// 是否定向阴影使用16位
+	const bool positional_shadow_16_bits = GLOBAL_GET("rendering/lights_and_shadows/positional_shadow/atlas_16_bits");	// 是否点阴影使用16位
 	global_pipeline_data_required.use_16_bit_shadows = directional_shadow_16_bits || positional_shadow_16_bits;
 	global_pipeline_data_required.use_32_bit_shadows = !directional_shadow_16_bits || !positional_shadow_16_bits;
-	global_pipeline_data_required.texture_samples = RenderSceneBuffersRD::msaa_to_samples(RS::ViewportMSAA(msaa_3d_mode));
+	global_pipeline_data_required.texture_samples = RenderSceneBuffersRD::msaa_to_samples(RS::ViewportMSAA(msaa_3d_mode));	// 从msaa的模式获取到采样器
 }
 
+// 从光照存储获取管线数据
 void RenderDeferred::_update_global_pipeline_data_requirements_from_light_storage() {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
-	global_pipeline_data_required.use_shadow_cubemaps = light_storage->get_shadow_cubemaps_used();
-	global_pipeline_data_required.use_shadow_dual_paraboloid = light_storage->get_shadow_dual_paraboloid_used();
+	global_pipeline_data_required.use_shadow_cubemaps = light_storage->get_shadow_cubemaps_used();	// 是否使用阴影的cubemap
+	global_pipeline_data_required.use_shadow_dual_paraboloid = light_storage->get_shadow_dual_paraboloid_used();	// 是否使用双抛物面阴影
 }
 
-void RenderDeferred::_geometry_instance_add_surface_with_material(GeometryInstanceDeferred *ginstance, uint32_t p_surface, SceneShaderDeferred::MaterialData *p_material, uint32_t p_material_id, uint32_t p_shader_id, RID p_mesh) {
-	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
+// 为几何实例添加带有特定材质的表面
+void RenderDeferred::_geometry_instance_add_surface_with_material(GeometryInstanceDeferred *ginstance,
+	uint32_t p_surface,
+	SceneShaderDeferred::MaterialData *p_material,
+	uint32_t p_material_id,
+	uint32_t p_shader_id,
+	RID p_mesh)
+{
+	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();	// 网格存储
 	uint32_t flags = 0;
 
 	if (p_material->shader_data->uses_sss) {
-		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_SUBSURFACE_SCATTERING;
+		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_SUBSURFACE_SCATTERING;	// 使用sss的标记
 	}
 
 	if (p_material->shader_data->uses_screen_texture) {
-		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_SCREEN_TEXTURE;
+		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_SCREEN_TEXTURE;	// 使用屏幕纹理的标记
 	}
 
 	if (p_material->shader_data->uses_depth_texture) {
-		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_DEPTH_TEXTURE;
+		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_DEPTH_TEXTURE;	// 使用深度纹理的标记
 	}
 
 	if (p_material->shader_data->uses_normal_texture) {
-		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_NORMAL_TEXTURE;
+		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_NORMAL_TEXTURE;	// 使用法线纹理的标记
 	}
 
 	if (ginstance->data->cast_double_sided_shadows) {
-		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_DOUBLE_SIDED_SHADOWS;
+		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_DOUBLE_SIDED_SHADOWS;	// 使用双面阴影的标记
 	}
 
 	if (p_material->shader_data->uses_alpha_pass()) {
-		flags |= GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA;
+		flags |= GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA;		// 使用alpha通道的标记
 		if (p_material->shader_data->uses_depth_in_alpha_pass()) {
 			flags |= GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH;
 			flags |= GeometryInstanceSurfaceDataCache::FLAG_PASS_SHADOW;
@@ -4375,20 +4664,21 @@ void RenderDeferred::_geometry_instance_add_surface_with_material(GeometryInstan
 		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_MOTION_VECTOR;
 	}
 
-	SceneShaderDeferred::MaterialData *material_shadow = nullptr;
+	SceneShaderDeferred::MaterialData *material_shadow = nullptr;	// 材质数据
 	void *surface_shadow = nullptr;
-	if (p_material->shader_data->uses_shared_shadow_material()) {
+	if (p_material->shader_data->uses_shared_shadow_material()) {	// 是否共享阴影材质
 		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_SHARED_SHADOW_MATERIAL;
 		material_shadow = static_cast<SceneShaderDeferred::MaterialData *>(RendererRD::MaterialStorage::get_singleton()->material_get_data(scene_shader.default_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
 
-		RID shadow_mesh = mesh_storage->mesh_get_shadow_mesh(p_mesh);
+		RID shadow_mesh = mesh_storage->mesh_get_shadow_mesh(p_mesh);	// 获取阴影网格。Q：阴影网格是啥东西？阴影为啥会有网格？
 		if (shadow_mesh.is_valid()) {
-			surface_shadow = mesh_storage->mesh_get_surface(shadow_mesh, p_surface);
+			surface_shadow = mesh_storage->mesh_get_surface(shadow_mesh, p_surface);	// 获取表面
 		}
 	} else {
 		material_shadow = p_material;
 	}
 
+	// 创建一个缓存数据结构
 	GeometryInstanceSurfaceDataCache *sdcache = geometry_instance_surface_alloc.alloc();
 
 	sdcache->flags = flags;
@@ -4401,7 +4691,7 @@ void RenderDeferred::_geometry_instance_add_surface_with_material(GeometryInstan
 	sdcache->surface_index = p_surface;
 
 	if (ginstance->data->dirty_dependencies) {
-		RSG::utilities->base_update_dependency(p_mesh, &ginstance->data->dependency_tracker);
+		RSG::utilities->base_update_dependency(p_mesh, &ginstance->data->dependency_tracker);	// 更新依赖
 	}
 
 	//shadow
@@ -4416,7 +4706,7 @@ void RenderDeferred::_geometry_instance_add_surface_with_material(GeometryInstan
 	ginstance->surface_caches = sdcache;
 
 	//sortkey
-
+	// 排序键
 	sdcache->sort.sort_key1 = 0;
 	sdcache->sort.sort_key2 = 0;
 
@@ -4432,12 +4722,13 @@ void RenderDeferred::_geometry_instance_add_surface_with_material(GeometryInstan
 
 	uint64_t format = RendererRD::MeshStorage::get_singleton()->mesh_surface_get_format(sdcache->surface);
 	if (p_material->shader_data->uses_tangent && !(format & RS::ARRAY_FORMAT_TANGENT)) {
-		String shader_path = p_material->shader_data->path.is_empty() ? "" : "(" + p_material->shader_data->path + ")";
-		String mesh_path = mesh_storage->mesh_get_path(p_mesh).is_empty() ? "" : "(" + mesh_storage->mesh_get_path(p_mesh) + ")";
+		String shader_path = p_material->shader_data->path.is_empty() ? "" : "(" + p_material->shader_data->path + ")";		// 着色器路径
+		String mesh_path = mesh_storage->mesh_get_path(p_mesh).is_empty() ? "" : "(" + mesh_storage->mesh_get_path(p_mesh) + ")";	// 网格路径
 		WARN_PRINT_ED(vformat("Attempting to use a shader %s that requires tangents with a mesh %s that doesn't contain tangents. Ensure that meshes are imported with the 'ensure_tangents' option. If creating your own meshes, add an `ARRAY_TANGENT` array (when using ArrayMesh) or call `generate_tangents()` (when using SurfaceTool).", shader_path, mesh_path));
 	}
 
-#if PRELOAD_PIPELINES_ON_SURFACE_CACHE_CONSTRUCTION
+#if PRELOAD_PIPELINES_ON_SURFACE_CACHE_CONSTRUCTION	// 在表面构建的时候预加载管线
+	// 添加元素到列表中，不管是整体的列表，还是脏数据列表
 	if (!sdcache->compilation_dirty_element.in_list()) {
 		geometry_surface_compilation_dirty_list.add(&sdcache->compilation_dirty_element);
 	}
@@ -4448,12 +4739,24 @@ void RenderDeferred::_geometry_instance_add_surface_with_material(GeometryInstan
 #endif
 }
 
-void RenderDeferred::_geometry_instance_add_surface_with_material_chain(GeometryInstanceDeferred*ginstance, uint32_t p_surface, SceneShaderDeferred::MaterialData *p_material, RID p_mat_src, RID p_mesh) {
-	SceneShaderDeferred::MaterialData *material = p_material;
-	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
+// 几何实例增加材质链的表面
+void RenderDeferred::_geometry_instance_add_surface_with_material_chain(GeometryInstanceDeferred*ginstance,
+	uint32_t p_surface,
+	SceneShaderDeferred::MaterialData *p_material,
+	RID p_mat_src,
+	RID p_mesh)
+{
+	SceneShaderDeferred::MaterialData *material = p_material;	// 材质数据
+	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();	// 材质存储
 
-	_geometry_instance_add_surface_with_material(ginstance, p_surface, material, p_mat_src.get_local_index(), material_storage->material_get_shader_id(p_mat_src), p_mesh);
+	// 然后就是调用独立的增加material的函数，所以这个chain的作用是什么？
+	_geometry_instance_add_surface_with_material(ginstance,
+		p_surface,
+		material,
+		p_mat_src.get_local_index(),
+		material_storage->material_get_shader_id(p_mat_src), p_mesh);
 
+	// 材质还有下一个pass的东西
 	while (material->next_pass.is_valid()) {
 		RID next_pass = material->next_pass;
 		material = static_cast<SceneShaderDeferred::MaterialData *>(material_storage->material_get_data(next_pass, RendererRD::MaterialStorage::SHADER_TYPE_3D));
@@ -4463,19 +4766,30 @@ void RenderDeferred::_geometry_instance_add_surface_with_material_chain(Geometry
 		if (ginstance->data->dirty_dependencies) {
 			material_storage->material_update_dependency(next_pass, &ginstance->data->dependency_tracker);
 		}
-		_geometry_instance_add_surface_with_material(ginstance, p_surface, material, next_pass.get_local_index(), material_storage->material_get_shader_id(next_pass), p_mesh);
+		// 循环增加
+		_geometry_instance_add_surface_with_material(ginstance,
+			p_surface,
+			material,
+			next_pass.get_local_index(),
+			material_storage->material_get_shader_id(next_pass), p_mesh);
 	}
 }
 
-void RenderDeferred::_geometry_instance_add_surface(GeometryInstanceDeferred*ginstance, uint32_t p_surface, RID p_material, RID p_mesh) {
-	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
+// 几何实例添加表面
+void RenderDeferred::_geometry_instance_add_surface(GeometryInstanceDeferred*ginstance,
+	uint32_t p_surface,
+	RID p_material,
+	RID p_mesh)
+{
+	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();	// 材质存储
 	RID m_src;
 
-	m_src = ginstance->data->material_override.is_valid() ? ginstance->data->material_override : p_material;
+	m_src = ginstance->data->material_override.is_valid() ? ginstance->data->material_override : p_material;	// 材质是否要覆盖
 
-	SceneShaderDeferred::MaterialData *material = nullptr;
+	SceneShaderDeferred::MaterialData *material = nullptr;	// 材质数据
 
 	if (m_src.is_valid()) {
+		// 获取对应的材质
 		material = static_cast<SceneShaderDeferred::MaterialData *>(material_storage->material_get_data(m_src, RendererRD::MaterialStorage::SHADER_TYPE_3D));
 		if (!material || !material->shader_data->is_valid()) {
 			material = nullptr;
@@ -4484,18 +4798,22 @@ void RenderDeferred::_geometry_instance_add_surface(GeometryInstanceDeferred*gin
 
 	if (material) {
 		if (ginstance->data->dirty_dependencies) {
+			// 材质更新依赖
 			material_storage->material_update_dependency(m_src, &ginstance->data->dependency_tracker);
 		}
 	} else {
+		// 创建一个新材质
 		material = static_cast<SceneShaderDeferred::MaterialData *>(material_storage->material_get_data(scene_shader.default_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
 		m_src = scene_shader.default_material;
 	}
 
 	ERR_FAIL_NULL(material);
 
+	// 通过材质链添加表面
 	_geometry_instance_add_surface_with_material_chain(ginstance, p_surface, material, m_src, p_mesh);
 
 	if (ginstance->data->material_overlay.is_valid()) {
+		// overlay还需要做一次处理
 		m_src = ginstance->data->material_overlay;
 
 		material = static_cast<SceneShaderDeferred::MaterialData *>(material_storage->material_get_data(m_src, RendererRD::MaterialStorage::SHADER_TYPE_3D));
@@ -4509,39 +4827,43 @@ void RenderDeferred::_geometry_instance_add_surface(GeometryInstanceDeferred*gin
 	}
 }
 
-void RenderDeferred::_geometry_instance_update(RenderGeometryInstance *p_geometry_instance) {
-	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
-	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
-	GeometryInstanceDeferred*ginstance = static_cast<GeometryInstanceDeferred*>(p_geometry_instance);
+void RenderDeferred::_geometry_instance_update(RenderGeometryInstance *p_geometry_instance)
+{
+	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();	// 网格存储
+	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();	// 粒子存储
+	GeometryInstanceDeferred*ginstance = static_cast<GeometryInstanceDeferred*>(p_geometry_instance);	// 几何实例
 
 	if (ginstance->data->dirty_dependencies) {
 		ginstance->data->dependency_tracker.update_begin();
 	}
 
 	//add geometry for drawing
+	// 添加要渲染的几何体
 	switch (ginstance->data->base_type) {
-		case RS::INSTANCE_MESH: {
+		case RS::INSTANCE_MESH: {	// 实例类型：网格
 			const RID *materials = nullptr;
 			uint32_t surface_count;
 			RID mesh = ginstance->data->base;
 
+			// 获取表面数量以及材质
 			materials = mesh_storage->mesh_get_surface_count_and_materials(mesh, surface_count);
 			if (materials) {
 				//if no materials, no surfaces.
+				// 如果没有材质，则没有表面
 				const RID *inst_materials = ginstance->data->surface_materials.ptr();
 				uint32_t surf_mat_count = ginstance->data->surface_materials.size();
 
 				for (uint32_t j = 0; j < surface_count; j++) {
 					RID material = (j < surf_mat_count && inst_materials[j].is_valid()) ? inst_materials[j] : materials[j];
-					_geometry_instance_add_surface(ginstance, j, material, mesh);
+					_geometry_instance_add_surface(ginstance, j, material, mesh);	// 添加表面包括材质
 				}
 			}
 
-			ginstance->instance_count = 1;
+			ginstance->instance_count = 1;	// 实例数设置为1
 
 		} break;
 
-		case RS::INSTANCE_MULTIMESH: {
+		case RS::INSTANCE_MULTIMESH: {	// 实例类型：多网格
 			RID mesh = mesh_storage->multimesh_get_mesh(ginstance->data->base);
 			if (mesh.is_valid()) {
 				const RID *materials = nullptr;
@@ -4550,6 +4872,7 @@ void RenderDeferred::_geometry_instance_update(RenderGeometryInstance *p_geometr
 				materials = mesh_storage->mesh_get_surface_count_and_materials(mesh, surface_count);
 				if (materials) {
 					for (uint32_t j = 0; j < surface_count; j++) {
+						// 逐个添加表面
 						_geometry_instance_add_surface(ginstance, j, materials[j], mesh);
 					}
 				}
@@ -4567,11 +4890,12 @@ void RenderDeferred::_geometry_instance_update(RenderGeometryInstance *p_geometr
 
 		} break;
 #endif
-		case RS::INSTANCE_PARTICLES: {
-			int draw_passes = particles_storage->particles_get_draw_passes(ginstance->data->base);
+		case RS::INSTANCE_PARTICLES: {	// 实例类型：粒子
+			int draw_passes = particles_storage->particles_get_draw_passes(ginstance->data->base);	// 获取通道
 
 			for (int j = 0; j < draw_passes; j++) {
-				RID mesh = particles_storage->particles_get_draw_pass_mesh(ginstance->data->base, j);
+				// 对每个通道遍历
+				RID mesh = particles_storage->particles_get_draw_pass_mesh(ginstance->data->base, j);	// 获取通道的网格
 				if (!mesh.is_valid()) {
 					continue;
 				}
@@ -4579,15 +4903,15 @@ void RenderDeferred::_geometry_instance_update(RenderGeometryInstance *p_geometr
 				const RID *materials = nullptr;
 				uint32_t surface_count;
 
-				materials = mesh_storage->mesh_get_surface_count_and_materials(mesh, surface_count);
+				materials = mesh_storage->mesh_get_surface_count_and_materials(mesh, surface_count);	// 又是获取材质和数量
 				if (materials) {
 					for (uint32_t k = 0; k < surface_count; k++) {
-						_geometry_instance_add_surface(ginstance, k, materials[k], mesh);
+						_geometry_instance_add_surface(ginstance, k, materials[k], mesh);	// 逐个添加网格
 					}
 				}
 			}
 
-			ginstance->instance_count = particles_storage->particles_get_amount(ginstance->data->base, ginstance->trail_steps);
+			ginstance->instance_count = particles_storage->particles_get_amount(ginstance->data->base, ginstance->trail_steps);	// 获取实例数量
 
 		} break;
 
@@ -4596,6 +4920,7 @@ void RenderDeferred::_geometry_instance_update(RenderGeometryInstance *p_geometr
 	}
 
 	//Fill push constant
+	// 填充push constant
 
 	ginstance->base_flags = 0;
 
@@ -4625,6 +4950,7 @@ void RenderDeferred::_geometry_instance_update(RenderGeometryInstance *p_geometr
 		//for particles, stride is the trail size
 		ginstance->base_flags |= (ginstance->trail_steps << INSTANCE_DATA_FLAGS_PARTICLE_TRAIL_SHIFT);
 
+		// 粒子使用局部坐标
 		if (!particles_storage->particles_is_using_local_coords(ginstance->data->base)) {
 			store_transform = false;
 		}
@@ -4632,14 +4958,15 @@ void RenderDeferred::_geometry_instance_update(RenderGeometryInstance *p_geometr
 
 		if (particles_storage->particles_get_frame_counter(ginstance->data->base) == 0) {
 			// Particles haven't been cleared or updated, update once now to ensure they are ready to render.
+			// 粒子如果还没有被清理或者更新，在这里强制更新一次，确保它们被渲染
 			particles_storage->update_particles();
 		}
 
-		if (ginstance->data->dirty_dependencies) {
+		if (ginstance->data->dirty_dependencies) {	// 如果依赖变脏了
 			particles_storage->particles_update_dependency(ginstance->data->base, &ginstance->data->dependency_tracker);
 		}
 	} else if (ginstance->data->base_type == RS::INSTANCE_MESH) {
-		if (mesh_storage->skeleton_is_valid(ginstance->data->skeleton)) {
+		if (mesh_storage->skeleton_is_valid(ginstance->data->skeleton)) {	// 骨骼体是否有效
 			ginstance->transforms_uniform_set = mesh_storage->skeleton_get_3d_uniform_set(ginstance->data->skeleton, scene_shader.default_shader_rd, TRANSFORMS_UNIFORM_SET);
 			if (ginstance->data->dirty_dependencies) {
 				mesh_storage->skeleton_update_dependency(ginstance->data->skeleton, &ginstance->data->dependency_tracker);
@@ -4666,7 +4993,13 @@ void RenderDeferred::_geometry_instance_update(RenderGeometryInstance *p_geometr
 	ginstance->dirty_list_element.remove_from_list();
 }
 
-static RD::FramebufferFormatID _get_color_framebuffer_format_for_pipeline(RD::DataFormat p_color_format, bool p_can_be_storage, RD::TextureSamples p_samples, bool p_specular, bool p_velocity, uint32_t p_view_count) {
+static RD::FramebufferFormatID _get_color_framebuffer_format_for_pipeline(RD::DataFormat p_color_format,
+	bool p_can_be_storage,
+	RD::TextureSamples p_samples,
+	bool p_specular,
+	bool p_velocity,
+	uint32_t p_view_count)
+{
 	const bool multisampling = p_samples > RD::TEXTURE_SAMPLES_1;
 	RD::AttachmentFormat attachment;
 	attachment.samples = p_samples;
