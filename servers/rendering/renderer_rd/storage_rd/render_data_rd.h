@@ -85,12 +85,14 @@ public:
 
 	bool lightmap_bicubic_filter = false;
 
+	// 渲染方法里有一部分是为了剔除用的，但是感觉还有很多其它的东西。
 	RenderingMethod::RenderInfo *render_info = nullptr;
 
 	/* Viewport data */
 	bool transparent_bg = false;
 
 	/* Shadow data */
+	// 阴影数据，这部分数据本身已经在渲染器里了，为什么还要在这里弄个指针？
 	const RendererSceneRender::RenderShadowData *render_shadows = nullptr;
 	int render_shadow_count = 0;
 
@@ -99,8 +101,9 @@ public:
 	LocalVector<int> directional_shadows;
 
 	/* GI info */
+	// 渲染用的SDFGI数据，以及SDFGI更新数据。
 	const RendererSceneRender::RenderSDFGIData *render_sdfgi_regions = nullptr;
-	int render_sdfgi_region_count = 0;
+	int render_sdfgi_region_count = 0;	// SDFGI区域数量。
 	const RendererSceneRender::RenderSDFGIUpdateData *sdfgi_update_data = nullptr;
 
 	uint32_t voxel_gi_count = 0;

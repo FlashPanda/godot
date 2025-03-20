@@ -4377,6 +4377,8 @@ static uint64_t navigation_process_max = 0;
 // Return false means iterating further, returning true means `OS::run`
 // will terminate the program. In case of failure, the OS exit code needs
 // to be set explicitly here (defaults to EXIT_SUCCESS).
+// 返回 false 表示继续迭代；返回 true 则表示 `OS::run` 将终止程序。
+// 如果发生失败，则需要在此显式设置 OS 的退出代码（默认为 EXIT_SUCCESS）。
 bool Main::iteration() {
 	iterating++;
 

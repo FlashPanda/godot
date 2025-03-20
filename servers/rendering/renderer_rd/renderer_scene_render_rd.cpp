@@ -1127,35 +1127,67 @@ void RendererSceneRenderRD::_post_prepass_render(RenderDataRD *p_render_data, bo
 	}
 }
 
-void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render_buffers, const CameraData *p_camera_data, const CameraData *p_prev_camera_data, const PagedArray<RenderGeometryInstance *> &p_instances, const PagedArray<RID> &p_lights, const PagedArray<RID> &p_reflection_probes, const PagedArray<RID> &p_voxel_gi_instances, const PagedArray<RID> &p_decals, const PagedArray<RID> &p_lightmaps, const PagedArray<RID> &p_fog_volumes, RID p_environment, RID p_camera_attributes, RID p_compositor, RID p_shadow_atlas, RID p_occluder_debug_tex, RID p_reflection_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, const RenderShadowData *p_render_shadows, int p_render_shadow_count, const RenderSDFGIData *p_render_sdfgi_regions, int p_render_sdfgi_region_count, const RenderSDFGIUpdateData *p_sdfgi_update_data, RenderingMethod::RenderInfo *r_render_info) {
+void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render_buffers,	// 各个渲染缓冲区
+	const CameraData *p_camera_data,	// 当前帧相机数据
+	const CameraData *p_prev_camera_data,	// 上一帧相机数据
+	const PagedArray<RenderGeometryInstance *> &p_instances,	// 几何实例的数组
+	const PagedArray<RID> &p_lights,	// 光源
+	const PagedArray<RID> &p_reflection_probes,	// 反射探针
+	const PagedArray<RID> &p_voxel_gi_instances,	// 体素GI实例
+	const PagedArray<RID> &p_decals,	// 贴花
+	const PagedArray<RID> &p_lightmaps,	// 光照贴图
+	const PagedArray<RID> &p_fog_volumes,	// 雾效体积
+	RID p_environment,	// 环境资源
+	RID p_camera_attributes,	// 相机属性
+	RID p_compositor,	// 合成器
+	RID p_shadow_atlas,		// 阴影图集
+	RID p_occluder_debug_tex,	// 遮挡调试纹理
+	RID p_reflection_atlas,	// 反射图集
+	RID p_reflection_probe,	// 当前渲染的反射探针
+	int p_reflection_probe_pass,	// 反射探针的渲染通道
+	float p_screen_mesh_lod_threshold,		// 屏幕网格LOD阈值
+	const RenderShadowData *p_render_shadows,	// 阴影数据数组
+	int p_render_shadow_count,	// 阴影数据的数量。
+	const RenderSDFGIData *p_render_sdfgi_regions,	// SDFGI数据数组
+	int p_render_sdfgi_region_count,	// SDFGI数据数量
+	const RenderSDFGIUpdateData *p_sdfgi_update_data,	// SDFGI更新数据
+	RenderingMethod::RenderInfo *r_render_info)	// 输出渲染信息
+{
+	// 获取光源存储单例
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
+	// 获取纹理存储单例
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
 	// getting this here now so we can direct call a bunch of things more easily
 	ERR_FAIL_COND(p_render_buffers.is_null());
+	// 缓冲区是RD类型的缓冲区
 	Ref<RenderSceneBuffersRD> rb = p_render_buffers;
 	ERR_FAIL_COND(rb.is_null());
 
 	// setup scene data
+	/**************** 初始化场景数据 ​****************/
 	RenderSceneDataRD scene_data;
 	{
 		// Our first camera is used by default
-		scene_data.cam_transform = p_camera_data->main_transform;
-		scene_data.cam_projection = p_camera_data->main_projection;
-		scene_data.cam_orthogonal = p_camera_data->is_orthogonal;
-		scene_data.cam_frustum = p_camera_data->is_frustum;
-		scene_data.camera_visible_layers = p_camera_data->visible_layers;
-		scene_data.taa_jitter = p_camera_data->taa_jitter;
-		scene_data.taa_frame_count = p_camera_data->taa_frame_count;
-		scene_data.main_cam_transform = p_camera_data->main_transform;
-		scene_data.flip_y = !p_reflection_probe.is_valid();
+		// 设置当前帧的相机参数
+		scene_data.cam_transform = p_camera_data->main_transform;			// 相机变换矩阵
+		scene_data.cam_projection = p_camera_data->main_projection;			// 相机投影矩阵
+		scene_data.cam_orthogonal = p_camera_data->is_orthogonal;			// 是否正交投影
+		scene_data.cam_frustum = p_camera_data->is_frustum;					// 是否视锥体裁剪
+		scene_data.camera_visible_layers = p_camera_data->visible_layers;	// 可见层掩码
+		scene_data.taa_jitter = p_camera_data->taa_jitter;					// 时间抗锯齿抖动值
+		scene_data.taa_frame_count = p_camera_data->taa_frame_count;		// TAA累计帧数
+		scene_data.main_cam_transform = p_camera_data->main_transform;		// 主相机变换（可能用于多视图）
+		scene_data.flip_y = !p_reflection_probe.is_valid();					// Y轴反转标志（反射探针需要翻转）
 
+		// 多视图配置（例如VR）
 		scene_data.view_count = p_camera_data->view_count;
 		for (uint32_t v = 0; v < p_camera_data->view_count; v++) {
 			scene_data.view_eye_offset[v] = p_camera_data->view_offset[v].origin;
 			scene_data.view_projection[v] = p_camera_data->view_projection[v];
 		}
 
+		// 设置上一帧相机参数（用于运动模糊/TAA）
 		scene_data.prev_cam_transform = p_prev_camera_data->main_transform;
 		scene_data.prev_cam_projection = p_prev_camera_data->main_projection;
 		scene_data.prev_taa_jitter = p_prev_camera_data->taa_jitter;
@@ -1164,10 +1196,12 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 			scene_data.prev_view_projection[v] = p_prev_camera_data->view_projection[v];
 		}
 
+		// 获取远近裁剪面的距离
 		scene_data.z_near = p_camera_data->main_projection.get_z_near();
 		scene_data.z_far = p_camera_data->main_projection.get_z_far();
 
 		// this should be the same for all cameras..
+		// 计算LOD距离缩放因子（考虑分辨率缩放设置）
 		const float lod_distance_multiplier = p_camera_data->main_projection.get_lod_multiplier();
 
 		// Also, take into account resolution scaling for the multiplier, since we have more leeway with quality
@@ -1175,33 +1209,39 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 		const float scaling_3d_scale = GLOBAL_GET("rendering/scaling_3d/scale");
 		scene_data.lod_distance_multiplier = lod_distance_multiplier * (1.0 / scaling_3d_scale);
 
+		// 处理调试模式下的LOD设置
 		if (get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_DISABLE_LOD) {
-			scene_data.screen_mesh_lod_threshold = 0.0;
+			scene_data.screen_mesh_lod_threshold = 0.0;		// 强制最高细节
 		} else {
 			scene_data.screen_mesh_lod_threshold = p_screen_mesh_lod_threshold;
 		}
 
+		// 计算阴影图集像素尺寸（用于阴影采样）
 		if (p_shadow_atlas.is_valid()) {
 			int shadow_atlas_size = light_storage->shadow_atlas_get_size(p_shadow_atlas);
 			scene_data.shadow_atlas_pixel_size.x = 1.0 / shadow_atlas_size;
 			scene_data.shadow_atlas_pixel_size.y = 1.0 / shadow_atlas_size;
 		}
+		// 计算方向光阴影像素尺寸
 		{
 			int directional_shadow_size = light_storage->directional_shadow_get_size();
 			scene_data.directional_shadow_pixel_size.x = 1.0 / directional_shadow_size;
 			scene_data.directional_shadow_pixel_size.y = 1.0 / directional_shadow_size;
 		}
 
+		// 设置全局时间参数（用于动画/时间相关效果）
 		scene_data.time = time;
 		scene_data.time_step = time_step;
 	}
 
 	//assign render data
+	// 组装渲染数据结构
 	RenderDataRD render_data;
 	{
-		render_data.render_buffers = rb;
-		render_data.scene_data = &scene_data;
+		render_data.render_buffers = rb;			// 渲染缓冲区
+		render_data.scene_data = &scene_data;		// 场景数据指针
 
+		// 渲染对象集合
 		render_data.instances = &p_instances;
 		render_data.lights = &p_lights;
 		render_data.reflection_probes = &p_reflection_probes;
@@ -1209,6 +1249,8 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 		render_data.decals = &p_decals;
 		render_data.lightmaps = &p_lightmaps;
 		render_data.fog_volumes = &p_fog_volumes;
+
+		// 渲染ID参数
 		render_data.environment = p_environment;
 		render_data.compositor = p_compositor;
 		render_data.camera_attributes = p_camera_attributes;
@@ -1218,21 +1260,26 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 		render_data.reflection_probe = p_reflection_probe;
 		render_data.reflection_probe_pass = p_reflection_probe_pass;
 
+		// 阴影和GI数据
 		render_data.render_shadows = p_render_shadows;
 		render_data.render_shadow_count = p_render_shadow_count;
 		render_data.render_sdfgi_regions = p_render_sdfgi_regions;
 		render_data.render_sdfgi_region_count = p_render_sdfgi_region_count;
 		render_data.sdfgi_update_data = p_sdfgi_update_data;
 
+		// 信息输出
 		render_data.render_info = r_render_info;
 
+		// 判断是否透明背景（非反射探针且渲染目标支持透明）
 		if (p_render_buffers.is_valid() && p_reflection_probe.is_null()) {
 			render_data.transparent_bg = texture_storage->render_target_get_transparent(rb->get_render_target());
 		}
 	}
 
+	// 用于存储调试模式的数据
 	PagedArray<RID> empty;
 
+	// 为着色或过载调试模式：禁用所有光照相关。
 	if (get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_UNSHADED || get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_OVERDRAW) {
 		render_data.lights = &empty;
 		render_data.reflection_probes = &empty;
@@ -1240,6 +1287,7 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 		render_data.lightmaps = &empty;
 	}
 
+	// 特定调试模式，禁用贴花
 	if (get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_UNSHADED ||
 			get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_OVERDRAW ||
 			get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_LIGHTING ||
@@ -1247,14 +1295,20 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 		render_data.decals = &empty;
 	}
 
+	/** 确定清除颜色 */
 	Color clear_color;
 	if (p_render_buffers.is_valid() && p_reflection_probe.is_null()) {
+		// 从渲染目标获取清除颜色
 		clear_color = texture_storage->render_target_get_clear_request_color(rb->get_render_target());
 	} else {
+		// 获取默认的清除颜色
 		clear_color = RSG::texture_storage->get_default_clear_color();
 	}
 
 	//calls _pre_opaque_render between depth pre-pass and opaque pass
+	/**************** 执行实际渲染 ​****************/
+	// 调用内部渲染方法，传递准备好的数据和清除颜色
+	// 该函数会处理深度预渲染、不透明/透明物体渲染、后期处理等完整流程
 	_render_scene(&render_data, clear_color);
 }
 

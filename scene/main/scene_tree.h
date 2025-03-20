@@ -81,6 +81,19 @@ public:
 	SceneTreeTimer();
 };
 
+/**
+ * Manages the game loop via a hierarchy of nodes.
+ * 通过节点的层次结构管理游戏循环。
+ *
+ * 作为最重要的类之一，SceneTree 管理着场景中节点的层次结构以及场景本身。
+ * 节点可以被添加、获取和移除。整个场景树（即当前场景）可以被暂停。
+ * 场景可以加载、切换和重新加载。
+ * 
+ * 你也可以使用 SceneTree 将节点组织成多个组：每个节点可以被加入任意数量的组，
+ * 例如“enemy”组。然后你可以遍历这些组，甚至对属于某个特定组的所有节点调用方法或设置属性。
+
+ * SceneTree 是引擎默认的 MainLoop 实现，因此负责整个游戏循环。
+ */
 class SceneTree : public MainLoop {
 	_THREAD_SAFE_CLASS_
 

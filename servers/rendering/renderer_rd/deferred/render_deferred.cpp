@@ -3884,10 +3884,10 @@ RID RenderDeferred::_setup_render_pass_uniform_set(RenderListType p_render_list,
 	if (p_render_data && p_render_data->render_buffers.is_valid()) {
 		rb = p_render_data->render_buffers;
 		is_multiview = rb->get_view_count() > 1;
-		if (rb->has_custom_data(RB_SCOPE_FORWARD_CLUSTERED)) {
+		if (rb->has_custom_data(RB_SCOPE_DEFERRED)) {
 			// Our forward clustered custom data buffer will only be available when we're rendering our normal view.
 			// This will not be available when rendering reflection probes.
-			rb_data = rb->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+			rb_data = rb->get_custom_data(RB_SCOPE_DEFERRED);
 		}
 	}
 
@@ -4430,7 +4430,7 @@ RID RenderDeferred::_setup_sdfgi_render_pass_uniform_set(RID p_albedo_texture, R
 }
 
 RID RenderDeferred::_render_buffers_get_normal_texture(Ref<RenderSceneBuffersRD> p_render_buffers) {
-	Ref<RenderBufferDataDeferred> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
+	Ref<RenderBufferDataDeferred> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_DEFERRED);
 
 	return rb_data->get_normal_roughness();
 }
