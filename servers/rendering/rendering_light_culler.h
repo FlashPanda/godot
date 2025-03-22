@@ -67,6 +67,7 @@ struct Transform3D;
 #endif
 
 // Culls shadow casters that can't cast shadows into the camera frustum.
+// 剔除那些无法将阴影投射到相机视锥体内的阴影投射物
 class RenderingLightCuller {
 public:
 	RenderingLightCuller();

@@ -3165,39 +3165,66 @@ void RendererSceneCull::_scene_particles_set_view_axis(RID p_particles, const Ve
 	RSG::particles_storage->particles_set_view_axis(p_particles, p_axis, p_up_axis);
 }
 
-void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_camera_data, const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, RID p_force_camera_attributes, RID p_compositor, uint32_t p_visible_layers, RID p_scenario, RID p_viewport, RID p_shadow_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, bool p_using_shadows, RenderingMethod::RenderInfo *r_render_info) {
+void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_camera_data,
+	const Ref<RenderSceneBuffers> &p_render_buffers,
+	RID p_environment,
+	RID p_force_camera_attributes,
+	RID p_compositor,
+	uint32_t p_visible_layers,
+	RID p_scenario,
+	RID p_viewport,
+	RID p_shadow_atlas,
+	RID p_reflection_probe,
+	int p_reflection_probe_pass,
+	float p_screen_mesh_lod_threshold,
+	bool p_using_shadows,
+	RenderingMethod::RenderInfo *r_render_info)
+{
+	// 获取反射探针实例
 	Instance *render_reflection_probe = instance_owner.get_or_null(p_reflection_probe); //if null, not rendering to it
 
 	// Prepare the light - camera volume culling system.
+	// 准备光源剔除系统，传入相机变换和投影矩阵。
 	light_culler->prepare_camera(p_camera_data->main_transform, p_camera_data->main_projection);
 
+	// 获取场景数据和相机位置
 	Scenario *scenario = scenario_owner.get_or_null(p_scenario);
 	Vector3 camera_position = p_camera_data->main_transform.origin;
 
 	ERR_FAIL_COND(p_render_buffers.is_null());
 
+	// 渲染通道计数
 	render_pass++;
 
+	// 设置当前渲染通道
 	scene_render->set_scene_pass(render_pass);
 
+	// 在非反射探针模式下的SDFGI更新（空间全局光照）
 	if (p_reflection_probe.is_null()) {
 		//no rendering code here, this is only to set up what needs to be done, request regions, etc.
+		// 此处没有渲染代码，这只是为了设置需要完成的任务、请求区域等
 		scene_render->sdfgi_update(p_render_buffers, p_environment, camera_position); //update conditions for SDFGI (whether its used or not)
 	}
 
+	// 开始可见性依赖更新
 	RENDER_TIMESTAMP("Update Visibility Dependencies");
 
+	// 处理场景实例可见性剔除
 	if (scenario->instance_visibility.get_bin_count() > 0) {
+		// 确保视口可见性掩码存在
 		if (!scenario->viewport_visibility_masks.has(p_viewport)) {
 			scenario_add_viewport_visibility_mask(scenario->self, p_viewport);
 		}
 
+		// 准备可见性剔除数据
 		VisibilityCullData visibility_cull_data;
 		visibility_cull_data.scenario = scenario;
 		visibility_cull_data.viewport_mask = scenario->viewport_visibility_masks[p_viewport];
 		visibility_cull_data.camera_position = camera_position;
 
+		// 遍历所有可见性分箱，0除外。
 		for (int i = scenario->instance_visibility.get_bin_count() - 1; i > 0; i--) { // We skip bin 0
+			// 0中有始终可见的对象
 			visibility_cull_data.cull_offset = scenario->instance_visibility.get_bin_start(i);
 			visibility_cull_data.cull_count = scenario->instance_visibility.get_bin_size(i);
 
@@ -3205,6 +3232,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				continue;
 			}
 
+			// 选择多线程或者单线程剔除。
 			if (visibility_cull_data.cull_count > thread_cull_threshold) {
 				WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_template_group_task(this, &RendererSceneCull::_visibility_cull_threaded, &visibility_cull_data, WorkerThreadPool::get_singleton()->get_thread_count(), -1, true, SNAME("VisibilityCullInstances"));
 				WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
@@ -3219,22 +3247,26 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	//rasterizer->set_camera(p_camera_data->main_transform, p_camera_data.main_projection, p_camera_data.is_orthogonal);
 
 	/* STEP 2 - CULL */
-
+	// 生成相机的视锥平面，并开始初始化剔除结构。
 	Vector<Plane> planes = p_camera_data->main_projection.get_projection_planes(p_camera_data->main_transform);
 	cull.frustum = Frustum(planes);
 
 	Vector<RID> directional_lights;
 	// directional lights
+	// 处理定向光源
 	{
 		cull.shadow_count = 0;
 
 		Vector<Instance *> lights_with_shadow;
 
+		// 遍历场景中的定向光源
 		for (Instance *E : scenario->directional_lights) {
+			// 跳过不可见或者图层不匹配的光源
 			if (!E->visible || !(E->layer_mask & p_visible_layers)) {
 				continue;
 			}
 
+			// 达到最大的定向光源数则停止（8个）
 			if (directional_lights.size() >= RendererSceneRender::MAX_DIRECTIONAL_LIGHTS) {
 				break;
 			}
@@ -3243,88 +3275,127 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 			//check shadow..
 
+			// 检查阴影设置
 			if (light) {
 				if (p_using_shadows && p_shadow_atlas.is_valid() && RSG::light_storage->light_has_shadow(E->base) && !(RSG::light_storage->light_get_type(E->base) == RS::LIGHT_DIRECTIONAL && RSG::light_storage->light_directional_get_sky_mode(E->base) == RS::LIGHT_DIRECTIONAL_SKY_MODE_SKY_ONLY)) {
-					lights_with_shadow.push_back(E);
+					lights_with_shadow.push_back(E);	// 会产生阴影的光源
 				}
 				//add to list
+				// 定向光源添加到列表
 				directional_lights.push_back(light->instance);
 			}
 		}
 
+		// 记录会产生阴影的定向光源数
 		RSG::light_storage->set_directional_shadow_count(lights_with_shadow.size());
 
+		// 设置光源的阴影参数
 		for (int i = 0; i < lights_with_shadow.size(); i++) {
-			_light_instance_setup_directional_shadow(i, lights_with_shadow[i], p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect);
+			_light_instance_setup_directional_shadow(i,
+				lights_with_shadow[i],
+				p_camera_data->main_transform,
+				p_camera_data->main_projection,
+				p_camera_data->is_orthogonal,
+				p_camera_data->vaspect);
 		}
 	}
 
 	{ //sdfgi
+		// 区域数量
 		cull.sdfgi.region_count = 0;
 
 		if (p_reflection_probe.is_null()) {
+			// 重置级联光照计数器
 			cull.sdfgi.cascade_light_count = 0;
 
+			// 存储前一个级联索引的临时变量（初始化为无效值）
 			uint32_t prev_cascade = 0xFFFFFFFF;
+			// 获取待处理的SDFGI区域数量（来自渲染缓冲区）
 			uint32_t pending_region_count = scene_render->sdfgi_get_pending_region_count(p_render_buffers);
 
+			// 遍历所有待处理区域
 			for (uint32_t i = 0; i < pending_region_count; i++) {
+				// 获取第i个待处理区域的AABB包围盒
 				cull.sdfgi.region_aabb[i] = scene_render->sdfgi_get_pending_region_bounds(p_render_buffers, i);
+				// 获取该区域所属的级联层级
 				uint32_t region_cascade = scene_render->sdfgi_get_pending_region_cascade(p_render_buffers, i);
 				cull.sdfgi.region_cascade[i] = region_cascade;
 
+				// 检测级联层级是否发生变化
 				if (region_cascade != prev_cascade) {
+					// 记录新级联的索引
 					cull.sdfgi.cascade_light_index[cull.sdfgi.cascade_light_count] = region_cascade;
+					// 级联光照计数器递增
 					cull.sdfgi.cascade_light_count++;
+					// 更新前一个级联的索引
 					prev_cascade = region_cascade;
 				}
 			}
 
+			// 设置有效的SDFGI区域数量
 			cull.sdfgi.region_count = pending_region_count;
 		}
 	}
 
+	// 清空场景剔除结果
 	scene_cull_result.clear();
 
 	{
+		// 剔除实例的起始和终止
 		uint64_t cull_from = 0;
 		uint64_t cull_to = scenario->instance_data.size();
 
+		// 创建剔除数据结构体，用于封装多线程共享参数
 		CullData cull_data;
 
 		//prepare for eventual thread usage
-		cull_data.cull = &cull;
-		cull_data.scenario = scenario;
-		cull_data.shadow_atlas = p_shadow_atlas;
-		cull_data.cam_transform = p_camera_data->main_transform;
-		cull_data.visible_layers = p_visible_layers;
-		cull_data.render_reflection_probe = render_reflection_probe;
-		cull_data.occlusion_buffer = RendererSceneOcclusionCull::get_singleton()->buffer_get_ptr(p_viewport);
-		cull_data.camera_matrix = &p_camera_data->main_projection;
-		cull_data.visibility_viewport_mask = scenario->viewport_visibility_masks.has(p_viewport) ? scenario->viewport_visibility_masks[p_viewport] : 0;
+		cull_data.cull = &cull;		// 剔除器指针对象
+		cull_data.scenario = scenario;	// 当前场景数据
+		cull_data.shadow_atlas = p_shadow_atlas;	// 阴影贴图数据
+		cull_data.cam_transform = p_camera_data->main_transform;	// 摄像机变换矩阵
+		cull_data.visible_layers = p_visible_layers;	// 可见渲染层
+		cull_data.render_reflection_probe = render_reflection_probe;	// 反射探针状态
+		cull_data.occlusion_buffer = RendererSceneOcclusionCull::get_singleton()->buffer_get_ptr(p_viewport);	// 获取视口的遮挡缓冲区
+		cull_data.camera_matrix = &p_camera_data->main_projection;	// 摄像机投影矩阵
+		cull_data.visibility_viewport_mask = scenario->viewport_visibility_masks.has(p_viewport) ?
+												scenario->viewport_visibility_masks[p_viewport] : 0; // 视口可见性掩码
+
+// 性能调试宏，默认不启用。
 //#define DEBUG_CULL_TIME
 #ifdef DEBUG_CULL_TIME
 		uint64_t time_from = OS::get_singleton()->get_ticks_usec();
 #endif
 
+		// 根据实例数量，确定使用单线程还是多线程
 		if (cull_to > thread_cull_threshold) {
 			//multiple threads
 			for (InstanceCullResult &thread : scene_cull_result_threads) {
-				thread.clear();
+				thread.clear();	// 清空个线程的临时结果容器
 			}
 
-			WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_template_group_task(this, &RendererSceneCull::_scene_cull_threaded, &cull_data, scene_cull_result_threads.size(), -1, true, SNAME("RenderCullInstances"));
+			// 创建临时任务分组
+			WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_template_group_task(this,
+				&RendererSceneCull::_scene_cull_threaded,
+				&cull_data,
+				scene_cull_result_threads.size(),
+				-1,
+				true,
+				SNAME("RenderCullInstances"));
+			// 等待所有任务完成
 			WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
 
+			// 合并个线程的剔除结果
 			for (InstanceCullResult &thread : scene_cull_result_threads) {
 				scene_cull_result.append_from(thread);
 			}
 
 		} else {
 			//single threaded
+			// 单线程的执行路径：直接调用单线程剔除函数
 			_scene_cull(cull_data, scene_cull_result, cull_from, cull_to);
 		}
 
+// 调试代码：计算平均执行时间
 #ifdef DEBUG_CULL_TIME
 		static float time_avg = 0;
 		static uint32_t time_count = 0;
@@ -3333,10 +3404,13 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		print_line("time taken: " + rtos(time_avg / time_count));
 #endif
 
+		// 处理网格实例更新
 		if (scene_cull_result.mesh_instances.size()) {
 			for (uint64_t i = 0; i < scene_cull_result.mesh_instances.size(); i++) {
+				// 检查网格实例是否需要更新
 				RSG::mesh_storage->mesh_instance_check_for_update(scene_cull_result.mesh_instances[i]);
 			}
+			// 批量更新所有标记的网格实例
 			RSG::mesh_storage->update_mesh_instances();
 		}
 	}
@@ -3345,6 +3419,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 	max_shadows_used = 0;
 
+	// 设置阴影贴图
 	if (p_using_shadows) { //setup shadow maps
 
 		// Directional Shadows
@@ -3551,7 +3626,30 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	}
 
 	RENDER_TIMESTAMP("Render 3D Scene");
-	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, scene_cull_result.geometry_instances, scene_cull_result.light_instances, scene_cull_result.reflections, scene_cull_result.voxel_gi_instances, scene_cull_result.decals, scene_cull_result.lightmaps, scene_cull_result.fog_volumes, p_environment, camera_attributes, p_compositor, p_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_shadow_data, max_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, &sdfgi_update_data, r_render_info);
+	scene_render->render_scene(p_render_buffers,
+		p_camera_data,
+		prev_camera_data,
+		scene_cull_result.geometry_instances,
+		scene_cull_result.light_instances,
+		scene_cull_result.reflections,
+		scene_cull_result.voxel_gi_instances,
+		scene_cull_result.decals,
+		scene_cull_result.lightmaps,
+		scene_cull_result.fog_volumes,
+		p_environment,
+		camera_attributes,
+		p_compositor,
+		p_shadow_atlas,
+		occluders_tex,
+		p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas,
+		p_reflection_probe,
+		p_reflection_probe_pass,
+		p_screen_mesh_lod_threshold,
+		render_shadow_data,
+		max_shadows_used,
+		render_sdfgi_data,
+		cull.sdfgi.region_count,
+		&sdfgi_update_data, r_render_info);
 
 	if (p_viewport.is_valid()) {
 		RSG::viewport->viewport_set_prev_camera_data(p_viewport, p_camera_data);
