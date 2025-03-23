@@ -3423,80 +3423,112 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	if (p_using_shadows) { //setup shadow maps
 
 		// Directional Shadows
-
+		// 方向阴影
+		// 遍历阴影数量以及阴影的级联数量
 		for (uint32_t i = 0; i < cull.shadow_count; i++) {
 			for (uint32_t j = 0; j < cull.shadows[i].cascade_count; j++) {
 				const Cull::Shadow::Cascade &c = cull.shadows[i].cascades[j];
 				//			print_line("shadow " + itos(i) + " cascade " + itos(j) + " elements: " + itos(c.cull_result.size()));
-				RSG::light_storage->light_instance_set_shadow_transform(cull.shadows[i].light_instance, c.projection, c.transform, c.zfar, c.split, j, c.shadow_texel_size, c.bias_scale, c.range_begin, c.uv_scale);
+				// 配置实例参数到光源存储系统中
+				RSG::light_storage->light_instance_set_shadow_transform(
+						cull.shadows[i].light_instance,
+						c.projection,
+						c.transform,
+						c.zfar,
+						c.split,
+						j,
+						c.shadow_texel_size,
+						c.bias_scale,
+						c.range_begin,
+						c.uv_scale);
+				// 检查是否达到最大可处理阴影数量
 				if (max_shadows_used == MAX_UPDATE_SHADOWS) {
 					continue;
 				}
+				// 填充渲染阴影数据数组
 				render_shadow_data[max_shadows_used].light = cull.shadows[i].light_instance;
 				render_shadow_data[max_shadows_used].pass = j;
+				// 合并当前级联的可见几何体实例（来自场景剔除结果）
 				render_shadow_data[max_shadows_used].instances.merge_unordered(scene_cull_result.directional_shadows[i].cascade_geometry_instances[j]);
 				max_shadows_used++;
 			}
 		}
 
 		// Positional Shadows
+		// 点光源阴影
 		for (uint32_t i = 0; i < (uint32_t)scene_cull_result.lights.size(); i++) {
+			// 获取当前光源实例
 			Instance *ins = scene_cull_result.lights[i];
 
+			// 跳过无效的阴影图集的情况
 			if (!p_shadow_atlas.is_valid()) {
 				continue;
 			}
 
+			// 转换为光源专用的实例数据
 			InstanceLightData *light = static_cast<InstanceLightData *>(ins->base_data);
 
+			// 检查光源在相机位置的可见性（基于遮挡剔除的结果）
 			if (!RSG::light_storage->light_instance_is_shadow_visible_at_position(light->instance, camera_position)) {
 				continue;
 			}
 
-			float coverage = 0.f;
+			float coverage = 0.f;	// 光源在屏幕空间的覆盖比例
 
-			{ //compute coverage
+			{ //compute coverage	计算覆盖率
 
 				Transform3D cam_xf = p_camera_data->main_transform;
 				float zn = p_camera_data->main_projection.get_z_near();
+				// 构造近裁剪平面方程，用于后续几何投影计算
 				Plane p(-cam_xf.basis.get_column(2), cam_xf.origin + cam_xf.basis.get_column(2) * -zn); //camera near plane
 
 				// near plane half width and height
+				// 获取视口半尺寸（用于标准化覆盖率计算）
 				Vector2 vp_half_extents = p_camera_data->main_projection.get_viewport_half_extents();
 
+				// 根据光源类型分别处理。
 				switch (RSG::light_storage->light_get_type(ins->base)) {
-					case RS::LIGHT_OMNI: {
+					case RS::LIGHT_OMNI: {	// 点光源处理
 						float radius = RSG::light_storage->light_get_param(ins->base, RS::LIGHT_PARAM_RANGE);
 
 						//get two points parallel to near plane
+						// 构造沿x轴的两个采样点。（用于计算投影尺寸）
 						Vector3 points[2] = {
 							ins->transform.origin,
 							ins->transform.origin + cam_xf.basis.get_column(0) * radius
 						};
 
+						// 透视相机需要将点映射到近裁剪面
 						if (!p_camera_data->is_orthogonal) {
 							//if using perspetive, map them to near plane
 							for (int j = 0; j < 2; j++) {
-								if (p.distance_to(points[j]) < 0) {
+								if (p.distance_to(points[j]) < 0) {	// 位于相机后方时
 									points[j].z = -zn; //small hack to keep size constant when hitting the screen
+									// 保持屏幕尺寸恒定的小技巧
 								}
 
+								// 计算线段与近平面交点（实现空间到屏幕的映射）
 								p.intersects_segment(cam_xf.origin, points[j], &points[j]); //map to plane
 							}
 						}
 
+						// 计算投影直径并标准化为覆盖率（0-1范围）
 						float screen_diameter = points[0].distance_to(points[1]) * 2;
 						coverage = screen_diameter / (vp_half_extents.x + vp_half_extents.y);
 					} break;
-					case RS::LIGHT_SPOT: {
+					case RS::LIGHT_SPOT: {	// 聚光灯处理
+
 						float radius = RSG::light_storage->light_get_param(ins->base, RS::LIGHT_PARAM_RANGE);
 						float angle = RSG::light_storage->light_get_param(ins->base, RS::LIGHT_PARAM_SPOT_ANGLE);
 
+						// 计算聚光灯锥体参数（底圆半径和高度）
 						float w = radius * Math::sin(Math::deg_to_rad(angle));
 						float d = radius * Math::cos(Math::deg_to_rad(angle));
 
+						// 计算锥体地面中心点（沿光源方向偏移）
 						Vector3 base = ins->transform.origin - ins->transform.basis.get_column(2).normalized() * d;
 
+						// 与点光源类似的路径
 						Vector3 points[2] = {
 							base,
 							base + cam_xf.basis.get_column(0) * w
@@ -3525,13 +3557,16 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 			// We can detect whether multiple cameras are hitting this light, whether or not the shadow is dirty,
 			// so that we can turn off tighter caster culling.
+			// 检测光源是否被多个相机可见（影响剔除策略）
 			light->detect_light_intersects_multiple_cameras(Engine::get_singleton()->get_frames_drawn());
 
+			// 阴影脏标记处理（需要更新阴影时）
 			if (light->is_shadow_dirty()) {
 				// Dirty shadows have no need to be drawn if
 				// the light volume doesn't intersect the camera frustum.
 
 				// Returns false if the entire light can be culled.
+				// 准备光源剔除数据，返回是否允许重绘
 				bool allow_redraw = light_culler->prepare_regular_light(*ins);
 
 				// Directional lights aren't handled here, _light_instance_update_shadow is called from elsewhere.
@@ -3545,22 +3580,24 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				// so we should detect this and switch off tighter caster culling automatically.
 				// This is done in the logic for `decrement_shadow_dirty()`.
 				if (allow_redraw) {
-					light->last_version++;
-					light->decrement_shadow_dirty();
+					light->last_version++;		// 更新阴影版本号
+					light->decrement_shadow_dirty();	// 递减脏标记计数
 				}
 			}
 
+			// 更新阴影图集并获取是否需要重绘的标记
 			bool redraw = RSG::light_storage->shadow_atlas_update_light(p_shadow_atlas, light->instance, coverage, light->last_version);
 
+			// 根据阴影更新状态执行实际渲染
 			if (redraw && max_shadows_used < MAX_UPDATE_SHADOWS) {
 				//must redraw!
 				RENDER_TIMESTAMP("> Render Light3D " + itos(i));
 				if (_light_instance_update_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers)) {
-					light->make_shadow_dirty();
+					light->make_shadow_dirty();	// 标记需要下次更新
 				}
 				RENDER_TIMESTAMP("< Render Light3D " + itos(i));
 			} else {
-				if (redraw) {
+				if (redraw) {	// 超过最大阴影更新数量是的补偿处理
 					light->make_shadow_dirty();
 				}
 			}
