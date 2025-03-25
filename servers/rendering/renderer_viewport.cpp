@@ -271,59 +271,86 @@ void RendererViewport::_draw_3d(Viewport *p_viewport) {
 #ifndef _3D_DISABLED
 	RENDER_TIMESTAMP("> Render 3D Scene");
 
+	// 获取XR接口
 	Ref<XRInterface> xr_interface;
 	if (p_viewport->use_xr && XRServer::get_singleton() != nullptr) {
 		xr_interface = XRServer::get_singleton()->get_primary_interface();
 	}
 
+	// 如果视口使用遮挡剔除，并且遮挡缓冲已脏
 	if (p_viewport->use_occlusion_culling) {
 		if (p_viewport->occlusion_buffer_dirty) {
-			float aspect = p_viewport->size.aspect();
-			int max_size = occlusion_rays_per_thread * WorkerThreadPool::get_singleton()->get_thread_count();
+			float aspect = p_viewport->size.aspect();	// 获取视口宽高比
+			int max_size = occlusion_rays_per_thread * WorkerThreadPool::get_singleton()->get_thread_count();	// 获取最大的遮挡射线数量
 
+			// 视口大小
 			int viewport_size = p_viewport->size.width * p_viewport->size.height;
+			// 至少每16x16的区域有一个深度像素，最多2x2的区域有一个深度像素
 			max_size = CLAMP(max_size, viewport_size / (32 * 32), viewport_size / (2 * 2)); // At least one depth pixel for every 16x16 region. At most one depth pixel for every 2x2 region.
 
+			// 高度值获取
 			float height = Math::sqrt(max_size / aspect);
 			Size2i new_size = Size2i(height * aspect, height);
+			// 剔除的缓存大小设置
 			RendererSceneOcclusionCull::get_singleton()->buffer_set_size(p_viewport->self, new_size);
 			p_viewport->occlusion_buffer_dirty = false;
 		}
 	}
 
+	// 场景网格LOD阈值
 	float screen_mesh_lod_threshold = p_viewport->mesh_lod_threshold / float(p_viewport->size.width);
-	RSG::scene->render_camera(p_viewport->render_buffers, p_viewport->camera, p_viewport->scenario, p_viewport->self, p_viewport->internal_size, p_viewport->jitter_phase_count, screen_mesh_lod_threshold, p_viewport->shadow_atlas, xr_interface, &p_viewport->render_info);
+	// 渲染相机
+	RSG::scene->render_camera(p_viewport->render_buffers,
+		p_viewport->camera,
+		p_viewport->scenario,
+		p_viewport->self,
+		p_viewport->internal_size,
+		p_viewport->jitter_phase_count,
+		screen_mesh_lod_threshold,
+		p_viewport->shadow_atlas,
+		xr_interface,
+		&p_viewport->render_info);
 
 	RENDER_TIMESTAMP("< Render 3D Scene");
 #endif // _3D_DISABLED
 }
 
 void RendererViewport::_draw_viewport(Viewport *p_viewport) {
+	// 统计渲染时间，记录时间戳。
 	if (p_viewport->measure_render_time) {
 		String rt_id = "vp_begin_" + itos(p_viewport->self.get_id());
 		RSG::utilities->capture_timestamp(rt_id);
 		timestamp_vp_map[rt_id] = p_viewport->self;
 	}
 
+	// 在渲染方法是gl兼容性模式的情况下，正确设置当前要渲染的窗口
 	if (OS::get_singleton()->get_current_rendering_method() == "gl_compatibility") {
 		// This is currently needed for GLES to keep the current window being rendered to up to date
 		DisplayServer::get_singleton()->gl_window_make_current(p_viewport->viewport_to_screen);
 	}
 
 	/* Camera should always be BEFORE any other 3D */
+	// 相机需要在任务其他3D元素之前。
 
+	// 立体渲染不支持2D，没有深度数据
 	bool can_draw_2d = !p_viewport->disable_2d && p_viewport->view_count == 1; // Stereo rendering does not support 2D, no depth data
+	// 是否将画布作为3D背景
 	bool scenario_draw_canvas_bg = false; //draw canvas, or some layer of it, as BG for 3D instead of in front
+	// 画布的最大层。
 	int scenario_canvas_max_layer = 0;
+	// 是否强制清除渲染目标
 	bool force_clear_render_target = false;
 
+	// 视口渲染信息重置
 	for (int i = 0; i < RS::VIEWPORT_RENDER_INFO_TYPE_MAX; i++) {
 		for (int j = 0; j < RS::VIEWPORT_RENDER_INFO_MAX; j++) {
 			p_viewport->render_info.info[i][j] = 0;
 		}
 	}
 
+	// 检查环境配置，确定是否将画布作为3D背景
 	if (RSG::scene->is_scenario(p_viewport->scenario)) {
+		// 获取环境资源ID
 		RID environment = RSG::scene->scenario_get_environment(p_viewport->scenario);
 		if (RSG::scene->is_environment(environment)) {
 			if (can_draw_2d && !viewport_is_environment_disabled(p_viewport)) {
@@ -336,24 +363,30 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 		}
 	}
 
+	// 是否启用了3D
 	bool can_draw_3d = RSG::scene->is_camera(p_viewport->camera) && !p_viewport->disable_3d;
 
+	// 看到这里，我觉得这引擎本身是一个2D引擎，所以才需要判断是否要渲染3D，因为如果本身就是3D引擎，是不可能出现这种判断，只会判断是否有UI。
 	if ((scenario_draw_canvas_bg || can_draw_3d) && !p_viewport->render_buffers.is_valid()) {
 		//wants to draw 3D but there is no render buffer, create
+		// 需要绘制3D但是没有渲染缓冲区的时候，就创建渲染缓冲区
 		p_viewport->render_buffers = RSG::scene->render_buffers_create();
 
+		// 根据视口配置渲染缓冲区
 		_configure_3d_render_buffers(p_viewport);
 	}
 
+	// 背景颜色设置
 	Color bgcolor = p_viewport->transparent_bg ? Color(0, 0, 0, 0) : RSG::texture_storage->get_default_clear_color();
 
 	if (p_viewport->clear_mode != RS::VIEWPORT_CLEAR_NEVER) {
 		RSG::texture_storage->render_target_request_clear(p_viewport->render_target, bgcolor);
 		if (p_viewport->clear_mode == RS::VIEWPORT_CLEAR_ONLY_NEXT_FRAME) {
-			p_viewport->clear_mode = RS::VIEWPORT_CLEAR_NEVER;
+			p_viewport->clear_mode = RS::VIEWPORT_CLEAR_NEVER;	// 一帧只清除一次
 		}
 	}
 
+	// 不使用画布背景，并且需要绘制3d，才绘制3d
 	if (!scenario_draw_canvas_bg && can_draw_3d) {
 		if (force_clear_render_target) {
 			RSG::texture_storage->render_target_do_clear_request(p_viewport->render_target);
@@ -361,49 +394,66 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 		_draw_3d(p_viewport);
 	}
 
+	// 需要绘制2D
 	if (can_draw_2d) {
+		// 画布数据
 		RBMap<Viewport::CanvasKey, Viewport::CanvasData *> canvas_map;
 
+		// 尺寸大小
 		Rect2 clip_rect(0, 0, p_viewport->size.x, p_viewport->size.y);
-		RendererCanvasRender::Light *lights = nullptr;
+		// 二维光照和阴影数据
+		// 画布渲染器(此渲染器是单例）
+		RendererCanvasRender::Light *lights = nullptr;		
 		RendererCanvasRender::Light *lights_with_shadow = nullptr;
 
 		RendererCanvasRender::Light *directional_lights = nullptr;
 		RendererCanvasRender::Light *directional_lights_with_shadow = nullptr;
 
+		// 是否启用了sdf（有向距离场）
 		if (p_viewport->sdf_active) {
 			// Process SDF.
-
+			// 获取SDF矩形大小
 			Rect2 sdf_rect = RSG::texture_storage->render_target_get_sdf_rect(p_viewport->render_target);
 
+			// 光照遮挡器实例
 			RendererCanvasRender::LightOccluderInstance *occluders = nullptr;
 
 			// Make list of occluders.
+			// 遍历所有画布，收集光源和遮挡信息
 			for (KeyValue<RID, Viewport::CanvasData> &E : p_viewport->canvas_map) {
 				RendererCanvasCull::Canvas *canvas = static_cast<RendererCanvasCull::Canvas *>(E.value.canvas);
+				// 计算当前画布到视口的变换矩阵
 				Transform2D xf = _canvas_get_transform(p_viewport, canvas, &E.value, clip_rect.size);
 
+				// 遍历该画布上的所有光遮挡器实例（用于优化光照计算的物体）
 				for (RendererCanvasRender::LightOccluderInstance *F : canvas->occluders) {
 					if (!F->enabled) {
 						continue;
 					}
 
+					// 插值处理：当全局插值启用且该遮挡器允许插值时
 					if (!RSG::canvas->_interpolation_data.interpolation_enabled || !F->interpolated) {
-						F->xform_cache = xf * F->xform_curr;
+						F->xform_cache = xf * F->xform_curr;	// 当前帧变换乘上视口变换
 					} else {
+						// 获取物理插值系数（介于上一帧和当前帧之间的插值比例）
 						real_t f = Engine::get_singleton()->get_physics_interpolation_fraction();
+						// 执行2D变换插值计算（平滑过渡两帧间的变换状态）
 						TransformInterpolator::interpolate_transform_2d(F->xform_prev, F->xform_curr, F->xform_cache, f);
 						F->xform_cache = xf * F->xform_cache;
 					}
 
+					// 空间相交检测：判断遮挡器的AABB是否与SDF（有向距离场）的矩形区域相交
 					if (sdf_rect.intersects_transformed(F->xform_cache, F->aabb_cache)) {
+						// 将符合条件的遮挡器加入链表头部（高效插入操作）
 						F->next = occluders;
 						occluders = F;
 					}
 				}
 			}
 
+			// 渲染sdf
 			RSG::canvas_render->render_sdf(p_viewport->render_target, occluders);
+			// 标记渲染目标启用sdf
 			RSG::texture_storage->render_target_mark_sdf_enabled(p_viewport->render_target, true);
 
 			p_viewport->sdf_active = false; // If used, gets set active again.

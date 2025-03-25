@@ -2659,13 +2659,25 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 	return animated_material_found;
 }
 
-void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_camera, RID p_scenario, RID p_viewport, Size2 p_viewport_size, uint32_t p_jitter_phase_count, float p_screen_mesh_lod_threshold, RID p_shadow_atlas, Ref<XRInterface> &p_xr_interface, RenderInfo *r_render_info) {
+void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_buffers,
+	RID p_camera,
+	RID p_scenario,
+	RID p_viewport,
+	Size2 p_viewport_size,
+	uint32_t p_jitter_phase_count,	// TAA抖动相位数量（Halton抖动序列的阶位数）
+	float p_screen_mesh_lod_threshold,
+	RID p_shadow_atlas,
+	Ref<XRInterface> &p_xr_interface,
+	RenderInfo *r_render_info)
+{
 #ifndef _3D_DISABLED
 
 	Camera *camera = camera_owner.get_or_null(p_camera);
 	ERR_FAIL_NULL(camera);
 
+	// 抖动值
 	Vector2 jitter;
+	// taa帧数
 	float taa_frame_count = 0.0f;
 	if (p_jitter_phase_count > 0) {
 		uint32_t current_jitter_count = camera_jitter_array.size();
@@ -2673,19 +2685,23 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 			// Resize the jitter array and fill it with the pre-computed Halton sequence.
 			camera_jitter_array.resize(p_jitter_phase_count);
 
+			// 设置新的抖动数值
 			for (uint32_t i = current_jitter_count; i < p_jitter_phase_count; i++) {
 				camera_jitter_array[i].x = get_halton_value(i, 2);
 				camera_jitter_array[i].y = get_halton_value(i, 3);
 			}
 		}
 
+		// 根据当前帧数获取当前帧对应的抖动值，并除以视口大小进行归一化。
 		jitter = camera_jitter_array[RSG::rasterizer->get_frame_number() % p_jitter_phase_count] / p_viewport_size;
 		taa_frame_count = float(RSG::rasterizer->get_frame_number() % p_jitter_phase_count);
 	}
 
+	// 相机数据
 	RendererSceneRender::CameraData camera_data;
 
 	// Setup Camera(s)
+	// 设置相机
 	if (p_xr_interface.is_null()) {
 		// Normal camera
 		Transform3D transform = camera->transform;
@@ -2696,6 +2712,7 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 
 		switch (camera->type) {
 			case Camera::ORTHOGONAL: {
+				// 正交投影
 				projection.set_orthogonal(
 						camera->size,
 						p_viewport_size.width / (float)p_viewport_size.height,
@@ -2705,6 +2722,7 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 				is_orthogonal = true;
 			} break;
 			case Camera::PERSPECTIVE: {
+				// 透视投影
 				projection.set_perspective(
 						camera->fov,
 						p_viewport_size.width / (float)p_viewport_size.height,
@@ -2714,6 +2732,7 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 
 			} break;
 			case Camera::FRUSTUM: {
+				// 视锥体投影
 				projection.set_frustum(
 						camera->size,
 						p_viewport_size.width / (float)p_viewport_size.height,
@@ -2725,30 +2744,47 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 			} break;
 		}
 
-		camera_data.set_camera(transform, projection, is_orthogonal, is_frustum, vaspect, jitter, taa_frame_count, camera->visible_layers);
+		// 相机数据设置
+		camera_data.set_camera(transform,
+			projection,
+			is_orthogonal,
+			is_frustum,
+			vaspect,
+			jitter,
+			taa_frame_count,
+			camera->visible_layers);
+		// 正交、视锥体、透视应该是互斥的，有个enum会比较好。
 	} else {
 		XRServer *xr_server = XRServer::get_singleton();
 
 		// Setup our camera for our XR interface.
 		// We can support multiple views here each with their own camera
+		// 设置XR接口的相机数据
+		// 多个视口可以有多个相机
 		Transform3D transforms[RendererSceneRender::MAX_RENDER_VIEWS];
 		Projection projections[RendererSceneRender::MAX_RENDER_VIEWS];
 
+		// 视口数获取
 		uint32_t view_count = p_xr_interface->get_view_count();
 		ERR_FAIL_COND_MSG(view_count == 0 || view_count > RendererSceneRender::MAX_RENDER_VIEWS, "Requested view count is not supported");
 
+		// 纵横比（宽高比）的计算
 		float aspect = p_viewport_size.width / (float)p_viewport_size.height;
 
+		// 获取世界参考原点。
 		Transform3D world_origin = xr_server->get_world_origin();
 
 		// We ignore our camera position, it will have been positioned with a slightly old tracking position.
 		// Instead we take our origin point and have our XR interface add fresh tracking data! Whoohoo!
+		// 我们忽略相机位置，它会被放置在一个稍微原始追踪的位置
+		// 我们通过接口获取新的位置。
 		for (uint32_t v = 0; v < view_count; v++) {
 			transforms[v] = p_xr_interface->get_transform_for_view(v, world_origin);
 			projections[v] = p_xr_interface->get_projection_for_view(v, aspect, camera->znear, camera->zfar);
 		}
 
 		// If requested, we move the views to be rendered as if the HMD is at the XROrigin.
+		// 如果需要，我们要移动视图，就当HMD是在XROrigin的位置。
 		if (unlikely(xr_server->is_camera_locked_to_origin())) {
 			Transform3D camera_reset = p_xr_interface->get_camera_transform().affine_inverse() * xr_server->get_reference_frame().affine_inverse();
 			for (uint32_t v = 0; v < view_count; v++) {
@@ -2756,6 +2792,8 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 			}
 		}
 
+		// 一个视口就设置一个相机
+		// 多个视口就设置多个相机
 		if (view_count == 1) {
 			camera_data.set_camera(transforms[0], projections[0], false, false, camera->vaspect, jitter, p_jitter_phase_count, camera->visible_layers);
 		} else if (view_count == 2) {
@@ -2765,14 +2803,34 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 		}
 	}
 
+	// 从相机和场景信息中获得场景资源ID
+	// 从相机和场景信息中获取合成器资源ID
 	RID environment = _render_get_environment(p_camera, p_scenario);
 	RID compositor = _render_get_compositor(p_camera, p_scenario);
 
 	RENDER_TIMESTAMP("Update Occlusion Buffer")
 	// For now just cull on the first camera
-	RendererSceneOcclusionCull::get_singleton()->buffer_update(p_viewport, camera_data.main_transform, camera_data.main_projection, camera_data.is_orthogonal);
+	// 当前只在第一个相机上剔除。更新缓冲信息。
+	RendererSceneOcclusionCull::get_singleton()->buffer_update(p_viewport,
+		camera_data.main_transform,
+		camera_data.main_projection,
+		camera_data.is_orthogonal);
 
-	_render_scene(&camera_data, p_render_buffers, environment, camera->attributes, compositor, camera->visible_layers, p_scenario, p_viewport, p_shadow_atlas, RID(), -1, p_screen_mesh_lod_threshold, true, r_render_info);
+	// 渲染场景
+	_render_scene(&camera_data,
+		p_render_buffers,
+		environment,
+		camera->attributes,
+		compositor,
+		camera->visible_layers,
+		p_scenario,
+		p_viewport,
+		p_shadow_atlas,
+		RID(),
+		-1,
+		p_screen_mesh_lod_threshold,
+		true,
+		r_render_info);
 #endif
 }
 
@@ -3591,8 +3649,18 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			// 根据阴影更新状态执行实际渲染
 			if (redraw && max_shadows_used < MAX_UPDATE_SHADOWS) {
 				//must redraw!
+				// 需要重新绘制的情况
 				RENDER_TIMESTAMP("> Render Light3D " + itos(i));
-				if (_light_instance_update_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers)) {
+				// 光源实例更新阴影数据
+				if (_light_instance_update_shadow(ins,
+					p_camera_data->main_transform,
+					p_camera_data->main_projection,
+					p_camera_data->is_orthogonal,
+					p_camera_data->vaspect,
+					p_shadow_atlas,
+					scenario,
+					p_screen_mesh_lod_threshold,
+					p_visible_layers)) {
 					light->make_shadow_dirty();	// 标记需要下次更新
 				}
 				RENDER_TIMESTAMP("< Render Light3D " + itos(i));
@@ -3608,24 +3676,30 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 	{
 		// Q: Should this whole block be skipped if we're rendering our reflection probe?
+		// 问题：这整个代码块是不是要跳过，当我们渲染反射探针的时候？
 
 		sdfgi_update_data.update_static = false;
 
 		if (cull.sdfgi.region_count > 0) {
 			//update regions
+			// 更新区域
+			// 遍历所有需要更新的区域，将其合并到sdfgi实例数据中。
 			for (uint32_t i = 0; i < cull.sdfgi.region_count; i++) {
 				render_sdfgi_data[i].instances.merge_unordered(scene_cull_result.sdfgi_region_geometry_instances[i]);
 				render_sdfgi_data[i].region = i;
 			}
 			//check if static lights were culled
+			// 检查静态光源是否被剔除。
 			bool static_lights_culled = false;
 			for (uint32_t i = 0; i < cull.sdfgi.cascade_light_count; i++) {
+				// 剔除结果数据中，有sdfgi级联光源的存在
 				if (scene_cull_result.sdfgi_cascade_lights[i].size()) {
-					static_lights_culled = true;
+					static_lights_culled = true;	// 标记静态光源要剔除。
 					break;
 				}
 			}
 
+			// 更新需要剔除的静态光源数据
 			if (static_lights_culled) {
 				sdfgi_update_data.static_cascade_count = cull.sdfgi.cascade_light_count;
 				sdfgi_update_data.static_cascade_indices = cull.sdfgi.cascade_light_index;
@@ -3634,6 +3708,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			}
 		}
 
+		// 如果没有反射探针，将光源数据信息保存到sdfgi更新数据中。
 		if (p_reflection_probe.is_null()) {
 			sdfgi_update_data.directional_lights = &directional_lights;
 			sdfgi_update_data.positional_light_instances = scenario->dynamic_lights.ptr();
@@ -3642,11 +3717,13 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	}
 
 	//append the directional lights to the lights culled
+	// 将方向光加入到光源剔除列表中
 	for (int i = 0; i < directional_lights.size(); i++) {
 		scene_cull_result.light_instances.push_back(directional_lights[i]);
 	}
 
 	RID camera_attributes;
+	// 确定相机属性数据，是用一个强制的相机属性数据，还是从场景信息中获取。
 	if (p_force_camera_attributes.is_valid()) {
 		camera_attributes = p_force_camera_attributes;
 	} else {
@@ -3654,15 +3731,19 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	}
 
 	/* PROCESS GEOMETRY AND DRAW SCENE */
+	// 处理几何数据并且重绘场景。
 
 	RID occluders_tex;
+	// 前一帧的相机数据先初始化成当前帧的。（如果是第一帧这个就有用）
 	const RendererSceneRender::CameraData *prev_camera_data = p_camera_data;
+	// 视口有效的情况下
 	if (p_viewport.is_valid()) {
-		occluders_tex = RSG::viewport->viewport_get_occluder_debug_texture(p_viewport);
-		prev_camera_data = RSG::viewport->viewport_get_prev_camera_data(p_viewport);
+		occluders_tex = RSG::viewport->viewport_get_occluder_debug_texture(p_viewport);	// 遮挡器纹理
+		prev_camera_data = RSG::viewport->viewport_get_prev_camera_data(p_viewport);	// 通过视口获取前一帧的相机数据
 	}
 
 	RENDER_TIMESTAMP("Render 3D Scene");
+	// 剔除结果的数据传入渲染器中进行渲染。
 	scene_render->render_scene(p_render_buffers,
 		p_camera_data,
 		prev_camera_data,
@@ -3686,17 +3767,21 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		max_shadows_used,
 		render_sdfgi_data,
 		cull.sdfgi.region_count,
-		&sdfgi_update_data, r_render_info);
+		&sdfgi_update_data,
+		r_render_info);
 
+	// 再获取一次相机数据信息，这个没看懂
 	if (p_viewport.is_valid()) {
 		RSG::viewport->viewport_set_prev_camera_data(p_viewport, p_camera_data);
 	}
 
+	// 阴影数据的实例在渲染完成后清空。
 	for (uint32_t i = 0; i < max_shadows_used; i++) {
 		render_shadow_data[i].instances.clear();
 	}
 	max_shadows_used = 0;
 
+	// sdfgi的实例数据清空。
 	for (uint32_t i = 0; i < cull.sdfgi.region_count; i++) {
 		render_sdfgi_data[i].instances.clear();
 	}
