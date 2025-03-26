@@ -461,39 +461,46 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 			RSG::texture_storage->render_target_mark_sdf_enabled(p_viewport->render_target, false);
 		}
 
+		// 阴影区域
 		Rect2 shadow_rect;
 
 		int shadow_count = 0;
 		int directional_light_count = 0;
 
 		RENDER_TIMESTAMP("Cull 2D Lights");
+		// 2D光剔除
 		for (KeyValue<RID, Viewport::CanvasData> &E : p_viewport->canvas_map) {
 			RendererCanvasCull::Canvas *canvas = static_cast<RendererCanvasCull::Canvas *>(E.value.canvas);
 
 			Transform2D xf = _canvas_get_transform(p_viewport, canvas, &E.value, clip_rect.size);
 
 			// Find lights in canvas.
+			// 找到画布中的光源
 
 			for (RendererCanvasRender::Light *F : canvas->lights) {
 				RendererCanvasRender::Light *cl = F;
 				if (cl->enabled && cl->texture.is_valid()) {
 					//not super efficient..
+					// 获取纹理尺寸
 					Size2 tsize = RSG::texture_storage->texture_size_with_proxy(cl->texture);
-					tsize *= cl->scale;
+					tsize *= cl->scale;		// 进行一定的缩放
 
-					Vector2 offset = tsize / 2.0;
-					Rect2 local_rect = Rect2(-offset + cl->texture_offset, tsize);
+					Vector2 offset = tsize / 2.0;	// 纹理尺寸的一半作为偏移
+					Rect2 local_rect = Rect2(-offset + cl->texture_offset, tsize);	// 局部矩形区域
 
 					if (!RSG::canvas->_interpolation_data.interpolation_enabled || !cl->interpolated) {
 						cl->xform_cache = xf * cl->xform_curr;
 					} else {
+						// 物理插值比例
 						real_t f = Engine::get_singleton()->get_physics_interpolation_fraction();
+						// 2d变换的插值
 						TransformInterpolator::interpolate_transform_2d(cl->xform_prev, cl->xform_curr, cl->xform_cache, f);
 						cl->xform_cache = xf * cl->xform_cache;
 					}
 
 					cl->rect_cache = cl->xform_cache.xform(local_rect);
 
+					// 裁剪区域相交计算
 					if (clip_rect.intersects(cl->rect_cache)) {
 						cl->filter_next_ptr = lights;
 						lights = cl;
@@ -515,9 +522,10 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 				}
 			}
 
+			// 方向光源的处理
 			for (RendererCanvasRender::Light *F : canvas->directional_lights) {
 				RendererCanvasRender::Light *cl = F;
-				if (cl->enabled) {
+				if (cl->enabled) {	// 光源是否启用
 					cl->filter_next_ptr = directional_lights;
 					directional_lights = cl;
 					if (!RSG::canvas->_interpolation_data.interpolation_enabled || !cl->interpolated) {
@@ -553,35 +561,50 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 			RENDER_TIMESTAMP("Cull LightOccluder2Ds");
 
 			//make list of occluders
+			// 遍历视口内的所有画布
 			for (KeyValue<RID, Viewport::CanvasData> &E : p_viewport->canvas_map) {
+				// 获取当前画布的实例
 				RendererCanvasCull::Canvas *canvas = static_cast<RendererCanvasCull::Canvas *>(E.value.canvas);
+				// 计算画布在视口中的变换矩阵
 				Transform2D xf = _canvas_get_transform(p_viewport, canvas, &E.value, clip_rect.size);
 
+				// 遍历画布的所有遮挡器
 				for (RendererCanvasRender::LightOccluderInstance *F : canvas->occluders) {
 					if (!F->enabled) {
 						continue;
 					}
 					if (!RSG::canvas->_interpolation_data.interpolation_enabled || !F->interpolated) {
-						F->xform_cache = xf * F->xform_curr;
+						F->xform_cache = xf * F->xform_curr;	// 直接使用当前帧变换
 					} else {
+						// 插值计算，在物理帧之间平滑过度
 						real_t f = Engine::get_singleton()->get_physics_interpolation_fraction();
 						TransformInterpolator::interpolate_transform_2d(F->xform_prev, F->xform_curr, F->xform_cache, f);
 						F->xform_cache = xf * F->xform_cache;
 					}
+					// 检测遮挡器包围盒是否与阴影区域相交
 					if (shadow_rect.intersects_transformed(F->xform_cache, F->aabb_cache)) {
-						F->next = occluders;
+						F->next = occluders;	// 链表头插法
 						occluders = F;
 					}
 				}
 			}
 			//update the light shadowmaps with them
 
+			// 遍历所有需要投射阴影的光源
 			RendererCanvasRender::Light *light = lights_with_shadow;
 			while (light) {
 				RENDER_TIMESTAMP("Render PointLight2D Shadow");
 
-				RSG::canvas_render->light_update_shadow(light->light_internal, shadow_count++, light->xform_cache.affine_inverse(), light->item_shadow_mask, light->radius_cache / 1000.0, light->radius_cache * 1.1, occluders, light->rect_cache);
-				light = light->shadows_next_ptr;
+				// 更新光源在画布上的阴影
+				RSG::canvas_render->light_update_shadow(light->light_internal,	// 光源内部标识
+					shadow_count++,		// 自增阴影计数
+					light->xform_cache.affine_inverse(),	// 光源逆变换矩阵
+					light->item_shadow_mask,
+					light->radius_cache / 1000.0,
+					light->radius_cache * 1.1,
+					occluders,	// 遮挡器列表
+					light->rect_cache);		// 光源影响区域
+				light = light->shadows_next_ptr;	// 下一个光源
 			}
 
 			RENDER_TIMESTAMP("< Render PointLight2D Shadows");
@@ -589,38 +612,52 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 
 		if (directional_lights_with_shadow) {
 			//update shadows if any
+			// 遍历定向光源
 			RendererCanvasRender::Light *light = directional_lights_with_shadow;
 			while (light) {
+				// 光源的照射方向
 				Vector2 light_dir = -light->xform_cache.columns[1].normalized(); // Y is light direction
+				// 光源的有效照射范围
 				float cull_distance = light->directional_distance;
 
+				// 计算光源方向的符号向量（用于确定阴影投射象限）
 				Vector2 light_dir_sign;
 				light_dir_sign.x = (ABS(light_dir.x) < CMP_EPSILON) ? 0.0 : ((light_dir.x > 0.0) ? 1.0 : -1.0);
 				light_dir_sign.y = (ABS(light_dir.y) < CMP_EPSILON) ? 0.0 : ((light_dir.y > 0.0) ? 1.0 : -1.0);
 
+				 // 预定义6个顶点数组（最大可能生成的阴影几何顶点数）
 				Vector2 points[6];
 				int point_count = 0;
 
+				// 遍历视口裁剪矩形的四个角落
 				for (int j = 0; j < 4; j++) {
+					// 定义四个角落的标准化坐标（0,0到1,1范围）
 					static const Vector2 signs[4] = { Vector2(1, 1), Vector2(1, 0), Vector2(0, 0), Vector2(0, 1) };
+					// 转换为-1到1范围的坐标系
 					Vector2 sign_cmp = signs[j] * 2.0 - Vector2(1.0, 1.0);
+					// 转换为实际屏幕坐标
 					Vector2 point = clip_rect.position + clip_rect.size * signs[j];
 
+					// 判断顶点与光源方向的关系
 					if (sign_cmp == light_dir_sign) {
 						//both point in same direction, plot offsetted
+						// 相同方向象限：顶点沿光源方向偏移剔除距离
 						points[point_count++] = point + light_dir * cull_distance;
 					} else if (sign_cmp.x == light_dir_sign.x || sign_cmp.y == light_dir_sign.y) {
+						// 部分方向一致：生成边缘线段
 						int next_j = (j + 1) % 4;
 						Vector2 next_sign_cmp = signs[next_j] * 2.0 - Vector2(1.0, 1.0);
 
 						//one point in the same direction, plot segment
 
 						if (next_sign_cmp.x == light_dir_sign.x || next_sign_cmp.y == light_dir_sign.y) {
+							// 连续两个顶点在同一方向象限
 							if (light_dir_sign.x != 0.0 || light_dir_sign.y != 0.0) {
-								points[point_count++] = point;
+								points[point_count++] = point;// 添加原始顶点
 							}
-							points[point_count++] = point + light_dir * cull_distance;
+							points[point_count++] = point + light_dir * cull_distance;	// 添加偏移顶点
 						} else {
+							// 单个顶点在方向象限
 							points[point_count++] = point + light_dir * cull_distance;
 							if (light_dir_sign.x != 0.0 || light_dir_sign.y != 0.0) {
 								points[point_count++] = point;
@@ -628,10 +665,12 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 						}
 					} else {
 						//plot normally
+						// 其他情况保留原始顶点
 						points[point_count++] = point;
 					}
 				}
 
+				// 存储变换后的顶点坐标
 				Vector2 xf_points[6];
 
 				RendererCanvasRender::LightOccluderInstance *occluders = nullptr;
@@ -639,14 +678,17 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 				RENDER_TIMESTAMP("> Render DirectionalLight2D Shadows");
 
 				// Make list of occluders.
+				// 收集所有可见遮挡器（与点光源处理类似但包含方向特性）
 				for (KeyValue<RID, Viewport::CanvasData> &E : p_viewport->canvas_map) {
 					RendererCanvasCull::Canvas *canvas = static_cast<RendererCanvasCull::Canvas *>(E.value.canvas);
+					// 获取画布空间变换矩阵
 					Transform2D xf = _canvas_get_transform(p_viewport, canvas, &E.value, clip_rect.size);
 
 					for (RendererCanvasRender::LightOccluderInstance *F : canvas->occluders) {
 						if (!F->enabled) {
 							continue;
 						}
+						// 计算遮挡器的插值变换（与物理帧同步）
 						if (!RSG::canvas->_interpolation_data.interpolation_enabled || !F->interpolated) {
 							F->xform_cache = xf * F->xform_curr;
 						} else {
@@ -654,21 +696,33 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 							TransformInterpolator::interpolate_transform_2d(F->xform_prev, F->xform_curr, F->xform_cache, f);
 							F->xform_cache = xf * F->xform_cache;
 						}
+						// 计算逆变换用于空间坐标转换
 						Transform2D localizer = F->xform_cache.affine_inverse();
 
+						// 将屏幕空间顶点转换到遮挡器本地空间
 						for (int j = 0; j < point_count; j++) {
 							xf_points[j] = localizer.xform(points[j]);
 						}
+						// 检测遮挡器包围盒是否与阴影区域相交
 						if (F->aabb_cache.intersects_filled_polygon(xf_points, point_count)) {
+							// 链表方式收集有效遮挡器
 							F->next = occluders;
 							occluders = F;
 						}
 					}
 				}
 
-				RSG::canvas_render->light_update_directional_shadow(light->light_internal, shadow_count++, light->xform_cache, light->item_shadow_mask, cull_distance, clip_rect, occluders);
+				// 调用底层渲染器更新方向光源阴影（核心渲染指令）
+				RSG::canvas_render->light_update_directional_shadow(
+					light->light_internal,		// 光源内部标识
+					shadow_count++,				// 自增阴影计数器
+					light->xform_cache,			// 光源变换矩阵
+					light->item_shadow_mask,	// 阴影遮罩位
+					cull_distance,				// 有效照射距离
+					clip_rect,					// 当前视口裁剪区域
+					occluders);					// 收集的遮挡器链表
 
-				light = light->shadows_next_ptr;
+				light = light->shadows_next_ptr;	// 遍历下一个光源
 			}
 
 			RENDER_TIMESTAMP("< Render DirectionalLight2D Shadows");
@@ -677,12 +731,17 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 		if (scenario_draw_canvas_bg && canvas_map.begin() && canvas_map.begin()->key.get_layer() > scenario_canvas_max_layer) {
 			// There may be an outstanding clear request if a clear was requested, but no 2D elements were drawn.
 			// Clear now otherwise we copy over garbage from the render target.
+			// 如果存在未完成的清除请求（例如请求了清除但未绘制任何2D元素）
+			// 此时强制清除渲染目标的残留数据，避免复制到无效数据
 			RSG::texture_storage->render_target_do_clear_request(p_viewport->render_target);
 			if (!can_draw_3d) {
+				// 若禁用3D渲染，则渲染一个空场景（仅保留光照/阴影等基础信息）
 				RSG::scene->render_empty_scene(p_viewport->render_buffers, p_viewport->scenario, p_viewport->shadow_atlas);
 			} else {
+				// 启用3D渲染时，执行完整的3D场景绘制流程
 				_draw_3d(p_viewport);
 			}
+			// 标记画布背景绘制完成，避免重复处理
 			scenario_draw_canvas_bg = false;
 		}
 
@@ -694,6 +753,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 			RendererCanvasRender::Light *canvas_lights = nullptr;
 			RendererCanvasRender::Light *canvas_directional_lights = nullptr;
 
+			// 筛选光源
 			RendererCanvasRender::Light *ptr = lights;
 			while (ptr) {
 				if (E.value->layer >= ptr->layer_min && E.value->layer <= ptr->layer_max) {
@@ -712,11 +772,25 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 				ptr = ptr->filter_next_ptr;
 			}
 
-			RSG::canvas->render_canvas(p_viewport->render_target, canvas, xform, canvas_lights, canvas_directional_lights, clip_rect, p_viewport->texture_filter, p_viewport->texture_repeat, p_viewport->snap_2d_transforms_to_pixel, p_viewport->snap_2d_vertices_to_pixel, p_viewport->canvas_cull_mask, &p_viewport->render_info);
+			// 绘制画布
+			RSG::canvas->render_canvas(
+				p_viewport->render_target,
+				canvas,
+				xform,
+				canvas_lights,
+				canvas_directional_lights,
+				clip_rect,
+				p_viewport->texture_filter,
+				p_viewport->texture_repeat,
+				p_viewport->snap_2d_transforms_to_pixel,
+				p_viewport->snap_2d_vertices_to_pixel,
+				p_viewport->canvas_cull_mask,
+				&p_viewport->render_info);
 			if (RSG::canvas->was_sdf_used()) {
 				p_viewport->sdf_active = true;
 			}
 
+			// 画布层级超过最大预设值，优先渲染3D场景。
 			if (scenario_draw_canvas_bg && E.key.get_layer() >= scenario_canvas_max_layer) {
 				// There may be an outstanding clear request if a clear was requested, but no 2D elements were drawn.
 				// Clear now otherwise we copy over garbage from the render target.
@@ -731,6 +805,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 			}
 		}
 
+		// 如果到这一步还没有绘制的话，就绘制3D场景
 		if (scenario_draw_canvas_bg) {
 			// There may be an outstanding clear request if a clear was requested, but no 2D elements were drawn.
 			// Clear now otherwise we copy over garbage from the render target.
@@ -745,14 +820,17 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 
 	if (RSG::texture_storage->render_target_is_clear_requested(p_viewport->render_target)) {
 		//was never cleared in the end, force clear it
+		// 还需要清空的话就强制清空
 		RSG::texture_storage->render_target_do_clear_request(p_viewport->render_target);
 	}
 
+	// 是否需要2D的msaa
 	if (RSG::texture_storage->render_target_get_msaa_needs_resolve(p_viewport->render_target)) {
 		WARN_PRINT_ONCE("2D MSAA is enabled while there is no 2D content. Disable 2D MSAA for better performance.");
 		RSG::texture_storage->render_target_do_msaa_resolve(p_viewport->render_target);
 	}
 
+	// 渲染时间测量
 	if (p_viewport->measure_render_time) {
 		String rt_id = "vp_end_" + itos(p_viewport->self.get_id());
 		RSG::utilities->capture_timestamp(rt_id);
@@ -765,26 +843,32 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 
 #ifndef _3D_DISABLED
 	// get our xr interface in case we need it
+	// 获取 XR 接口（若存在），供后续使用。
 	Ref<XRInterface> xr_interface;
 	XRServer *xr_server = XRServer::get_singleton();
 	if (xr_server != nullptr) {
 		// let our XR server know we're about to render our frames so we can get our frame timing
+		// 通知 XR 服务器即将进行渲染，以便获得帧同步相关的信息（如帧开始时间点）
 		xr_server->pre_render();
 
 		// retrieve the interface responsible for rendering
+		// 获取主要用来做渲染的 XRInterface（若存在）。
 		xr_interface = xr_server->get_primary_interface();
 	}
 #endif // _3D_DISABLED
 
+	// 如果在编辑器环境下，则设置默认的清除颜色（clear color）。
 	if (Engine::get_singleton()->is_editor_hint()) {
 		RSG::texture_storage->set_default_clear_color(GLOBAL_GET("rendering/environment/defaults/default_clear_color"));
 	}
 
+	// 如果需要重新排序活跃的 viewports（因为它们的顺序可能被改变了），就重新排序，并将标记置为 false。
 	if (sorted_active_viewports_dirty) {
 		sorted_active_viewports = _sort_active_viewports();
 		sorted_active_viewports_dirty = false;
 	}
 
+	// 用于记录最终要 blit 到屏幕的参数列表，按 WindowID 分开存储。
 	HashMap<DisplayServer::WindowID, Vector<BlitToScreen>> blit_to_screen_list;
 	//draw viewports
 	RENDER_TIMESTAMP("> Render Viewports");
@@ -792,10 +876,12 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 	//determine what is visible
 	draw_viewports_pass++;
 
+	// 要确定父节点的可见性，需要从后往前遍历
 	for (int i = sorted_active_viewports.size() - 1; i >= 0; i--) { //to compute parent dependency, must go in reverse draw order
 
 		Viewport *vp = sorted_active_viewports[i];
 
+		// 这个视口不要更新，则跳过
 		if (vp->update_mode == RS::VIEWPORT_UPDATE_DISABLED) {
 			continue;
 		}
@@ -805,6 +891,7 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 		}
 		//ERR_CONTINUE(!vp->render_target.is_valid());
 
+		// 视口到屏幕空间是否不为空
 		bool visible = vp->viewport_to_screen_rect != Rect2();
 
 #ifndef _3D_DISABLED
@@ -823,7 +910,8 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 			}
 		} else
 #endif // _3D_DISABLED
-		{
+		{	// 判断是否可见
+			
 			if (vp->update_mode == RS::VIEWPORT_UPDATE_ALWAYS || vp->update_mode == RS::VIEWPORT_UPDATE_ONCE) {
 				visible = true;
 			}
@@ -843,6 +931,7 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 		visible = visible && vp->size.x > 1 && vp->size.y > 1;
 
 		if (visible) {
+			// 如果可见，则记录一下它在本次渲染循环中被使用过
 			vp->last_pass = draw_viewports_pass;
 		}
 	}
@@ -851,9 +940,11 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 	int objects_drawn = 0;
 	int draw_calls_used = 0;
 
+	// 正向遍历视口，执行真正的渲染。
 	for (int i = 0; i < sorted_active_viewports.size(); i++) {
 		Viewport *vp = sorted_active_viewports[i];
 
+		// 为什么这里会用这种判断跳过？
 		if (vp->last_pass != draw_viewports_pass) {
 			continue; //should not draw
 		}
@@ -910,13 +1001,16 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 		} else
 #endif // _3D_DISABLED
 		{
+			// 设置调试绘制模式
 			RSG::scene->set_debug_draw_mode(vp->debug_draw);
 
 			// render standard mono camera
+			// 进行视口绘制
 			_draw_viewport(vp);
 
 			if (vp->viewport_to_screen != DisplayServer::INVALID_WINDOW_ID && (!vp->viewport_render_direct_to_screen || !RSG::rasterizer->is_low_end())) {
 				//copy to screen if set as such
+				// 看看有没有设置拷贝到屏幕，靠到屏幕的矩形区域来判断
 				BlitToScreen blit;
 				blit.render_target = vp->render_target;
 				if (vp->viewport_to_screen_rect != Rect2()) {
@@ -926,11 +1020,13 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 					blit.dst_rect.size = vp->size;
 				}
 
+				// 获取要渲染到哪些区域
 				Vector<BlitToScreen> *blits = blit_to_screen_list.getptr(vp->viewport_to_screen);
 				if (blits == nullptr) {
 					blits = &blit_to_screen_list.insert(vp->viewport_to_screen, Vector<BlitToScreen>())->value;
 				}
 
+				// opengl3有不同的绘制路径
 				if (OS::get_singleton()->get_current_rendering_driver_name().begins_with("opengl3")) {
 					Vector<BlitToScreen> blit_to_screen_vec;
 					blit_to_screen_vec.push_back(blit);
@@ -949,10 +1045,14 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 		RENDER_TIMESTAMP("< Render Viewport " + itos(i));
 
 		// 3D render info.
+		// 绘制的物体数量
 		objects_drawn += vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_VISIBLE][RS::VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME] + vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_SHADOW][RS::VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME];
+		// 绘制的顶点数量
 		vertices_drawn += vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_VISIBLE][RS::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME] + vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_SHADOW][RS::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME];
+		// 使用的drawcall数
 		draw_calls_used += vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_VISIBLE][RS::VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME] + vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_SHADOW][RS::VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME];
 		// 2D render info.
+		// 2D物体的绘制信息，和3D的统计到一起
 		objects_drawn += vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_CANVAS][RS::VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME];
 		vertices_drawn += vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_CANVAS][RS::VIEWPORT_RENDER_INFO_PRIMITIVES_IN_FRAME];
 		draw_calls_used += vp->render_info.info[RS::VIEWPORT_RENDER_INFO_TYPE_CANVAS][RS::VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME];
@@ -965,6 +1065,7 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 
 	RENDER_TIMESTAMP("< Render Viewports");
 
+	// 统一绘制到屏幕上
 	if (p_swap_buffers && !blit_to_screen_list.is_empty()) {
 		for (const KeyValue<int, Vector<BlitToScreen>> &E : blit_to_screen_list) {
 			RSG::rasterizer->blit_render_targets_to_screen(E.key, E.value.ptr(), E.value.size());
