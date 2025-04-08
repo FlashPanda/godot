@@ -317,6 +317,7 @@ public:
 	int get_num_viewports_with_motion_vectors() const;
 
 	// Workaround for setting this on thread.
+	// 设置垂直同步模式
 	void call_set_vsync_mode(DisplayServer::VSyncMode p_mode, DisplayServer::WindowID p_window);
 
 	RendererViewport();

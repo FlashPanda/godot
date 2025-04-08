@@ -330,7 +330,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 	}
 
 	/* Camera should always be BEFORE any other 3D */
-	// 相机需要在任务其他3D元素之前。
+	// 相机需要在其他3D元素之前。
 
 	// 立体渲染不支持2D，没有深度数据
 	bool can_draw_2d = !p_viewport->disable_2d && p_viewport->view_count == 1; // Stereo rendering does not support 2D, no depth data
@@ -1074,6 +1074,7 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 }
 
 RID RendererViewport::viewport_allocate() {
+	// 在分配RID的时候就已经把相关的空间分配好了。
 	return viewport_owner.allocate_rid();
 }
 
