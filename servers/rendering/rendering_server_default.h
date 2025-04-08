@@ -40,7 +40,7 @@
 #include "rendering_server_globals.h"
 #include "servers/rendering/renderer_compositor.h"
 #include "servers/rendering_server.h"
-#include "servers/server_wrap_mt_common.h"
+//#include "servers/server_wrap_mt_common.h"	// 这个文件在后面定义了必要的WRITE_ACTION宏之后会引入  。、？
 
 class RenderingServerDefault : public RenderingServer {
 	enum {
@@ -121,6 +121,7 @@ public:
 #define MAIN_THREAD_SYNC_WARN WARN_PRINT("Call to " + String(__FUNCTION__) + " causing RenderingServer synchronizations on every frame. This significantly affects performance.");
 #endif
 
+// 这里的区别在于，定义了一个WRITE_ACTION宏，然后server_wrap_mt_common里的宏用到了WRITE_ACTION宏。
 #include "servers/server_wrap_mt_common.h"
 
 	/* TEXTURE API */

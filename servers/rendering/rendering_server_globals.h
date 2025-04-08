@@ -60,6 +60,7 @@ public:
 	static RendererTextureStorage *texture_storage;
 	static RendererGI *gi;
 	static RendererFog *fog;
+
 	static RendererCameraAttributes *camera_attributes;
 	static RendererCanvasRender *canvas_render;
 	static RendererCompositor *rasterizer;

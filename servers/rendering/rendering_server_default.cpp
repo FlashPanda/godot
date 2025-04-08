@@ -65,6 +65,8 @@ void RenderingServerDefault::request_frame_drawn_callback(const Callable &p_call
 	frame_drawn_callbacks.push_back(p_callable);
 }
 
+// 这个地方传入的参数就少，所以从这里开始就是数据起始的地方。
+// 这个地方就可以看出整个流程是什么样子的。
 void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 	RSG::rasterizer->begin_frame(frame_step);
 
@@ -73,18 +75,27 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 	uint64_t time_usec = OS::get_singleton()->get_ticks_usec();
 
 	RENDER_TIMESTAMP("Prepare Render Frame");
+	// 场景更新
 	RSG::scene->update(); //update scenes stuff before updating instances
+	// 画布更新
 	RSG::canvas->update();
 
+	// 计算更新的两步花了多少时间，转换成ms级
 	frame_setup_time = double(OS::get_singleton()->get_ticks_usec() - time_usec) / 1000.0;
 
+	// 更新粒子
+	// 需要在更新了实例之后更新
 	RSG::particles_storage->update_particles(); //need to be done after instances are updated (colliders and particle transforms), and colliders are rendered
 
+	// 渲染探针
 	RSG::scene->render_probes();
 
+	// 绘制视口
 	RSG::viewport->draw_viewports(p_swap_buffers);
+	// 画布渲染器更新
 	RSG::canvas_render->update();
 
+	// 一帧结束
 	RSG::rasterizer->end_frame(p_swap_buffers);
 
 #ifndef _3D_DISABLED
@@ -95,15 +106,19 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 	}
 #endif // _3D_DISABLED
 
+	// 画布可见性更新
 	RSG::canvas->update_visibility_notifiers();
+	// 场景可见性更新
 	RSG::scene->update_visibility_notifiers();
 
 	if (create_thread) {
 		callable_mp(this, &RenderingServerDefault::_run_post_draw_steps).call_deferred();
 	} else {
+		// 绘制后的一些步骤
 		_run_post_draw_steps();
 	}
 
+	// 收集时间戳信息
 	if (RSG::utilities->get_captured_timestamps_count()) {
 		Vector<FrameProfileArea> new_profile;
 		if (RSG::utilities->capturing_timestamps) {
@@ -177,6 +192,7 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 		}
 	}
 
+	// 更新内存信息
 	RSG::utilities->update_memory_info();
 }
 

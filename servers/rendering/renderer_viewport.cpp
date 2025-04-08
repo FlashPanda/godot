@@ -391,6 +391,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 		if (force_clear_render_target) {
 			RSG::texture_storage->render_target_do_clear_request(p_viewport->render_target);
 		}
+		// 通过3D渲染器的路径。
 		_draw_3d(p_viewport);
 	}
 
@@ -1006,6 +1007,7 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 
 			// render standard mono camera
 			// 进行视口绘制
+			/**********通往渲染器的路径***********/ 
 			_draw_viewport(vp);
 
 			if (vp->viewport_to_screen != DisplayServer::INVALID_WINDOW_ID && (!vp->viewport_render_direct_to_screen || !RSG::rasterizer->is_low_end())) {
