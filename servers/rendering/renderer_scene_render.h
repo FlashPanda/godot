@@ -35,52 +35,53 @@
 #include "core/templates/paged_array.h"
 #include "servers/rendering/renderer_geometry_instance.h"
 #include "servers/rendering/rendering_method.h"
-#include "servers/rendering/storage/compositor_storage.h"
-#include "servers/rendering/storage/environment_storage.h"
-#include "storage/render_scene_buffers.h"
+#include "servers/rendering/storage/compositor_storage.h"		// 合成器资源
+#include "servers/rendering/storage/environment_storage.h"		// 环境资源
+#include "storage/render_scene_buffers.h"	// 渲染缓冲管理
 
 class RendererSceneRender {
 private:
-	RendererEnvironmentStorage environment_storage;
-	RendererCompositorStorage compositor_storage;
+	RendererEnvironmentStorage environment_storage;		// 环境参数存储
+	RendererCompositorStorage compositor_storage;		// 合成器资源存储
 
 public:
+	// 渲染器常量配置
 	enum {
-		MAX_DIRECTIONAL_LIGHTS = 8,
-		MAX_DIRECTIONAL_LIGHT_CASCADES = 4,
-		MAX_RENDER_VIEWS = 2
+		MAX_DIRECTIONAL_LIGHTS = 8,		// 最大方向光数量。
+		MAX_DIRECTIONAL_LIGHT_CASCADES = 4,		// 级联阴影最大级数
+		MAX_RENDER_VIEWS = 2	// 最大渲染视图数
 	};
 
 	/* Geometry Instance */
-
-	virtual RenderGeometryInstance *geometry_instance_create(RID p_base) = 0;
-	virtual void geometry_instance_free(RenderGeometryInstance *p_geometry_instance) = 0;
-	virtual uint32_t geometry_instance_get_pair_mask() = 0;
+	/* 几何实例生命周期管理 */
+	virtual RenderGeometryInstance *geometry_instance_create(RID p_base) = 0;		// 创建几何实例
+	virtual void geometry_instance_free(RenderGeometryInstance *p_geometry_instance) = 0;	// 释放几何实例
+	virtual uint32_t geometry_instance_get_pair_mask() = 0;	// 几何实例配对掩码
 
 	/* PIPELINES */
-
-	virtual void mesh_generate_pipelines(RID p_mesh, bool p_background_compilation) = 0;
-	virtual uint32_t get_pipeline_compilations(RS::PipelineSource p_source) = 0;
+	/* 渲染管线管理 */
+	virtual void mesh_generate_pipelines(RID p_mesh, bool p_background_compilation) = 0;	// 生成网格管线
+	virtual uint32_t get_pipeline_compilations(RS::PipelineSource p_source) = 0;	// 获取管线编译状态
 
 	/* SDFGI UPDATE */
-
-	virtual void sdfgi_update(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, const Vector3 &p_world_position) = 0;
-	virtual int sdfgi_get_pending_region_count(const Ref<RenderSceneBuffers> &p_render_buffers) const = 0;
-	virtual AABB sdfgi_get_pending_region_bounds(const Ref<RenderSceneBuffers> &p_render_buffers, int p_region) const = 0;
-	virtual uint32_t sdfgi_get_pending_region_cascade(const Ref<RenderSceneBuffers> &p_render_buffers, int p_region) const = 0;
+	/* SDFGI动态更新接口 */
+	virtual void sdfgi_update(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, const Vector3 &p_world_position) = 0;	 // 更新SDFGI
+	virtual int sdfgi_get_pending_region_count(const Ref<RenderSceneBuffers> &p_render_buffers) const = 0;	// 获取SDFGI待更新区域数
+	virtual AABB sdfgi_get_pending_region_bounds(const Ref<RenderSceneBuffers> &p_render_buffers, int p_region) const = 0;	// 获取区域边界
+	virtual uint32_t sdfgi_get_pending_region_cascade(const Ref<RenderSceneBuffers> &p_render_buffers, int p_region) const = 0;	// 获取级联层级
 
 	/* SKY API */
+	/* 天空系统接口 */
+	virtual RID sky_allocate() = 0;		// 分配天空资源
+	virtual void sky_initialize(RID p_rid) = 0;		// 初始化天空
 
-	virtual RID sky_allocate() = 0;
-	virtual void sky_initialize(RID p_rid) = 0;
-
-	virtual void sky_set_radiance_size(RID p_sky, int p_radiance_size) = 0;
-	virtual void sky_set_mode(RID p_sky, RS::SkyMode p_samples) = 0;
-	virtual void sky_set_material(RID p_sky, RID p_material) = 0;
-	virtual Ref<Image> sky_bake_panorama(RID p_sky, float p_energy, bool p_bake_irradiance, const Size2i &p_size) = 0;
+	virtual void sky_set_radiance_size(RID p_sky, int p_radiance_size) = 0;		// 设置辐照图尺寸
+	virtual void sky_set_mode(RID p_sky, RS::SkyMode p_samples) = 0;	// 设置采样模式
+	virtual void sky_set_material(RID p_sky, RID p_material) = 0;	// 设置材质
+	virtual Ref<Image> sky_bake_panorama(RID p_sky, float p_energy, bool p_bake_irradiance, const Size2i &p_size) = 0;		// 烘焙天空全景图
 
 	/* COMPOSITOR EFFECT API */
-
+	/* 合成器特效管理 */
 	RID compositor_effect_allocate();
 	void compositor_effect_initialize(RID p_rid);
 	void compositor_effect_free(RID p_rid);

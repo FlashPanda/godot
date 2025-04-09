@@ -924,6 +924,7 @@ public:
 		VIEWPORT_SCALING_3D_MODE_OFF = 255, // for internal use only
 	};
 
+	// 各向异性滤波的级别
 	enum ViewportAnisotropicFiltering {
 		VIEWPORT_ANISOTROPY_DISABLED,
 		VIEWPORT_ANISOTROPY_2X,

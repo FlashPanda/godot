@@ -106,6 +106,7 @@ public:
  * Note: This is an internal rendering server object, do not instantiate this from script.
  * 注意：这事内部的渲染服务对象，不要在脚本中实例化它。
  */
+// 这只是个interface
 class RenderSceneBuffers : public RefCounted {
 	GDCLASS(RenderSceneBuffers, RefCounted);
 

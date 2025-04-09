@@ -83,32 +83,35 @@ class RenderSceneBuffersRD : public RenderSceneBuffers {
 private:
 	bool can_be_storage = true;
 	uint32_t max_cluster_elements = 512;
-	RD::DataFormat base_data_format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
+	RD::DataFormat base_data_format = RD::DATA_FORMAT_R16G16B16A16_SFLOAT;		// RGBA的有符号浮点数
 	RendererRD::VRS *vrs = nullptr;
 	uint64_t auto_exposure_version = 1;
 
 	// Our render target represents our final destination that we display on screen.
+	// 渲染目标是最终要显示到屏幕上的。
 	RID render_target;
 	Size2i target_size = Size2i(0, 0);
 	uint32_t view_count = 1;
 
 	// The internal size of the textures we render 3D to in case we render at a lower resolution and upscale
+	// 纹理内部尺寸大小，避免我们渲染了一个低分辨率的纹理，还需要做放大
 	Size2i internal_size = Size2i(0, 0);
-	RS::ViewportScaling3DMode scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_OFF;
+	RS::ViewportScaling3DMode scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_OFF;		// 视口的3D缩放模式
 	float fsr_sharpness = 0.2f;
 	float texture_mipmap_bias = 0.0f;
-	RS::ViewportAnisotropicFiltering anisotropic_filtering_level = RS::VIEWPORT_ANISOTROPY_4X;
+	RS::ViewportAnisotropicFiltering anisotropic_filtering_level = RS::VIEWPORT_ANISOTROPY_4X;	// 默认各向异性滤波层级是4倍
 
 #ifdef METAL_ENABLED
 	RendererRD::MFXSpatialContext *mfx_spatial_context = nullptr;
 #endif
 
 	// Aliasing settings
-	RS::ViewportMSAA msaa_3d = RS::VIEWPORT_MSAA_DISABLED;
-	RS::ViewportScreenSpaceAA screen_space_aa = RS::VIEWPORT_SCREEN_SPACE_AA_DISABLED;
+	// 抗锯齿设置
+	RS::ViewportMSAA msaa_3d = RS::VIEWPORT_MSAA_DISABLED;	// 视口的AA
+	RS::ViewportScreenSpaceAA screen_space_aa = RS::VIEWPORT_SCREEN_SPACE_AA_DISABLED;		// 屏幕空间AA
 	bool use_taa = false;
 	bool use_debanding = false;
-	RD::TextureSamples texture_samples = RD::TEXTURE_SAMPLES_1;
+	RD::TextureSamples texture_samples = RD::TEXTURE_SAMPLES_1;		// 抗锯齿采样数，1次表示不抗锯齿采样。
 
 	// Named Textures
 
@@ -169,10 +172,13 @@ private:
 
 	struct NamedTexture {
 		// Cache the data used to create our texture
+		// 缓存数据，用来创建纹理
 		RD::TextureFormat format;
 		bool is_unique; // If marked as unique, we return it into our pool
+			// 如果标记成唯一，我们会将它返回到池中。
 
 		// Our texture objects, slices are lazy (i.e. only created when requested).
+		// 这是我们的纹理对象，但是将其切块是后期操作，只在需要的时候切块。
 		RID texture;
 		mutable HashMap<NTSliceKey, RID, NTSliceKey> slices;
 		Vector<Size2i> sizes;
@@ -183,9 +189,11 @@ private:
 	void free_named_texture(NamedTexture &p_named_texture);
 
 	// Data buffers
+	// 自定义的数据缓冲
 	mutable HashMap<StringName, Ref<RenderBufferCustomDataRD>> data_buffers;
 
 	// Samplers.
+	// 材质采样器
 	RendererRD::MaterialStorage::Samplers samplers;
 
 	void update_samplers();
@@ -198,6 +206,7 @@ public:
 	virtual ~RenderSceneBuffersRD();
 
 	// info from our renderer
+	// 渲染器的配置信息
 	void set_can_be_storage(const bool p_can_be_storage) { can_be_storage = p_can_be_storage; }
 	bool get_can_be_storage() const { return can_be_storage; }
 	void set_max_cluster_elements(const uint32_t p_max_elements) { max_cluster_elements = p_max_elements; }
@@ -207,7 +216,7 @@ public:
 	void set_vrs(RendererRD::VRS *p_vrs) { vrs = p_vrs; }
 
 	void cleanup();
-	virtual void configure(const RenderSceneBuffersConfiguration *p_config) override;
+	virtual void configure(const RenderSceneBuffersConfiguration *p_config) override;	// 渲染场景缓冲的配置信息
 	void configure_for_reflections(const Size2i p_reflection_size);
 	virtual void set_fsr_sharpness(float p_fsr_sharpness) override;
 	virtual void set_texture_mipmap_bias(float p_texture_mipmap_bias) override;
@@ -255,6 +264,7 @@ public:
 	_FORCE_INLINE_ bool get_use_taa() const { return use_taa; }
 	_FORCE_INLINE_ bool get_use_debanding() const { return use_debanding; }
 
+	// 自动曝光版本？
 	uint64_t get_auto_exposure_version() const { return auto_exposure_version; }
 	void set_auto_exposure_version(const uint64_t p_auto_exposure_version) { auto_exposure_version = p_auto_exposure_version; }
 

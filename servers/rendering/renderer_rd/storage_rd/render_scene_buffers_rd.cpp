@@ -148,6 +148,7 @@ void RenderSceneBuffersRD::cleanup() {
 #endif
 }
 
+// 在配置的阶段创建缓冲。
 void RenderSceneBuffersRD::configure(const RenderSceneBuffersConfiguration *p_config) {
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
@@ -179,6 +180,8 @@ void RenderSceneBuffersRD::configure(const RenderSceneBuffersConfiguration *p_co
 
 	// TODO: Detect when it is safe to use RD::TEXTURE_USAGE_TRANSIENT_BIT for RB_TEX_DEPTH, RB_TEX_COLOR_MSAA and/or RB_TEX_DEPTH_MSAA.
 	// (it means we cannot sample from it, we cannot copy from/to it) to save VRAM (and maybe performance too).
+	// 检查一下什么时候能安全使用RD::TEXTURE_USAGE_TRANSIENT_BIT标记，对RB_TEX_DEPTH, RB_TEX_COLOR_MSAA 以及 RB_TEX_DEPTH_MSAA.
+	// 这意味着，我们不能对其进行采样，或者拷贝它。这个标记会节省显存，可能也会提高性能。
 
 	// Create our depth buffer.
 	create_texture(RB_SCOPE_BUFFERS, RB_TEX_DEPTH, get_depth_format(resolve_target, false, can_be_storage), get_depth_usage_bits(resolve_target, false, can_be_storage));

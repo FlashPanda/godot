@@ -119,10 +119,11 @@ public:
 	};
 
 	struct Samplers {
+		// 采样器根据纹理滤波类型和纹理重复类型组成一个二维数组资源
 		RID rids[RS::CANVAS_ITEM_TEXTURE_FILTER_MAX][RS::CANVAS_ITEM_TEXTURE_REPEAT_MAX];
 		float mipmap_bias = 0.0f;
 		bool use_nearest_mipmap_filter = false;
-		int anisotropic_filtering_level = 2;
+		int anisotropic_filtering_level = 2;	// 各向异性滤波等级
 
 		_FORCE_INLINE_ RID get_sampler(RS::CanvasItemTextureFilter p_filter, RS::CanvasItemTextureRepeat p_repeat) const {
 			return rids[p_filter][p_repeat];
