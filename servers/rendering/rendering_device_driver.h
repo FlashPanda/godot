@@ -125,6 +125,7 @@ public:
 				id(p_id) {}
 	};
 
+	// 使用宏定义多个结构体类型
 #define DEFINE_ID(m_name)                                                         \
 	struct m_name##ID : public ID {                                               \
 		_ALWAYS_INLINE_ explicit operator bool() const {                          \
@@ -179,6 +180,7 @@ public:
 	/**** MEMORY ****/
 	/****************/
 
+	// 对图片来说，CPU分配意味着线性，GPU是分块优化
 	enum MemoryAllocationType {
 		MEMORY_ALLOCATION_TYPE_CPU, // For images, CPU allocation also means linear, GPU is tiling optimal.
 		MEMORY_ALLOCATION_TYPE_GPU,

@@ -327,6 +327,7 @@ public:
 	/**** TEXTURE ****/
 	/*****************/
 
+	// 纹理类型
 	enum TextureType {
 		TEXTURE_TYPE_1D,
 		TEXTURE_TYPE_2D,
@@ -349,6 +350,7 @@ public:
 		TEXTURE_SAMPLES_MAX,
 	};
 
+	// 纹理用途
 	enum TextureUsageBits {
 		TEXTURE_USAGE_SAMPLING_BIT = (1 << 0),
 		TEXTURE_USAGE_COLOR_ATTACHMENT_BIT = (1 << 1),
@@ -379,19 +381,34 @@ public:
 		TEXTURE_USAGE_TRANSIENT_BIT = (1 << 11),
 	};
 
+	// 纹理格式
 	struct TextureFormat {
-		DataFormat format = DATA_FORMAT_R8_UNORM;
-		uint32_t width = 1;
-		uint32_t height = 1;
-		uint32_t depth = 1;
-		uint32_t array_layers = 1;
-		uint32_t mipmaps = 1;
-		TextureType texture_type = TEXTURE_TYPE_2D;
-		TextureSamples samples = TEXTURE_SAMPLES_1;
-		uint32_t usage_bits = 0;
-		Vector<DataFormat> shareable_formats;
-		bool is_resolve_buffer = false;
-		bool is_discardable = false;
+		DataFormat format = DATA_FORMAT_R8_UNORM;		// 数据格式
+		uint32_t width = 1;								// 宽度
+		uint32_t height = 1;							// 高度
+		uint32_t depth = 1;								// 深度
+		uint32_t array_layers = 1;						// 数组层数
+		uint32_t mipmaps = 1;							// mipmap数
+		TextureType texture_type = TEXTURE_TYPE_2D;		// 纹理类型
+		TextureSamples samples = TEXTURE_SAMPLES_1;		// 纹理采样数
+		uint32_t usage_bits = 0;						// 纹理用途，用途会对应TextureUsageBits，它是一个按位与的操作
+		Vector<DataFormat> shareable_formats;			// 该纹理支持共享的数据格式集合
+		// 该字段表示当前纹理可以被其他系统或渲染流程复用时，所允许的数据格式列表。
+		// 例如，当需要在不同渲染阶段（如后处理、阴影生成等）使用同一纹理时，若这些
+		// 阶段对数据格式有不同要求，shareable_formats会列出所有兼容的格式，避免
+		// 重复创建纹理资源。
+
+		// 不同硬件平台可能对纹理格式的支持存在差异（如移动端常用ASTC，PC端常用BC
+		// 压缩格式）。通过指定shareable_formats，开发者可以预定义一组后备格式，
+		// 使引擎在目标平台不支持主格式时，自动选择列表中的次优格式加载，从而提升
+		// 跨平台适配性
+
+		// 当多个系统请求同一纹理的不同格式时，若这些格式在shareable_formats范围
+		// 内，引擎可能复用底层纹理数据的内存块，仅通过格式转换而非全量复制实现共享。
+		// 这显著减少了内存占用，尤其对高分辨率纹理至关重要。
+
+		bool is_resolve_buffer = false;					// 该纹理是否作为多重采样抗锯齿（MSAA）的解析缓冲区
+		bool is_discardable = false;					// 是否可丢弃
 
 		bool operator==(const TextureFormat &b) const {
 			if (format != b.format) {
@@ -424,6 +441,7 @@ public:
 		}
 	};
 
+	// 纹理通道的映射规则
 	enum TextureSwizzle {
 		TEXTURE_SWIZZLE_IDENTITY,
 		TEXTURE_SWIZZLE_ZERO,
@@ -435,6 +453,7 @@ public:
 		TEXTURE_SWIZZLE_MAX
 	};
 
+	// 纹理切片的不同类型
 	enum TextureSliceType {
 		TEXTURE_SLICE_2D,
 		TEXTURE_SLICE_CUBEMAP,
@@ -446,12 +465,13 @@ public:
 	/*****************/
 	/**** SAMPLER ****/
 	/*****************/
-
+	// 采样器滤波模式
 	enum SamplerFilter {
 		SAMPLER_FILTER_NEAREST,
 		SAMPLER_FILTER_LINEAR,
 	};
 
+	// 采样器重复模式
 	enum SamplerRepeatMode {
 		SAMPLER_REPEAT_MODE_REPEAT,
 		SAMPLER_REPEAT_MODE_MIRRORED_REPEAT,
@@ -461,6 +481,7 @@ public:
 		SAMPLER_REPEAT_MODE_MAX
 	};
 
+	// 采样器边界颜色模式
 	enum SamplerBorderColor {
 		SAMPLER_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
 		SAMPLER_BORDER_COLOR_INT_TRANSPARENT_BLACK,
@@ -471,22 +492,25 @@ public:
 		SAMPLER_BORDER_COLOR_MAX
 	};
 
+	// 采样器状态
 	struct SamplerState {
-		SamplerFilter mag_filter = SAMPLER_FILTER_NEAREST;
-		SamplerFilter min_filter = SAMPLER_FILTER_NEAREST;
-		SamplerFilter mip_filter = SAMPLER_FILTER_NEAREST;
+		SamplerFilter mag_filter = SAMPLER_FILTER_NEAREST;		// 放大时候的滤波方式
+		SamplerFilter min_filter = SAMPLER_FILTER_NEAREST;		// 缩小时候的滤波方式
+		SamplerFilter mip_filter = SAMPLER_FILTER_NEAREST;		// mipmap的滤波方式
+		/* 三个方向的重复模式 */
 		SamplerRepeatMode repeat_u = SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
 		SamplerRepeatMode repeat_v = SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
 		SamplerRepeatMode repeat_w = SAMPLER_REPEAT_MODE_CLAMP_TO_EDGE;
-		float lod_bias = 0.0f;
-		bool use_anisotropy = false;
-		float anisotropy_max = 1.0f;
-		bool enable_compare = false;
-		CompareOperator compare_op = COMPARE_OP_ALWAYS;
-		float min_lod = 0.0f;
-		float max_lod = 1e20; // Something very large should do.
+		float lod_bias = 0.0f;	// lod偏移量
+		bool use_anisotropy = false;	// 启用各向异性过滤，改善倾斜视角下纹理的清晰度（如地面、墙面等非正视表面。
+		float anisotropy_max = 1.0f;	// 最大各向异性等级，设置各向异性过滤的最大采样次数，值越高纹理倾斜时的细节保留越好。
+										// 典型的范围是从1.0~16.0
+		bool enable_compare = false;	// 启动深度比较开关
+		CompareOperator compare_op = COMPARE_OP_ALWAYS;		// 比较操作的执行
+		float min_lod = 0.0f;			// 最小lod等级。
+		float max_lod = 1e20;			// 最大lod等级。一个很大的值表示没有限制。
 		SamplerBorderColor border_color = SAMPLER_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-		bool unnormalized_uvw = false;
+		bool unnormalized_uvw = false;	// 是否不进行归一化。如果是true表示不进行归一化，false（默认值）表示进行归一化。
 	};
 
 	/**********************/
@@ -498,6 +522,8 @@ public:
 		INDEX_BUFFER_FORMAT_UINT32,
 	};
 
+	// 顶点属性是逐个顶点，还是逐个实例
+	// 更新的频率不同
 	enum VertexFrequency {
 		VERTEX_FREQUENCY_VERTEX,
 		VERTEX_FREQUENCY_INSTANCE,
@@ -546,6 +572,7 @@ public:
 
 	static const uint32_t MAX_UNIFORM_SETS = 16;
 
+	// 着色器（Shader）所需的 Uniform 资源类型
 	enum UniformType {
 		UNIFORM_TYPE_SAMPLER, // For sampling only (sampler GLSL type).
 		UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, // For sampling only, but includes a texture, (samplerXX GLSL type), first a sampler then a texture.
@@ -563,7 +590,7 @@ public:
 	/******************/
 	/**** PIPELINE ****/
 	/******************/
-
+	// 可以理解成传入着色器的常量类型
 	enum PipelineSpecializationConstantType {
 		PIPELINE_SPECIALIZATION_CONSTANT_TYPE_BOOL,
 		PIPELINE_SPECIALIZATION_CONSTANT_TYPE_INT,
@@ -613,6 +640,7 @@ public:
 		POLYGON_FRONT_FACE_COUNTER_CLOCKWISE,
 	};
 
+	// 模板操作
 	enum StencilOperation {
 		STENCIL_OP_KEEP,
 		STENCIL_OP_ZERO,
@@ -625,6 +653,7 @@ public:
 		STENCIL_OP_MAX
 	};
 
+	// 逻辑操作
 	enum LogicOperation {
 		LOGIC_OP_CLEAR,
 		LOGIC_OP_AND,
@@ -645,6 +674,7 @@ public:
 		LOGIC_OP_MAX
 	};
 
+	// 融合因子
 	enum BlendFactor {
 		BLEND_FACTOR_ZERO,
 		BLEND_FACTOR_ONE,
@@ -668,6 +698,7 @@ public:
 		BLEND_FACTOR_MAX
 	};
 
+	// 融合操作
 	enum BlendOperation {
 		BLEND_OP_ADD,
 		BLEND_OP_SUBTRACT,
@@ -677,6 +708,7 @@ public:
 		BLEND_OP_MAX
 	};
 
+	// 管线光栅化状态
 	struct PipelineRasterizationState {
 		bool enable_depth_clamp = false;
 		bool discard_primitives = false;
@@ -691,6 +723,7 @@ public:
 		uint32_t patch_control_points = 1;
 	};
 
+	// 管线多重采样状态
 	struct PipelineMultisampleState {
 		TextureSamples sample_count = TEXTURE_SAMPLES_1;
 		bool enable_sample_shading = false;
@@ -700,6 +733,7 @@ public:
 		bool enable_alpha_to_one = false;
 	};
 
+	// 管线深度和模板状态
 	struct PipelineDepthStencilState {
 		bool enable_depth_test = false;
 		bool enable_depth_write = false;
@@ -723,6 +757,7 @@ public:
 		StencilOperationState back_op;
 	};
 
+	// 管线颜色混合状态
 	struct PipelineColorBlendState {
 		bool enable_logic_op = false;
 		LogicOperation logic_op = LOGIC_OP_CLEAR;
@@ -768,6 +803,7 @@ public:
 		Color blend_constant;
 	};
 
+	// 管线动态状态标记
 	enum PipelineDynamicStateFlags {
 		DYNAMIC_STATE_LINE_WIDTH = (1 << 0),
 		DYNAMIC_STATE_DEPTH_BIAS = (1 << 1),
@@ -784,6 +820,8 @@ public:
 
 	// This enum matches VkPhysicalDeviceType (except for `DEVICE_TYPE_MAX`).
 	// Unlike VkPhysicalDeviceType, DeviceType is exposed to the scripting API.
+	// 设备类型，和VkPhysicalDeviceType对应
+	// 这个类型会暴露给脚本API
 	enum DeviceType {
 		DEVICE_TYPE_OTHER,
 		DEVICE_TYPE_INTEGRATED_GPU,
@@ -795,21 +833,23 @@ public:
 
 	// Defined in an API-agnostic way.
 	// Some may not make sense for the underlying API; in that case, 0 is returned.
+	// 以与 API 无关的方式定义。某些情况下可能在底层 API 中没有实际意义，此时将返回 0。
+	// 设备资源类型定义
 	enum DriverResource {
-		DRIVER_RESOURCE_LOGICAL_DEVICE,
-		DRIVER_RESOURCE_PHYSICAL_DEVICE,
-		DRIVER_RESOURCE_TOPMOST_OBJECT,
-		DRIVER_RESOURCE_COMMAND_QUEUE,
-		DRIVER_RESOURCE_QUEUE_FAMILY,
-		DRIVER_RESOURCE_TEXTURE,
-		DRIVER_RESOURCE_TEXTURE_VIEW,
-		DRIVER_RESOURCE_TEXTURE_DATA_FORMAT,
-		DRIVER_RESOURCE_SAMPLER,
-		DRIVER_RESOURCE_UNIFORM_SET,
-		DRIVER_RESOURCE_BUFFER,
-		DRIVER_RESOURCE_COMPUTE_PIPELINE,
-		DRIVER_RESOURCE_RENDER_PIPELINE,
-#ifndef DISABLE_DEPRECATED
+		DRIVER_RESOURCE_LOGICAL_DEVICE,			// 逻辑设备
+		DRIVER_RESOURCE_PHYSICAL_DEVICE,		// 物理设备
+		DRIVER_RESOURCE_TOPMOST_OBJECT,			// 顶层物体
+		DRIVER_RESOURCE_COMMAND_QUEUE,			// 命令队列
+		DRIVER_RESOURCE_QUEUE_FAMILY,			// 队列族
+		DRIVER_RESOURCE_TEXTURE,				// 纹理
+		DRIVER_RESOURCE_TEXTURE_VIEW,			// 纹理视图
+		DRIVER_RESOURCE_TEXTURE_DATA_FORMAT,	// 纹理数据格式
+		DRIVER_RESOURCE_SAMPLER,				// 采样器
+		DRIVER_RESOURCE_UNIFORM_SET,			// 统一变量集
+		DRIVER_RESOURCE_BUFFER,					// 缓冲
+		DRIVER_RESOURCE_COMPUTE_PIPELINE,		// 计算管线
+		DRIVER_RESOURCE_RENDER_PIPELINE,		// 渲染管线
+#ifndef DISABLE_DEPRECATED	// 这下面就是把vulkan的资源对应到引擎中定义的资源
 		DRIVER_RESOURCE_VULKAN_DEVICE = DRIVER_RESOURCE_LOGICAL_DEVICE,
 		DRIVER_RESOURCE_VULKAN_PHYSICAL_DEVICE = DRIVER_RESOURCE_PHYSICAL_DEVICE,
 		DRIVER_RESOURCE_VULKAN_INSTANCE = DRIVER_RESOURCE_TOPMOST_OBJECT,
@@ -826,6 +866,7 @@ public:
 #endif
 	};
 
+	// 一些限制
 	enum Limit {
 		LIMIT_MAX_BOUND_UNIFORM_SETS,
 		LIMIT_MAX_FRAMEBUFFER_COLOR_ATTACHMENTS,
@@ -877,6 +918,7 @@ public:
 		LIMIT_METALFX_TEMPORAL_SCALER_MAX_SCALE,
 	};
 
+	// 功能，或者特性
 	enum Features {
 		SUPPORTS_MULTIVIEW,
 		SUPPORTS_FSR_HALF_FLOAT,
@@ -884,9 +926,12 @@ public:
 		SUPPORTS_METALFX_SPATIAL,
 		SUPPORTS_METALFX_TEMPORAL,
 		// If not supported, a fragment shader with only side effects (i.e., writes  to buffers, but doesn't output to attachments), may be optimized down to no-op by the GPU driver.
+		// 若不被支持，仅具有副作用（例如写入缓冲区但不输出到附件）的片段着色器可能会被 GPU 驱动优化为无操作（no-op）
 		SUPPORTS_FRAGMENT_SHADER_WITH_ONLY_SIDE_EFFECTS,
 	};
 
+	//  GPU 子组（Subgroup）操作的功能标志位
+	// 这些标志可能用于检测 GPU 硬件支持的功能，或在着色器中动态启用特定优化
 	enum SubgroupOperations {
 		SUBGROUP_BASIC_BIT = 1,
 		SUBGROUP_VOTE_BIT = 2,
@@ -946,6 +991,7 @@ protected:
 	static const char *SHADER_STAGE_NAMES[SHADER_STAGE_MAX];
 
 public:
+	// 着色器中要用到的统一变量（uniform）的封装
 	struct ShaderUniform {
 		UniformType type = UniformType::UNIFORM_TYPE_MAX;
 		bool writable = false;
@@ -977,12 +1023,14 @@ public:
 		}
 	};
 
+	// 着色器特化常量
 	struct ShaderSpecializationConstant : public PipelineSpecializationConstant {
 		BitField<ShaderStage> stages;
 
 		bool operator<(const ShaderSpecializationConstant &p_other) const { return constant_id < p_other.constant_id; }
 	};
 
+	// 着色器描述符
 	struct ShaderDescription {
 		uint64_t vertex_input_mask = 0;
 		uint32_t fragment_output_mask = 0;
@@ -996,6 +1044,7 @@ public:
 	};
 
 protected:
+	// 增加与反射相关的信息
 	struct ShaderReflection : public ShaderDescription {
 		BitField<ShaderStage> stages;
 		BitField<ShaderStage> push_constant_stages;

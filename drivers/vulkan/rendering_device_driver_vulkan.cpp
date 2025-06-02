@@ -1387,6 +1387,9 @@ Error RenderingDeviceDriverVulkan::initialize(uint32_t p_device_index, uint32_t 
 	// Which eventually run out of memory. In such case we should not be using linear allocated pools
 	// Bug introduced in driver 512.597.0 and fixed in 512.671.0.
 	// Confirmed by Qualcomm.
+	// Adreno 730 的某个驱动版本存在内存泄漏漏洞，导致 vkResetDescriptorPool 不可靠。
+	// 通过禁用线性分配池规避问题，直到用户更新驱动到修复版本。
+	// 开发者需在代码中针对特定驱动版本做兼容处理，平衡性能与稳定性。
 	if (linear_descriptor_pools_enabled) {
 		const uint32_t reset_descriptor_pool_broken_driver_begin = VK_MAKE_VERSION(512u, 597u, 0u);
 		const uint32_t reset_descriptor_pool_fixed_driver_begin = VK_MAKE_VERSION(512u, 671u, 0u);
@@ -3595,6 +3598,7 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_bytecode(const Vec
 					layout_binding.descriptorCount = set_ptr[j].length;
 					// Immutable samplers: here they get set in the layoutbinding, given that they will not be changed later.
 					int immutable_bind_index = -1;
+					// 定位采样器的索引
 					if (immutable_samplers_enabled && p_immutable_samplers.size() > 0) {
 						for (int k = 0; k < p_immutable_samplers.size(); k++) {
 							if (p_immutable_samplers[k].binding == layout_binding.binding) {
@@ -3646,6 +3650,7 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_bytecode(const Vec
 
 		read_offset += set_size;
 	}
+	// 整个目的是把引擎的数据结构转换成vulkan的数据结构，方便之后使用。或者是反过来？
 
 	ERR_FAIL_COND_V(read_offset + binary_data.specialization_constants_count * sizeof(ShaderBinary::SpecializationConstant) >= binsize, ShaderID());
 
@@ -3661,8 +3666,9 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_bytecode(const Vec
 
 		read_offset += sizeof(ShaderBinary::SpecializationConstant);
 	}
+	// 二进制数据里面每段的位置在哪都是确定的。
 
-	Vector<Vector<uint8_t>> stages_spirv;
+	Vector<Vector<uint8_t>> stages_spirv;	// 外面的是用来对应阶段的，里面的是真实数据。
 	stages_spirv.resize(binary_data.stage_count);
 	r_shader_desc.stages.resize(binary_data.stage_count);
 
@@ -3682,6 +3688,7 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_bytecode(const Vec
 		const uint8_t *src_smolv = nullptr;
 
 		if (zstd_size > 0) {
+			// 二进制数据经过压缩了，需要解压缩成smolv
 			// Decompress to smolv.
 			smolv.resize(smolv_size);
 			int dec_smolv_size = Compression::decompress(smolv.ptrw(), smolv.size(), binptr + read_offset, zstd_size, Compression::MODE_ZSTD);
@@ -3694,6 +3701,7 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_bytecode(const Vec
 		Vector<uint8_t> &spirv = stages_spirv.ptrw()[i];
 		uint32_t spirv_size = smolv::GetDecodedBufferSize(src_smolv, smolv_size);
 		spirv.resize(spirv_size);
+		// 将smolv解码到spriv
 		if (!smolv::Decode(src_smolv, smolv_size, spirv.ptrw(), spirv_size)) {
 			ERR_FAIL_V_MSG(ShaderID(), "Malformed smolv input uncompressing shader stage:" + String(SHADER_STAGE_NAMES[stage]));
 		}
@@ -3712,7 +3720,7 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_bytecode(const Vec
 	String error_text;
 
 	for (int i = 0; i < r_shader_desc.stages.size(); i++) {
-		VkShaderModuleCreateInfo shader_module_create_info = {};
+		VkShaderModuleCreateInfo shader_module_create_info = {};	// 着色模块创建信息
 		shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 		shader_module_create_info.codeSize = stages_spirv[i].size();
 		shader_module_create_info.pCode = (const uint32_t *)stages_spirv[i].ptr();
@@ -3739,6 +3747,7 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_bytecode(const Vec
 		DEV_ASSERT((uint32_t)vk_set_bindings.size() == binary_data.set_count);
 		for (uint32_t i = 0; i < binary_data.set_count; i++) {
 			// Empty ones are fine if they were not used according to spec (binding count will be 0).
+			// 可以为空，只要把binding count设置为0就好。
 			VkDescriptorSetLayoutCreateInfo layout_create_info = {};
 			layout_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 			layout_create_info.bindingCount = vk_set_bindings[i].size();
@@ -3778,6 +3787,7 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_bytecode(const Vec
 		}
 	}
 
+	// 如果出错了，把之前的都回滚了。
 	if (!error_text.is_empty()) {
 		// Clean up if failed.
 		for (uint32_t i = 0; i < shader_info.vk_stages_create_info.size(); i++) {
@@ -3800,20 +3810,25 @@ RDD::ShaderID RenderingDeviceDriverVulkan::shader_create_from_bytecode(const Vec
 void RenderingDeviceDriverVulkan::shader_free(ShaderID p_shader) {
 	ShaderInfo *shader_info = (ShaderInfo *)p_shader.id;
 
+	// DescriptorSetLayout销毁
 	for (uint32_t i = 0; i < shader_info->vk_descriptor_set_layouts.size(); i++) {
 		vkDestroyDescriptorSetLayout(vk_device, shader_info->vk_descriptor_set_layouts[i], VKC::get_allocation_callbacks(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT));
 	}
 
+	// PipelineLayout销毁
 	vkDestroyPipelineLayout(vk_device, shader_info->vk_pipeline_layout, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_PIPELINE_LAYOUT));
 
+	// 着色器模块销毁
 	shader_destroy_modules(p_shader);
 
+	// 释放bookkeeping信息
 	VersatileResource::free(resources_allocator, shader_info);
 }
 
 void RenderingDeviceDriverVulkan::shader_destroy_modules(ShaderID p_shader) {
 	ShaderInfo *si = (ShaderInfo *)p_shader.id;
 
+	// 销毁模块，并将其模块句柄置空。
 	for (uint32_t i = 0; i < si->vk_stages_create_info.size(); i++) {
 		if (si->vk_stages_create_info[i].module) {
 			vkDestroyShaderModule(vk_device, si->vk_stages_create_info[i].module,
@@ -3827,6 +3842,7 @@ void RenderingDeviceDriverVulkan::shader_destroy_modules(ShaderID p_shader) {
 /*********************/
 /**** UNIFORM SET ****/
 /*********************/
+// 描述符集池，有什么保留的必要吗？
 VkDescriptorPool RenderingDeviceDriverVulkan::_descriptor_set_pool_find_or_create(const DescriptorSetPoolKey &p_key, DescriptorSetPools::Iterator *r_pool_sets_it, int p_linear_pool_index) {
 	bool linear_pool = p_linear_pool_index >= 0;
 	DescriptorSetPools::Iterator pool_sets_it = linear_pool ? linear_descriptor_set_pools[p_linear_pool_index].find(p_key) : descriptor_set_pools.find(p_key);
@@ -3921,7 +3937,7 @@ VkDescriptorPool RenderingDeviceDriverVulkan::_descriptor_set_pool_find_or_creat
 		descriptor_set_pool_create_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT; // Can't think how somebody may NOT need this flag.
 	}
 	descriptor_set_pool_create_info.maxSets = max_descriptor_sets_per_pool;
-	descriptor_set_pool_create_info.poolSizeCount = vk_sizes_count;
+	descriptor_set_pool_create_info.poolSizeCount = vk_sizes_count;		// 池的大小
 	descriptor_set_pool_create_info.pPoolSizes = vk_sizes;
 
 	VkDescriptorPool vk_pool = VK_NULL_HANDLE;
@@ -3945,6 +3961,7 @@ VkDescriptorPool RenderingDeviceDriverVulkan::_descriptor_set_pool_find_or_creat
 	return vk_pool;
 }
 
+// 释放某个描述符集
 void RenderingDeviceDriverVulkan::_descriptor_set_pool_unreference(DescriptorSetPools::Iterator p_pool_sets_it, VkDescriptorPool p_vk_descriptor_pool, int p_linear_pool_index) {
 	HashMap<VkDescriptorPool, uint32_t>::Iterator pool_rcs_it = p_pool_sets_it->value.find(p_vk_descriptor_pool);
 	pool_rcs_it->value--;
@@ -3961,12 +3978,16 @@ void RenderingDeviceDriverVulkan::_descriptor_set_pool_unreference(DescriptorSet
 	}
 }
 
+// 创建uniform集
 RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<BoundUniform> p_uniforms, ShaderID p_shader, uint32_t p_set_index, int p_linear_pool_index) {
+	// 创建的过程需要描述符集
 	if (!linear_descriptor_pools_enabled) {
 		p_linear_pool_index = -1;
 	}
 	DescriptorSetPoolKey pool_key;
 	// Immutable samplers will be skipped so we need to track the number of vk_writes used.
+	// 不可变的采样器会被跳过，所以我们需要追踪使用的vk_writes数量
+	// VkWriteDescriptorSet的作用是定义如何将具体的资源（如缓冲区、图像或采样器）绑定到描述符集（Descriptor Set）的特定绑定点，以便着色器在渲染过程中能够访问这些资源
 	VkWriteDescriptorSet *vk_writes = ALLOCA_ARRAY(VkWriteDescriptorSet, p_uniforms.size());
 	uint32_t writes_amount = 0;
 	for (uint32_t i = 0; i < p_uniforms.size(); i++) {
@@ -3996,7 +4017,7 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 				vk_writes[writes_amount].pImageInfo = vk_img_infos;
 			} break;
 			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
-				num_descriptors = uniform.ids.size() / 2;
+				num_descriptors = uniform.ids.size() / 2;	// 这是为啥？
 				VkDescriptorImageInfo *vk_img_infos = ALLOCA_ARRAY(VkDescriptorImageInfo, num_descriptors);
 
 				for (uint32_t j = 0; j < num_descriptors; j++) {
@@ -4073,6 +4094,7 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 				VkDescriptorImageInfo *vk_img_infos = ALLOCA_ARRAY(VkDescriptorImageInfo, num_descriptors);
 				VkDescriptorBufferInfo *vk_buf_infos = ALLOCA_ARRAY(VkDescriptorBufferInfo, num_descriptors);
 				VkBufferView *vk_buf_views = ALLOCA_ARRAY(VkBufferView, num_descriptors);
+				// 有buffer的view，那么image的view呢？
 
 				for (uint32_t j = 0; j < num_descriptors; j++) {
 					vk_img_infos[j] = {};
@@ -4095,6 +4117,7 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 				CRASH_NOW_MSG("Unimplemented!"); // TODO.
 			} break;
 			case UNIFORM_TYPE_UNIFORM_BUFFER: {
+				// 把内存地址当成id？
 				const BufferInfo *buf_info = (const BufferInfo *)uniform.ids[0].id;
 				VkDescriptorBufferInfo *vk_buf_info = ALLOCA_SINGLE(VkDescriptorBufferInfo);
 				*vk_buf_info = {};
@@ -4115,6 +4138,8 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 				vk_writes[writes_amount].pBufferInfo = vk_buf_info;
 			} break;
 			case UNIFORM_TYPE_INPUT_ATTACHMENT: {
+				// 输入附件：
+				// 允许着色器在子渲染过程（Subpass）中访问帧缓冲（Framebuffer）中的附件数据（如颜色、深度或模板附件
 				num_descriptors = uniform.ids.size();
 				VkDescriptorImageInfo *vk_img_infos = ALLOCA_ARRAY(VkDescriptorImageInfo, num_descriptors);
 
@@ -4208,6 +4233,7 @@ void RenderingDeviceDriverVulkan::linear_uniform_set_pools_reset(int p_linear_po
 		DescriptorSetPools &pools_to_reset = linear_descriptor_set_pools[p_linear_pool_index];
 		DescriptorSetPools::Iterator curr_pool = pools_to_reset.begin();
 
+		// 它还是一个pools的数组，然后数组里面还得遍历。
 		while (curr_pool != pools_to_reset.end()) {
 			HashMap<VkDescriptorPool, uint32_t>::Iterator curr_pair = curr_pool->value.begin();
 			while (curr_pair != curr_pool->value.end()) {
@@ -4230,7 +4256,74 @@ void RenderingDeviceDriverVulkan::command_uniform_set_prepare_for_use(CommandBuf
 /******************/
 
 static_assert(ARRAYS_COMPATIBLE_FIELDWISE(RDD::BufferCopyRegion, VkBufferCopy));
+/*
+`VkImageSubresourceRange` 和 `VkImageSubresourceLayers` 是 Vulkan 中用于描述图像子资源的两个关键结构体，它们的区别主要体现在 **用途** 和 **设计目的** 上：
 
+---
+
+### **1. 核心区别**
+| **特性**                | `VkImageSubresourceRange`                     | `VkImageSubresourceLayers`               |
+|-------------------------|-----------------------------------------------|-------------------------------------------|
+| **描述范围**            | **跨多个 Mip 层级**和多个数组层（Layer）      | **单个 Mip 层级**下的多个数组层           |
+| **主要用途**            | 用于需要范围的操作（如屏障、视图、布局转换）  | 用于需要精确层级操作（如图像复制、Blit）  |
+| **参数设计**            | 包含 `baseMipLevel` 和 `levelCount`           | 固定单个 `mipLevel`                       |
+| **连续性要求**          | 通常要求层级连续                              | 层（Layer）可以是非连续的（取决于操作）   |
+
+---
+
+### **2. 设计原因**
+#### **为什么需要两个结构体？**
+- **操作语义不同**：
+  - **Range**：用于需要 **批量处理多个 Mip 层级** 的场景（例如设置内存屏障时，可能同时影响多个 Mip 层）。
+  - **Layers**：用于 **单层多数组层** 的操作（例如复制图像时，源和目标区域的 Mip 层级必须明确固定，但可能涉及多个数组层）。
+
+- **参数灵活性**：
+  - `VkImageSubresourceRange` 的 `levelCount` 允许指定连续的 Mip 层级范围，适合视图创建或一次性处理多级。
+  - `VkImageSubresourceLayers` 的 `mipLevel` 固定为单一级别，确保操作精确性（如 `vkCmdCopyImage` 需要源和目标的 Mip 层级一一对应）。
+
+---
+
+### **3. 典型使用场景**
+#### **`VkImageSubresourceRange`**
+```cpp
+// 图像内存屏障：设置多个 Mip 层级和数组层的布局转换
+VkImageMemoryBarrier barrier = {
+	.subresourceRange = {
+		.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+		.baseMipLevel   = 0,       // 从第 0 级 Mip 开始
+		.levelCount     = 4,       // 共处理 4 个 Mip 层级
+		.baseArrayLayer = 0,       // 从第 0 个数组层开始
+		.layerCount     = 1        // 仅处理 1 个数组层
+	}
+};
+```
+- **用途**：图像视图创建、内存屏障、布局转换。
+
+#### **`VkImageSubresourceLayers`**
+```cpp
+// 图像复制操作：源和目标的 Mip 层级固定为 0
+VkImageCopy region = {
+	.srcSubresource = {
+		.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+		.mipLevel       = 0,       // 仅操作 Mip 层级 0
+		.baseArrayLayer  = 0,       // 从第 0 个数组层开始
+		.layerCount      = 2        // 复制 2 个数组层
+	},
+	.dstSubresource = { ... }      // 目标同理
+};
+```
+- **用途**：`vkCmdCopyImage`、`vkCmdBlitImage`、区域操作。
+
+---
+
+### **4. 总结**
+- **`Range` 是“纵向”范围**：跨 Mip 层级，适合批量操作。
+- **`Layers` 是“横向”范围**：单 Mip 层级下的多数组层，适合精确操作。
+- **分离设计** 避免了参数冗余，使 API 更清晰且符合操作的实际需求。
+
+*/
+
+// Range需要跨多个mipmap
 static void _texture_subresource_range_to_vk(const RDD::TextureSubresourceRange &p_subresources, VkImageSubresourceRange *r_vk_subreources) {
 	*r_vk_subreources = {};
 	r_vk_subreources->aspectMask = (VkImageAspectFlags)p_subresources.aspect;
@@ -4239,7 +4332,7 @@ static void _texture_subresource_range_to_vk(const RDD::TextureSubresourceRange 
 	r_vk_subreources->baseArrayLayer = p_subresources.base_layer;
 	r_vk_subreources->layerCount = p_subresources.layer_count;
 }
-
+// 这是单个mipmap里的多个layer
 static void _texture_subresource_layers_to_vk(const RDD::TextureSubresourceLayers &p_subresources, VkImageSubresourceLayers *r_vk_subreources) {
 	*r_vk_subreources = {};
 	r_vk_subreources->aspectMask = (VkImageAspectFlags)p_subresources.aspect;
@@ -4248,6 +4341,82 @@ static void _texture_subresource_layers_to_vk(const RDD::TextureSubresourceLayer
 	r_vk_subreources->layerCount = p_subresources.layer_count;
 }
 
+/*
+在Vulkan API中，`VkBufferImageCopy`和`VkImageCopy`是两个用于不同拷贝操作的结构体，主要区别如下：
+
+### **1. 用途与关联命令**
+- **VkBufferImageCopy**
+  用于 **缓冲区（Buffer）与图像（Image）之间的数据拷贝**，与以下命令关联：
+  - `vkCmdCopyBufferToImage`（从Buffer复制到Image）
+  - `vkCmdCopyImageToBuffer`（从Image复制到Buffer）
+
+- **VkImageCopy**
+  用于 **图像与图像之间的数据拷贝**，与以下命令关联：
+  - `vkCmdCopyImage`（从源Image复制到目标Image）
+
+---
+
+### **2. 数据结构差异**
+#### **VkBufferImageCopy**
+包含 **缓冲区布局** 和 **图像子资源信息**：
+```C
+typedef struct VkBufferImageCopy {
+	VkDeviceSize         bufferOffset;       // 缓冲区的起始偏移
+	uint32_t             bufferRowLength;    // 缓冲区中每行的像素数（处理行对齐）
+	uint32_t             bufferImageHeight;  // 缓冲区中图像的高度（处理内存填充）
+	VkImageSubresourceLayers imageSubresource; // 图像的子资源（层面、mip等级等）
+	VkOffset3D           imageOffset;        // 图像中拷贝区域的起始偏移
+	VkExtent3D           imageExtent;        // 拷贝的区域大小
+} VkBufferImageCopy;
+```
+**关键字段说明**：
+- `bufferRowLength`和`bufferImageHeight`：定义缓冲区中数据的逻辑布局（可能因内存对齐与实际图像不同）。
+- `imageSubresource`：指定图像的mip层级、数组层等。
+
+---
+
+#### **VkImageCopy**
+包含 **源与目标图像的子资源及区域信息**：
+```C
+typedef struct VkImageCopy {
+	VkImageSubresourceLayers srcSubresource; // 源图像的子资源
+	VkOffset3D               srcOffset;      // 源区域的起始偏移
+	VkImageSubresourceLayers dstSubresource; // 目标图像的子资源
+	VkOffset3D               dstOffset;      // 目标区域的起始偏移
+	VkExtent3D               extent;         // 拷贝的区域大小
+} VkImageCopy;
+```
+**关键字段说明**：
+- 需要为源和目标图像分别指定子资源（`srcSubresource`、`dstSubresource`）和偏移（`srcOffset`、`dstOffset`）。
+- `extent`：统一指定拷贝区域的大小（源和目标区域的尺寸必须一致）。
+
+---
+
+### **3. 核心区别总结**
+| 特性                | VkBufferImageCopy                     | VkImageCopy                          |
+|---------------------|---------------------------------------|--------------------------------------|
+| **用途**            | Buffer ↔ Image 的拷贝                 | Image ↔ Image 的拷贝                 |
+| **数据布局处理**    | 处理缓冲区的行对齐、填充（如`bufferRowLength`） | 无需处理缓冲区布局，直接操作图像数据 |
+| **子资源指定**      | 仅目标图像的子资源                    | 源和目标图像的子资源均需指定        |
+| **关联命令**        | `vkCmdCopyBufferToImage`/`vkCmdCopyImageToBuffer` | `vkCmdCopyImage` |
+
+---
+
+### **4. 示例场景**
+- **使用`VkBufferImageCopy`**：
+  从存储像素数据的Buffer拷贝到纹理Image时，需指定Buffer中数据的行长度（如包含填充字节），并定义目标Image的mip层级和区域。
+
+- **使用`VkImageCopy`**：
+  在两个纹理Image之间复制数据（如生成Mipmap链），需指定源和目标的mip层级、偏移及区域大小。
+
+---
+
+### **总结**
+- **`VkBufferImageCopy`** 是跨内存类型（Buffer-Image）拷贝的桥梁，处理非连续内存布局。
+- **`VkImageCopy`** 是图像间的直接拷贝，关注子资源和区域的精确对应。
+根据拷贝方向选择正确的结构体和命令，确保数据正确传输。
+
+*/
 static void _buffer_texture_copy_region_to_vk(const RDD::BufferTextureCopyRegion &p_copy_region, VkBufferImageCopy *r_vk_copy_region) {
 	*r_vk_copy_region = {};
 	r_vk_copy_region->bufferOffset = p_copy_region.buffer_offset;
@@ -4290,7 +4459,7 @@ void RenderingDeviceDriverVulkan::command_copy_texture(CommandBufferID p_cmd_buf
 	VkImageCopy *vk_copy_regions = ALLOCA_ARRAY(VkImageCopy, p_regions.size());
 	for (uint32_t i = 0; i < p_regions.size(); i++) {
 		_texture_copy_region_to_vk(p_regions[i], &vk_copy_regions[i]);
-	}
+	}	// texture到texture的copy
 
 	const TextureInfo *src_tex_info = (const TextureInfo *)p_src_texture.id;
 	const TextureInfo *dst_tex_info = (const TextureInfo *)p_dst_texture.id;
@@ -4304,10 +4473,27 @@ void RenderingDeviceDriverVulkan::command_copy_texture(CommandBufferID p_cmd_buf
 	}
 #endif
 
-	vkCmdCopyImage((VkCommandBuffer)p_cmd_buffer.id, src_tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_src_texture_layout], dst_tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_dst_texture_layout], p_regions.size(), vk_copy_regions);
+	vkCmdCopyImage((VkCommandBuffer)p_cmd_buffer.id,
+		src_tex_info->vk_view_create_info.image,
+		RD_TO_VK_LAYOUT[p_src_texture_layout],
+		dst_tex_info->vk_view_create_info.image,
+		RD_TO_VK_LAYOUT[p_dst_texture_layout],
+		p_regions.size(),
+		vk_copy_regions);
 }
 
-void RenderingDeviceDriverVulkan::command_resolve_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, uint32_t p_src_layer, uint32_t p_src_mipmap, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, uint32_t p_dst_layer, uint32_t p_dst_mipmap) {
+/*
+这个函数的作用是执行Vulkan中的多采样解析操作（Multisample Resolve），将多重采样（MSAA）的源纹理数据解析（降采样）到目标单采样纹理中。函数名中的"resolve"正是指这一过程。
+*/
+void RenderingDeviceDriverVulkan::command_resolve_texture(CommandBufferID p_cmd_buffer,
+	TextureID p_src_texture,
+	TextureLayout p_src_texture_layout,
+	uint32_t p_src_layer,
+	uint32_t p_src_mipmap,
+	TextureID p_dst_texture,
+	TextureLayout p_dst_texture_layout,
+	uint32_t p_dst_layer,
+	uint32_t p_dst_mipmap) {
 	const TextureInfo *src_tex_info = (const TextureInfo *)p_src_texture.id;
 	const TextureInfo *dst_tex_info = (const TextureInfo *)p_dst_texture.id;
 
@@ -4333,7 +4519,13 @@ void RenderingDeviceDriverVulkan::command_resolve_texture(CommandBufferID p_cmd_
 	}
 #endif
 
-	vkCmdResolveImage((VkCommandBuffer)p_cmd_buffer.id, src_tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_src_texture_layout], dst_tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_dst_texture_layout], 1, &vk_resolve);
+	vkCmdResolveImage((VkCommandBuffer)p_cmd_buffer.id,
+		src_tex_info->vk_view_create_info.image,
+		RD_TO_VK_LAYOUT[p_src_texture_layout],
+		dst_tex_info->vk_view_create_info.image,
+		RD_TO_VK_LAYOUT[p_dst_texture_layout],
+		1,
+		&vk_resolve);
 }
 
 void RenderingDeviceDriverVulkan::command_clear_color_texture(CommandBufferID p_cmd_buffer, TextureID p_texture, TextureLayout p_texture_layout, const Color &p_color, const TextureSubresourceRange &p_subresources) {
@@ -4349,7 +4541,12 @@ void RenderingDeviceDriverVulkan::command_clear_color_texture(CommandBufferID p_
 		ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT p_texture must not be used in command_clear_color_texture. Use a clear store action pass instead.");
 	}
 #endif
-	vkCmdClearColorImage((VkCommandBuffer)p_cmd_buffer.id, tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_texture_layout], &vk_color, 1, &vk_subresources);
+	vkCmdClearColorImage((VkCommandBuffer)p_cmd_buffer.id,
+		tex_info->vk_view_create_info.image,
+		RD_TO_VK_LAYOUT[p_texture_layout],
+		&vk_color,
+		1,
+		&vk_subresources);
 }
 
 void RenderingDeviceDriverVulkan::command_copy_buffer_to_texture(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, VectorView<BufferTextureCopyRegion> p_regions) {
@@ -4365,7 +4562,12 @@ void RenderingDeviceDriverVulkan::command_copy_buffer_to_texture(CommandBufferID
 		ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT p_dst_texture must not be used in command_copy_buffer_to_texture.");
 	}
 #endif
-	vkCmdCopyBufferToImage((VkCommandBuffer)p_cmd_buffer.id, buf_info->vk_buffer, tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_dst_texture_layout], p_regions.size(), vk_copy_regions);
+	vkCmdCopyBufferToImage((VkCommandBuffer)p_cmd_buffer.id,
+		buf_info->vk_buffer,
+		tex_info->vk_view_create_info.image,
+		RD_TO_VK_LAYOUT[p_dst_texture_layout],
+		p_regions.size(),
+		vk_copy_regions);
 }
 
 void RenderingDeviceDriverVulkan::command_copy_texture_to_buffer(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, BufferID p_dst_buffer, VectorView<BufferTextureCopyRegion> p_regions) {
@@ -4381,7 +4583,12 @@ void RenderingDeviceDriverVulkan::command_copy_texture_to_buffer(CommandBufferID
 		ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT p_src_texture must not be used in command_copy_texture_to_buffer.");
 	}
 #endif
-	vkCmdCopyImageToBuffer((VkCommandBuffer)p_cmd_buffer.id, tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_src_texture_layout], buf_info->vk_buffer, p_regions.size(), vk_copy_regions);
+	vkCmdCopyImageToBuffer((VkCommandBuffer)p_cmd_buffer.id,
+		tex_info->vk_view_create_info.image,
+		RD_TO_VK_LAYOUT[p_src_texture_layout],
+		buf_info->vk_buffer,
+		p_regions.size(),
+		vk_copy_regions);
 }
 
 /******************/
@@ -4393,10 +4600,14 @@ void RenderingDeviceDriverVulkan::pipeline_free(PipelineID p_pipeline) {
 }
 
 // ----- BINDING -----
-
+// 绑定推送常量，它与着色器相关。
 void RenderingDeviceDriverVulkan::command_bind_push_constants(CommandBufferID p_cmd_buffer, ShaderID p_shader, uint32_t p_dst_first_index, VectorView<uint32_t> p_data) {
 	const ShaderInfo *shader_info = (const ShaderInfo *)p_shader.id;
-	vkCmdPushConstants((VkCommandBuffer)p_cmd_buffer.id, shader_info->vk_pipeline_layout, shader_info->vk_push_constant_stages, p_dst_first_index * sizeof(uint32_t), p_data.size() * sizeof(uint32_t), p_data.ptr());
+	vkCmdPushConstants((VkCommandBuffer)p_cmd_buffer.id,
+		shader_info->vk_pipeline_layout,
+		shader_info->vk_push_constant_stages,
+		p_dst_first_index * sizeof(uint32_t),
+		p_data.size() * sizeof(uint32_t), p_data.ptr());
 }
 
 // ----- CACHE -----
@@ -4444,6 +4655,7 @@ bool RenderingDeviceDriverVulkan::pipeline_cache_create(const Vector<uint8_t> &p
 	}
 
 	// Create.
+	// 通过缓存去创建管线，速度最多可以提高10倍。
 	{
 		VkPipelineCacheCreateInfo cache_info = {};
 		cache_info.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
@@ -4519,6 +4731,7 @@ static_assert(ENUM_MEMBERS_EQUAL(RDD::ATTACHMENT_STORE_OP_DONT_CARE, VK_ATTACHME
 // - VkSubpassDescription2::pPreserveAttachments and RDD::Subpass::preserve_attachments.
 // - VkRenderPassCreateInfo2KHR::pCorrelatedViewMasks and p_view_correlation_mask.
 
+// 数据结构的转换
 static void _attachment_reference_to_vk(const RDD::AttachmentReference &p_attachment_reference, VkAttachmentReference2KHR *r_vk_attachment_reference) {
 	*r_vk_attachment_reference = {};
 	r_vk_attachment_reference->sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2_KHR;
@@ -4527,6 +4740,7 @@ static void _attachment_reference_to_vk(const RDD::AttachmentReference &p_attach
 	r_vk_attachment_reference->aspectMask = (VkImageAspectFlags)p_attachment_reference.aspect;
 }
 
+// 创建通道
 RDD::RenderPassID RenderingDeviceDriverVulkan::render_pass_create(VectorView<Attachment> p_attachments, VectorView<Subpass> p_subpasses, VectorView<SubpassDependency> p_subpass_dependencies, uint32_t p_view_count) {
 	// These are only used if we use multiview but we need to define them in scope.
 	const uint32_t view_mask = (1 << p_view_count) - 1;
@@ -4665,6 +4879,7 @@ void RenderingDeviceDriverVulkan::command_begin_render_pass(CommandBufferID p_cm
 	Framebuffer *framebuffer = (Framebuffer *)(p_framebuffer.id);
 	if (framebuffer->swap_chain_acquired) {
 		// Insert a barrier to wait for the acquisition of the framebuffer before the render pass begins.
+		// 如果需要交换链，需要设置一个图像barrier
 		VkImageMemoryBarrier image_barrier = {};
 		image_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		image_barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -4687,7 +4902,7 @@ void RenderingDeviceDriverVulkan::command_begin_render_pass(CommandBufferID p_cm
 	render_pass_begin.renderArea.extent.width = p_rect.size.x;
 	render_pass_begin.renderArea.extent.height = p_rect.size.y;
 
-	render_pass_begin.clearValueCount = p_clear_values.size();
+	render_pass_begin.clearValueCount = p_clear_values.size();	// 不理解，清理值为啥还需要数组？
 	render_pass_begin.pClearValues = (const VkClearValue *)p_clear_values.ptr();
 
 	VkSubpassContents vk_subpass_contents = p_cmd_buffer_type == COMMAND_BUFFER_TYPE_PRIMARY ? VK_SUBPASS_CONTENTS_INLINE : VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS;
@@ -4729,6 +4944,7 @@ void RenderingDeviceDriverVulkan::command_render_set_scissor(CommandBufferID p_c
 	vkCmdSetScissor((VkCommandBuffer)p_cmd_buffer.id, 0, p_scissors.size(), (VkRect2D *)p_scissors.ptr());
 }
 
+// 清除attachment上的某块区域
 void RenderingDeviceDriverVulkan::command_render_clear_attachments(CommandBufferID p_cmd_buffer, VectorView<AttachmentClear> p_attachment_clears, VectorView<Rect2i> p_rects) {
 	VkClearAttachment *vk_clears = ALLOCA_ARRAY(VkClearAttachment, p_attachment_clears.size());
 	for (uint32_t i = 0; i < p_attachment_clears.size(); i++) {
@@ -4752,10 +4968,15 @@ void RenderingDeviceDriverVulkan::command_render_clear_attachments(CommandBuffer
 	vkCmdClearAttachments((VkCommandBuffer)p_cmd_buffer.id, p_attachment_clears.size(), vk_clears, p_rects.size(), vk_rects);
 }
 
+// 将管线绑定到命令队列的指定绑定点
+// 包括这个vkCmdBindPipeline也是命令缓冲的一个命令而已。
 void RenderingDeviceDriverVulkan::command_bind_render_pipeline(CommandBufferID p_cmd_buffer, PipelineID p_pipeline) {
 	vkCmdBindPipeline((VkCommandBuffer)p_cmd_buffer.id, VK_PIPELINE_BIND_POINT_GRAPHICS, (VkPipeline)p_pipeline.id);
 }
 
+// 绑定描述符集需要确定到绑定点，也就是说绑定到那条管线上。
+// 这个绑定可以在绑定管线之前执行。
+// 因为只是向命令缓冲录入状态绑定命令的两条不同指令，它们的录入顺序本身并不影响合法性
 void RenderingDeviceDriverVulkan::command_bind_render_uniform_set(CommandBufferID p_cmd_buffer, UniformSetID p_uniform_set, ShaderID p_shader, uint32_t p_set_index) {
 	const ShaderInfo *shader_info = (const ShaderInfo *)p_shader.id;
 	const UniformSetInfo *usi = (const UniformSetInfo *)p_uniform_set.id;
@@ -4779,19 +5000,24 @@ void RenderingDeviceDriverVulkan::command_bind_render_uniform_sets(CommandBuffer
 	vkCmdBindDescriptorSets((VkCommandBuffer)p_cmd_buffer.id, VK_PIPELINE_BIND_POINT_GRAPHICS, shader_info->vk_pipeline_layout, p_first_set_index, p_set_count, &sets[0], 0, nullptr);
 }
 
+// 录制一个绘制指令。绘制的是顶点数，实例数，从哪个顶点开始，从哪个实例开始。
 void RenderingDeviceDriverVulkan::command_render_draw(CommandBufferID p_cmd_buffer, uint32_t p_vertex_count, uint32_t p_instance_count, uint32_t p_base_vertex, uint32_t p_first_instance) {
 	vkCmdDraw((VkCommandBuffer)p_cmd_buffer.id, p_vertex_count, p_instance_count, p_base_vertex, p_first_instance);
 }
 
+// 索引绘制的指令。
+// CPU驱动的绘制。
 void RenderingDeviceDriverVulkan::command_render_draw_indexed(CommandBufferID p_cmd_buffer, uint32_t p_index_count, uint32_t p_instance_count, uint32_t p_first_index, int32_t p_vertex_offset, uint32_t p_first_instance) {
 	vkCmdDrawIndexed((VkCommandBuffer)p_cmd_buffer.id, p_index_count, p_instance_count, p_first_index, p_vertex_offset, p_first_instance);
 }
 
+// GPU驱动的绘制。
 void RenderingDeviceDriverVulkan::command_render_draw_indexed_indirect(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, uint32_t p_draw_count, uint32_t p_stride) {
 	const BufferInfo *buf_info = (const BufferInfo *)p_indirect_buffer.id;
 	vkCmdDrawIndexedIndirect((VkCommandBuffer)p_cmd_buffer.id, buf_info->vk_buffer, p_offset, p_draw_count, p_stride);
 }
 
+// GPU驱动的绘制
 void RenderingDeviceDriverVulkan::command_render_draw_indexed_indirect_count(CommandBufferID p_cmd_buffer, BufferID p_indirect_buffer, uint64_t p_offset, BufferID p_count_buffer, uint64_t p_count_buffer_offset, uint32_t p_max_draw_count, uint32_t p_stride) {
 	const BufferInfo *indirect_buf_info = (const BufferInfo *)p_indirect_buffer.id;
 	const BufferInfo *count_buf_info = (const BufferInfo *)p_count_buffer.id;
@@ -4809,6 +5035,7 @@ void RenderingDeviceDriverVulkan::command_render_draw_indirect_count(CommandBuff
 	vkCmdDrawIndirectCount((VkCommandBuffer)p_cmd_buffer.id, indirect_buf_info->vk_buffer, p_offset, count_buf_info->vk_buffer, p_count_buffer_offset, p_max_draw_count, p_stride);
 }
 
+// 绑定到管线的顶点输入绑定槽（binding slots）上
 void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID *p_buffers, const uint64_t *p_offsets) {
 	VkBuffer *vk_buffers = ALLOCA_ARRAY(VkBuffer, p_binding_count);
 	for (uint32_t i = 0; i < p_binding_count; i++) {
@@ -4822,6 +5049,7 @@ void RenderingDeviceDriverVulkan::command_render_bind_index_buffer(CommandBuffer
 	vkCmdBindIndexBuffer((VkCommandBuffer)p_cmd_buffer.id, buf_info->vk_buffer, p_offset, p_format == INDEX_BUFFER_FORMAT_UINT16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
 }
 
+// 在命令缓冲中设置后续绘制操作所使用的全局“混合常量色”（blend constants），即 RGBA 四个分量的值。
 void RenderingDeviceDriverVulkan::command_render_set_blend_constants(CommandBufferID p_cmd_buffer, const Color &p_constants) {
 	vkCmdSetBlendConstants((VkCommandBuffer)p_cmd_buffer.id, p_constants.components);
 }
@@ -4907,25 +5135,40 @@ static_assert(ENUM_MEMBERS_EQUAL(RDD::BLEND_OP_REVERSE_SUBTRACT, VK_BLEND_OP_REV
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BLEND_OP_MINIMUM, VK_BLEND_OP_MIN));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BLEND_OP_MAXIMUM, VK_BLEND_OP_MAX));
 
+// 创建管线是非常重要的一个方法，因为执行绘制就是依靠管线的。
+// 输入参数：
+//	着色器
+//	顶点信息
+//	渲染图元类型
+//	光栅化状态
+//	多重采样状态
+//	深度模板状态
+//	颜色混合状态
+//	动态状态标记
+//	渲染通道
+//	渲染子通道
+//	常量
 RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 		ShaderID p_shader,
 		VertexFormatID p_vertex_format,
-		RenderPrimitive p_render_primitive,
-		PipelineRasterizationState p_rasterization_state,
-		PipelineMultisampleState p_multisample_state,
-		PipelineDepthStencilState p_depth_stencil_state,
-		PipelineColorBlendState p_blend_state,
-		VectorView<int32_t> p_color_attachments,
+		RenderPrimitive p_render_primitive,		// 从这个入参可以看出，图元类型是一个区分管线的标识
+		PipelineRasterizationState p_rasterization_state,		// 这个是我没想到的，是否wireframe这些都是区分的标识。
+		PipelineMultisampleState p_multisample_state,		// 这个也是没想到的
+		PipelineDepthStencilState p_depth_stencil_state,	// 这个也没想到
+		PipelineColorBlendState p_blend_state,		// 没想到
+		VectorView<int32_t> p_color_attachments,	// 没想到
 		BitField<PipelineDynamicStateFlags> p_dynamic_state,
-		RenderPassID p_render_pass,
-		uint32_t p_render_subpass,
-		VectorView<PipelineSpecializationConstant> p_specialization_constants) {
+		RenderPassID p_render_pass,	// 这个倒是在意料之中
+		uint32_t p_render_subpass,	// 这个也是意料之中
+		VectorView<PipelineSpecializationConstant> p_specialization_constants) {		// 常量这个没想到
 	// Vertex.
+	// 顶点输入状态创建信息
 	const VkPipelineVertexInputStateCreateInfo *vertex_input_state_create_info = nullptr;
 	if (p_vertex_format.id) {
 		const VertexFormatInfo *vf_info = (const VertexFormatInfo *)p_vertex_format.id;
 		vertex_input_state_create_info = &vf_info->vk_create_info;
 	} else {
+		// 一个空的顶点状态
 		VkPipelineVertexInputStateCreateInfo *null_vertex_input_state = ALLOCA_SINGLE(VkPipelineVertexInputStateCreateInfo);
 		*null_vertex_input_state = {};
 		null_vertex_input_state->sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -4933,42 +5176,49 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	}
 
 	// Input assembly.
+	// 输入装配状态创建信息
+	// 为什么是创建信息，难道不能直接创建状态信息吗？
+	// 最关键的感觉就是一致性。
 	VkPipelineInputAssemblyStateCreateInfo input_assembly_create_info = {};
 	input_assembly_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 	input_assembly_create_info.topology = RD_TO_VK_PRIMITIVE[p_render_primitive];
 	input_assembly_create_info.primitiveRestartEnable = (p_render_primitive == RENDER_PRIMITIVE_TRIANGLE_STRIPS_WITH_RESTART_INDEX);
 
 	// Tessellation.
+	// 细分状态创建
 	VkPipelineTessellationStateCreateInfo tessellation_create_info = {};
 	tessellation_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
 	ERR_FAIL_COND_V(physical_device_properties.limits.maxTessellationPatchSize > 0 && (p_rasterization_state.patch_control_points < 1 || p_rasterization_state.patch_control_points > physical_device_properties.limits.maxTessellationPatchSize), PipelineID());
-	tessellation_create_info.patchControlPoints = p_rasterization_state.patch_control_points;
+	tessellation_create_info.patchControlPoints = p_rasterization_state.patch_control_points;	// 利用的是光栅化状态的批控制点
 
 	// Viewport.
+	// 视口状态创建信息
 	VkPipelineViewportStateCreateInfo viewport_state_create_info = {};
 	viewport_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 	viewport_state_create_info.viewportCount = 1; // If VR extensions are supported at some point, this will have to be customizable in the framebuffer format.
 	viewport_state_create_info.scissorCount = 1;
 
 	// Rasterization.
+	// 光栅化状态创建
 	VkPipelineRasterizationStateCreateInfo rasterization_state_create_info = {};
 	rasterization_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-	rasterization_state_create_info.depthClampEnable = p_rasterization_state.enable_depth_clamp;
-	rasterization_state_create_info.rasterizerDiscardEnable = p_rasterization_state.discard_primitives;
-	rasterization_state_create_info.polygonMode = p_rasterization_state.wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
-	rasterization_state_create_info.cullMode = (PolygonCullMode)p_rasterization_state.cull_mode;
-	rasterization_state_create_info.frontFace = (p_rasterization_state.front_face == POLYGON_FRONT_FACE_CLOCKWISE ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE);
-	rasterization_state_create_info.depthBiasEnable = p_rasterization_state.depth_bias_enabled;
-	rasterization_state_create_info.depthBiasConstantFactor = p_rasterization_state.depth_bias_constant_factor;
-	rasterization_state_create_info.depthBiasClamp = p_rasterization_state.depth_bias_clamp;
-	rasterization_state_create_info.depthBiasSlopeFactor = p_rasterization_state.depth_bias_slope_factor;
-	rasterization_state_create_info.lineWidth = p_rasterization_state.line_width;
+	rasterization_state_create_info.depthClampEnable = p_rasterization_state.enable_depth_clamp;	// 启用深度截断
+	rasterization_state_create_info.rasterizerDiscardEnable = p_rasterization_state.discard_primitives;	// 启用光栅化丢弃
+	rasterization_state_create_info.polygonMode = p_rasterization_state.wireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;	// 是否用线框模式
+	rasterization_state_create_info.cullMode = (PolygonCullMode)p_rasterization_state.cull_mode;	// 剔除模式
+	rasterization_state_create_info.frontFace = (p_rasterization_state.front_face == POLYGON_FRONT_FACE_CLOCKWISE ? VK_FRONT_FACE_CLOCKWISE : VK_FRONT_FACE_COUNTER_CLOCKWISE);	// 前后面的绕序
+	rasterization_state_create_info.depthBiasEnable = p_rasterization_state.depth_bias_enabled;	// 是否启用深度偏移
+	rasterization_state_create_info.depthBiasConstantFactor = p_rasterization_state.depth_bias_constant_factor;	// 深度偏移恒定量
+	rasterization_state_create_info.depthBiasClamp = p_rasterization_state.depth_bias_clamp;	// 深度偏移最大最小值
+	rasterization_state_create_info.depthBiasSlopeFactor = p_rasterization_state.depth_bias_slope_factor;	// 斜视的时候，深度偏移量
+	rasterization_state_create_info.lineWidth = p_rasterization_state.line_width;	// 线宽参数
 
 	// Multisample.
+	// 多样本状态创建信息
 	VkPipelineMultisampleStateCreateInfo multisample_state_create_info = {};
 	multisample_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-	multisample_state_create_info.rasterizationSamples = _ensure_supported_sample_count(p_multisample_state.sample_count);
-	multisample_state_create_info.sampleShadingEnable = p_multisample_state.enable_sample_shading;
+	multisample_state_create_info.rasterizationSamples = _ensure_supported_sample_count(p_multisample_state.sample_count);	// 采样数
+	multisample_state_create_info.sampleShadingEnable = p_multisample_state.enable_sample_shading;	// 启用样本着色
 	multisample_state_create_info.minSampleShading = p_multisample_state.min_sample_shading;
 	if (p_multisample_state.sample_mask.size()) {
 		static_assert(ARRAYS_COMPATIBLE(uint32_t, VkSampleMask));
@@ -4980,7 +5230,7 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	multisample_state_create_info.alphaToOneEnable = p_multisample_state.enable_alpha_to_one;
 
 	// Depth stencil.
-
+	// 深度、模板状态创建信息
 	VkPipelineDepthStencilStateCreateInfo depth_stencil_state_create_info = {};
 	depth_stencil_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 	depth_stencil_state_create_info.depthTestEnable = p_depth_stencil_state.enable_depth_test;
@@ -4989,6 +5239,7 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	depth_stencil_state_create_info.depthBoundsTestEnable = p_depth_stencil_state.enable_depth_range;
 	depth_stencil_state_create_info.stencilTestEnable = p_depth_stencil_state.enable_stencil;
 
+	// 对前向的三角形进行模板测试时的操作
 	depth_stencil_state_create_info.front.failOp = (VkStencilOp)p_depth_stencil_state.front_op.fail;
 	depth_stencil_state_create_info.front.passOp = (VkStencilOp)p_depth_stencil_state.front_op.pass;
 	depth_stencil_state_create_info.front.depthFailOp = (VkStencilOp)p_depth_stencil_state.front_op.depth_fail;
@@ -4996,7 +5247,7 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	depth_stencil_state_create_info.front.compareMask = p_depth_stencil_state.front_op.compare_mask;
 	depth_stencil_state_create_info.front.writeMask = p_depth_stencil_state.front_op.write_mask;
 	depth_stencil_state_create_info.front.reference = p_depth_stencil_state.front_op.reference;
-
+	// 对后向的三角形进行模板测试时的操作
 	depth_stencil_state_create_info.back.failOp = (VkStencilOp)p_depth_stencil_state.back_op.fail;
 	depth_stencil_state_create_info.back.passOp = (VkStencilOp)p_depth_stencil_state.back_op.pass;
 	depth_stencil_state_create_info.back.depthFailOp = (VkStencilOp)p_depth_stencil_state.back_op.depth_fail;
@@ -5004,17 +5255,18 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	depth_stencil_state_create_info.back.compareMask = p_depth_stencil_state.back_op.compare_mask;
 	depth_stencil_state_create_info.back.writeMask = p_depth_stencil_state.back_op.write_mask;
 	depth_stencil_state_create_info.back.reference = p_depth_stencil_state.back_op.reference;
-
+	// 最小深度和最大深度
 	depth_stencil_state_create_info.minDepthBounds = p_depth_stencil_state.depth_range_min;
 	depth_stencil_state_create_info.maxDepthBounds = p_depth_stencil_state.depth_range_max;
 
 	// Blend state.
-
+	// 颜色混合模式状态
 	VkPipelineColorBlendStateCreateInfo color_blend_state_create_info = {};
 	color_blend_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 	color_blend_state_create_info.logicOpEnable = p_blend_state.enable_logic_op;
 	color_blend_state_create_info.logicOp = (VkLogicOp)p_blend_state.logic_op;
 
+	// 颜色混合附加的状态
 	VkPipelineColorBlendAttachmentState *vk_attachment_states = ALLOCA_ARRAY(VkPipelineColorBlendAttachmentState, p_color_attachments.size());
 	{
 		for (uint32_t i = 0; i < p_color_attachments.size(); i++) {
@@ -5054,30 +5306,36 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	color_blend_state_create_info.blendConstants[3] = p_blend_state.blend_constant.a;
 
 	// Dynamic state.
-
+	// 动态状态
 	VkPipelineDynamicStateCreateInfo dynamic_state_create_info = {};
 	dynamic_state_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
 
+	// 最大动态状态数
 	static const uint32_t MAX_DYN_STATE_COUNT = 9;
 	VkDynamicState *vk_dynamic_states = ALLOCA_ARRAY(VkDynamicState, MAX_DYN_STATE_COUNT);
 	uint32_t vk_dynamic_states_count = 0;
 
+	// 视口与裁剪器一直是动态的
 	vk_dynamic_states[vk_dynamic_states_count] = VK_DYNAMIC_STATE_VIEWPORT; // Viewport and scissor are always dynamic.
 	vk_dynamic_states_count++;
 	vk_dynamic_states[vk_dynamic_states_count] = VK_DYNAMIC_STATE_SCISSOR;
 	vk_dynamic_states_count++;
+	// 线宽
 	if (p_dynamic_state.has_flag(DYNAMIC_STATE_LINE_WIDTH)) {
 		vk_dynamic_states[vk_dynamic_states_count] = VK_DYNAMIC_STATE_LINE_WIDTH;
 		vk_dynamic_states_count++;
 	}
+	// 深度偏移
 	if (p_dynamic_state.has_flag(DYNAMIC_STATE_DEPTH_BIAS)) {
 		vk_dynamic_states[vk_dynamic_states_count] = VK_DYNAMIC_STATE_DEPTH_BIAS;
 		vk_dynamic_states_count++;
 	}
+	// 融合常量
 	if (p_dynamic_state.has_flag(DYNAMIC_STATE_BLEND_CONSTANTS)) {
 		vk_dynamic_states[vk_dynamic_states_count] = VK_DYNAMIC_STATE_BLEND_CONSTANTS;
 		vk_dynamic_states_count++;
 	}
+	// 深度范围
 	if (p_dynamic_state.has_flag(DYNAMIC_STATE_DEPTH_BOUNDS)) {
 		vk_dynamic_states[vk_dynamic_states_count] = VK_DYNAMIC_STATE_DEPTH_BOUNDS;
 		vk_dynamic_states_count++;
@@ -5090,6 +5348,7 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 		vk_dynamic_states[vk_dynamic_states_count] = VK_DYNAMIC_STATE_STENCIL_WRITE_MASK;
 		vk_dynamic_states_count++;
 	}
+	// 模板引用
 	if (p_dynamic_state.has_flag(DYNAMIC_STATE_STENCIL_REFERENCE)) {
 		vk_dynamic_states[vk_dynamic_states_count] = VK_DYNAMIC_STATE_STENCIL_REFERENCE;
 		vk_dynamic_states_count++;
@@ -5100,14 +5359,16 @@ RDD::PipelineID RenderingDeviceDriverVulkan::render_pipeline_create(
 	dynamic_state_create_info.pDynamicStates = vk_dynamic_states;
 
 	// VRS.
-
+	// 可变速率着色
 	void *graphics_pipeline_nextptr = nullptr;
 
 	if (vrs_capabilities.attachment_vrs_supported) {
 		// If VRS is used, this defines how the different VRS types are combined.
 		// combinerOps[0] decides how we use the output of pipeline and primitive (drawcall) VRS.
 		// combinerOps[1] decides how we use the output of combinerOps[0] and our attachment VRS.
-
+		// 如果VRS启用了，这显示了如何定义不同的VRS类型组合。
+		// combinerOps[0]定义了如何使用管线与图元的输出进行VRS
+		// combinerOps[1]定义了如何使用combinerOps[0]和附加物进行VRS
 		VkPipelineFragmentShadingRateStateCreateInfoKHR *vrs_create_info = ALLOCA_SINGLE(VkPipelineFragmentShadingRateStateCreateInfoKHR);
 		*vrs_create_info = {};
 		vrs_create_info->sType = VK_STRUCTURE_TYPE_PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR;

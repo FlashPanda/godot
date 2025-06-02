@@ -184,9 +184,12 @@ void RenderSceneBuffersRD::configure(const RenderSceneBuffersConfiguration *p_co
 	// 这意味着，我们不能对其进行采样，或者拷贝它。这个标记会节省显存，可能也会提高性能。
 
 	// Create our depth buffer.
+
+	// 创建深度缓存
 	create_texture(RB_SCOPE_BUFFERS, RB_TEX_DEPTH, get_depth_format(resolve_target, false, can_be_storage), get_depth_usage_bits(resolve_target, false, can_be_storage));
 
 	// Create our MSAA buffers.
+	// 创建MSAA缓存，这个缓存如果是要的话，要创建两个，颜色缓冲和深度缓冲都需要
 	if (msaa_3d == RS::VIEWPORT_MSAA_DISABLED) {
 		texture_samples = RD::TEXTURE_SAMPLES_1;
 	} else {
@@ -276,11 +279,22 @@ bool RenderSceneBuffersRD::has_texture(const StringName &p_context, const String
 	return named_textures.has(key);
 }
 
-RID RenderSceneBuffersRD::create_texture(const StringName &p_context, const StringName &p_texture_name, const RD::DataFormat p_data_format, const uint32_t p_usage_bits, const RD::TextureSamples p_texture_samples, const Size2i p_size, const uint32_t p_layers, const uint32_t p_mipmaps, bool p_unique, bool p_discardable) {
+RID RenderSceneBuffersRD::create_texture(const StringName &p_context,
+	const StringName &p_texture_name,
+	const RD::DataFormat p_data_format,
+	const uint32_t p_usage_bits,
+	const RD::TextureSamples p_texture_samples,
+	const Size2i p_size,
+	const uint32_t p_layers,
+	const uint32_t p_mipmaps,
+	bool p_unique,
+	bool p_discardable)
+{
 	// Keep some useful data, we use default values when these are 0.
+	// 如果输入的尺寸为0，那么就用内部尺寸
 	Size2i size = p_size == Size2i(0, 0) ? internal_size : p_size;
-	uint32_t layers = p_layers == 0 ? view_count : p_layers;
-	uint32_t mipmaps = p_mipmaps == 0 ? 1 : p_mipmaps;
+	uint32_t layers = p_layers == 0 ? view_count : p_layers;		// 这个layer是干嘛的？为什么会和视图数量扯在一起。
+	uint32_t mipmaps = p_mipmaps == 0 ? 1 : p_mipmaps;	// mipmap数
 
 	// Create our texture
 	RD::TextureFormat tf;

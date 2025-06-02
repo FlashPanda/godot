@@ -64,7 +64,15 @@ class RenderingServer : public Object {
 	int mm_policy = 0;
 	bool render_loop_enabled = true;
 
-	Array _get_array_from_surface(uint64_t p_format, Vector<uint8_t> p_vertex_data, Vector<uint8_t> p_attrib_data, Vector<uint8_t> p_skin_data, int p_vertex_len, Vector<uint8_t> p_index_data, int p_index_len, const AABB &p_aabb, const Vector4 &p_uv_scale) const;
+	Array _get_array_from_surface(uint64_t p_format,
+		Vector<uint8_t> p_vertex_data,
+		Vector<uint8_t> p_attrib_data,
+		Vector<uint8_t> p_skin_data,
+		int p_vertex_len,
+		Vector<uint8_t> p_index_data,
+		int p_index_len,
+		const AABB &p_aabb,
+		const Vector4 &p_uv_scale) const;
 
 	const Vector2 SMALL_VEC2 = Vector2(CMP_EPSILON, CMP_EPSILON);
 	const Vector3 SMALL_VEC3 = Vector3(CMP_EPSILON, CMP_EPSILON, CMP_EPSILON);
@@ -78,7 +86,22 @@ protected:
 	RID white_texture;
 	RID test_material;
 
-	Error _surface_set_data(Array p_arrays, uint64_t p_format, uint32_t *p_offsets, uint32_t p_vertex_stride, uint32_t p_normal_stride, uint32_t p_attrib_stride, uint32_t p_skin_stride, Vector<uint8_t> &r_vertex_array, Vector<uint8_t> &r_attrib_array, Vector<uint8_t> &r_skin_array, int p_vertex_array_len, Vector<uint8_t> &r_index_array, int p_index_array_len, AABB &r_aabb, Vector<AABB> &r_bone_aabb, Vector4 &r_uv_scale);
+	Error _surface_set_data(Array p_arrays,
+		uint64_t p_format,
+		uint32_t *p_offsets,
+		uint32_t p_vertex_stride,
+		uint32_t p_normal_stride,
+		uint32_t p_attrib_stride,
+		uint32_t p_skin_stride,
+		Vector<uint8_t> &r_vertex_array,
+		Vector<uint8_t> &r_attrib_array,
+		Vector<uint8_t> &r_skin_array,
+		int p_vertex_array_len,
+		Vector<uint8_t> &r_index_array,
+		int p_index_array_len,
+		AABB &r_aabb,
+		Vector<AABB> &r_bone_aabb,
+		Vector4 &r_uv_scale);
 
 	static RenderingServer *(*create_func)();
 	static void _bind_methods();
@@ -249,7 +272,7 @@ public:
 	virtual ShaderNativeSourceCode shader_get_native_source_code(RID p_shader) const = 0;
 
 	/* COMMON MATERIAL API */
-
+	// 通用材质API
 	enum {
 		MATERIAL_RENDER_PRIORITY_MIN = -128,
 		MATERIAL_RENDER_PRIORITY_MAX = 127,
@@ -269,6 +292,7 @@ public:
 
 	/* MESH API */
 
+	// 数组类型
 	enum ArrayType {
 		ARRAY_VERTEX = 0, // RG32F (2D), RGB32F, RGBA16 (compressed)
 		ARRAY_NORMAL = 1, // RG16
@@ -290,6 +314,7 @@ public:
 		ARRAY_CUSTOM_COUNT = ARRAY_BONES - ARRAY_CUSTOM0
 	};
 
+	// 自定义数据格式
 	enum ArrayCustomFormat {
 		ARRAY_CUSTOM_RGBA8_UNORM,
 		ARRAY_CUSTOM_RGBA8_SNORM,
@@ -350,6 +375,7 @@ public:
 
 	static_assert(sizeof(ArrayFormat) == 8, "ArrayFormat should be 64 bits long.");
 
+	// 五种图元类型：点、线、线带、三角形、三角形带
 	enum PrimitiveType {
 		PRIMITIVE_POINTS,
 		PRIMITIVE_LINES,
@@ -359,6 +385,8 @@ public:
 		PRIMITIVE_MAX,
 	};
 
+	// 三角形信息封装成表面数据
+	// 以表面数据为单位进行绘制而不是一个object
 	struct SurfaceData {
 		PrimitiveType primitive = PRIMITIVE_MAX;
 
