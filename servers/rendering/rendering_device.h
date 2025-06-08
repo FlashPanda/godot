@@ -57,6 +57,17 @@ class RDPipelineColorBlendState;
 class RDFramebufferPass;
 class RDPipelineSpecializationConstant;
 
+/*
+RenderingDevice 的角色是“翻译层”：它接收与引擎高层（如 RenderingServer 或渲染管线）交互的调用，进行参数校验、类型转换或状态跟踪，然后调用 driver 中的低层接口；如果直接让上层调用 Driver，则必须在每个后端驱动中重复实现一遍这些通用的校验与转换逻辑。
+
+上层调用的流程是：
+上层 → RenderingDevice → RenderingDeviceCommons 的公共逻辑 → driver → 具体 API
+
+设计思路是：
+公共层 + 统一接口层 + 驱动层
+
+*/
+
 class RenderingDevice : public RenderingDeviceCommons {
 	GDCLASS(RenderingDevice, Object)
 
@@ -66,14 +77,18 @@ private:
 	Thread::ID render_thread_id;
 
 public:
+	// 着色语言类型是两种
 	enum ShaderLanguage {
 		SHADER_LANGUAGE_GLSL,
 		SHADER_LANGUAGE_HLSL
 	};
 
+	// 绘制列表ID
 	typedef int64_t DrawListID;
+	// 计算列表ID
 	typedef int64_t ComputeListID;
 
+	// 着色器编译/缓存的函数指针
 	typedef String (*ShaderSPIRVGetCacheKeyFunction)(const RenderingDevice *p_render_device);
 	typedef Vector<uint8_t> (*ShaderCompileToSPIRVFunction)(ShaderStage p_stage, const String &p_source_code, ShaderLanguage p_language, String *r_error, const RenderingDevice *p_render_device);
 	typedef Vector<uint8_t> (*ShaderCacheFunction)(ShaderStage p_stage, const String &p_source_code, ShaderLanguage p_language);
@@ -89,13 +104,13 @@ private:
 
 	RenderingContextDriver *context = nullptr;
 	RenderingDeviceDriver *driver = nullptr;
-	RenderingContextDriver::Device device;
+	RenderingContextDriver::Device device;		// 驱动的设备。为啥要单独弄出来？
 
-	bool local_device_processing = false;
-	bool is_main_instance = false;
+	bool local_device_processing = false;	// 本地设备处理中？这个又是干啥的
+	bool is_main_instance = false;	// 是否主实例
 
 protected:
-	static void _bind_methods();
+	static void _bind_methods();	// 方法绑定，暴露给脚本使用的方法
 
 #ifndef DISABLE_DEPRECATED
 	RID _shader_create_from_bytecode_bind_compat_79606(const Vector<uint8_t> &p_shader_binary);
@@ -104,6 +119,7 @@ protected:
 
 	/***************************/
 	/**** ID INFRASTRUCTURE ****/
+	// ID基础设施
 	/***************************/
 public:
 	//base numeric ID for all types
@@ -111,26 +127,31 @@ public:
 		INVALID_FORMAT_ID = -1
 	};
 
+	// ID类型
 	enum IDType {
-		ID_TYPE_FRAMEBUFFER_FORMAT,
-		ID_TYPE_VERTEX_FORMAT,
-		ID_TYPE_DRAW_LIST,
-		ID_TYPE_COMPUTE_LIST = 4,
-		ID_TYPE_MAX,
+		ID_TYPE_FRAMEBUFFER_FORMAT,		// 帧缓冲格式
+		ID_TYPE_VERTEX_FORMAT,			// 顶点格式
+		ID_TYPE_DRAW_LIST,				// 绘制列表
+		ID_TYPE_COMPUTE_LIST = 4,		// 计算列表
+		ID_TYPE_MAX,					// 这个值是5，所以我喜欢前面加一个无效值
 		ID_BASE_SHIFT = 58, // 5 bits for ID types.
 		ID_MASK = (ID_BASE_SHIFT - 1),
 	};
 
 private:
 	HashMap<RID, HashSet<RID>> dependency_map; // IDs to IDs that depend on it.
+												// ID对应到依赖这个ID的ID
 	HashMap<RID, HashSet<RID>> reverse_dependency_map; // Same as above, but in reverse.
+														// 和上面的类似，但是反向
 
+	// 这个就是构造上面两个映射，释放映射的东西。
 	void _add_dependency(RID p_id, RID p_depends_on);
 	void _free_dependencies(RID p_id);
 
 private:
 	/***************************/
 	/**** BUFFER MANAGEMENT ****/
+	// 缓存管理
 	/***************************/
 
 	// These are temporary buffers on CPU memory that hold
@@ -138,12 +159,19 @@ private:
 	// either on GPU buffers, or images (textures). It ensures
 	// updates are properly synchronized with whatever the
 	// GPU is doing.
+	// 先在 CPU 可访问的内存中开辟一块临时缓冲区，将数据写入其中，
+	// 然后再通过拷贝命令把数据移动到 GPU 缓冲区或纹理（Images）。
+	// 这种做法可以避免直接对 GPU 资源进行写入，确保 CPU 写入和
+	// GPU 读取之间的数据同步正确无误
 	//
 	// The logic here is as follows, only 3 of these
 	// blocks are created at the beginning (one per frame)
 	// they can each belong to a frame (assigned to current when
 	// used) and they can only be reused after the same frame is
 	// recycled.
+	// 这里的逻辑是这样：只有3个区块会在开始的时候创建（每帧一个）。
+	// 他们可以属于一帧（用到的时候安排给当前帧），并且只允许在相同
+	// 帧回收之后才能被再利用。
 	//
 	// When CPU requires to allocate more than what is available,
 	// more of these buffers are created. If a limit is reached,
@@ -151,19 +179,39 @@ private:
 	// in previous frames are processed. If that fails, then
 	// another fence will ensure everything pending for the current
 	// frame is processed (effectively stalling).
+	// 当CPU请求更多的缓冲时，可以创建更多缓冲。如果达到了限制，那么就会
+	// 有一个fence来确保等待之前的帧处理完毕释放区块。如果它失败了，那么
+	// 另一个fence会确保所有等待当前帧的东西都会被处理。
 	//
 	// See the comments in the code to understand better how it works.
+	// 本质上是三缓冲机制
 
+	// 暂存需要的操作
 	enum StagingRequiredAction {
-		STAGING_REQUIRED_ACTION_NONE,
-		STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL,
-		STAGING_REQUIRED_ACTION_STALL_PREVIOUS,
+		STAGING_REQUIRED_ACTION_NONE,					// 不需要额外的操作
+		STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL,	// 在当前帧之前先等待所有 GPU 操作完成，并且刷新命令队列，
+														// 强制等待所有挂起的暂存操作
+		STAGING_REQUIRED_ACTION_STALL_PREVIOUS,			// 仅等待（stall）上一个使用相同暂存缓冲区块的 GPU 操作完成，而不是等待所有操作
 	};
 
+	/*
+		StagingBufferBlock 结构体表示一个单独的“暂存缓冲区块”（staging buffer block），
+		其中包含了驱动层分配的缓冲区 ID (driver_id)、该块最后一次被使用的帧编号 (frame_used)
+		以及该块当前已填充的数据量 (fill_amount)
+
+		StagingBuffers 则是对多个 StagingBufferBlock 的管理单元，
+		用于在多帧渲染过程中复用这些暂存缓冲区块，其中包含块列表 (blocks)、
+		当前使用的块索引 (current)、每个块的固定大小 (block_size)、
+		允许的最大总容量 (max_size)、缓冲用途位域 (usage_bits)
+		以及标记是否已使用过的标志 (used)
+
+	*/
+
+	// 暂存缓冲的区块
 	struct StagingBufferBlock {
-		RDD::BufferID driver_id;
-		uint64_t frame_used = 0;
-		uint32_t fill_amount = 0;
+		RDD::BufferID driver_id;		// 缓冲ID
+		uint64_t frame_used = 0;		// 使用这个区块的帧
+		uint32_t fill_amount = 0;		// 填充数量
 	};
 
 	struct StagingBuffers {
@@ -175,31 +223,67 @@ private:
 		bool used = false;
 	};
 
+	// 暂存缓冲的分配
 	Error _staging_buffer_allocate(StagingBuffers &p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t &r_alloc_offset, uint32_t &r_alloc_size, StagingRequiredAction &r_required_action, bool p_can_segment = true);
+	// 暂存缓冲执行操作
 	void _staging_buffer_execute_required_action(StagingBuffers &p_staging_buffers, StagingRequiredAction p_required_action);
+	// 插入缓冲区块
 	Error _insert_staging_block(StagingBuffers &p_staging_buffers);
 
-	StagingBuffers upload_staging_buffers;
-	StagingBuffers download_staging_buffers;
+	StagingBuffers upload_staging_buffers;		// 上传的缓冲
+	StagingBuffers download_staging_buffers;	// 下载的缓冲
+
+	/**
+	 * 创建/销毁缓冲区：取 size、usage 调用底层 buffer_create/buffer_destroy。
+
+	 * 数据更新：基于 driver_id 执行 buffer_update、buffer_copy 等操作，并通过 draw_tracker 保证安全。
+
+	 * 异步读写：结合 transfer 字段在后台线程高效传输数据。
+
+	 * 渲染提交：在构建渲染图时，用 driver_id 和 draw_tracker 生成正确的资源依赖和同步点，确保渲染命令的正确执行。
+	 */
 
 	struct Buffer {
 		RDD::BufferID driver_id;
-		uint32_t size = 0;
-		BitField<RDD::BufferUsageBits> usage;
-		RDG::ResourceTracker *draw_tracker = nullptr;
-		int32_t transfer_worker_index = -1;
-		uint64_t transfer_worker_operation = 0;
+		uint32_t size = 0;		// 缓冲区大小
+		BitField<RDD::BufferUsageBits> usage;	// 缓冲区用途以及访问方式（位域）
+		RDG::ResourceTracker *draw_tracker = nullptr;	// 绘制命令追踪器，确保资源在绘制的时候不会被释放或重用
+
+		// 下面两个用于后台异步将数据上传GPU
+		int32_t transfer_worker_index = -1;		// 分配给该缓冲区上传操作的后台工作线程索引
+		uint64_t transfer_worker_operation = 0;		// 在该线程上本次操作的唯一标识，用于调度和完成回调时的匹配
 	};
 
+	// 从拥有者那获取Buffer指针
 	Buffer *_get_buffer_from_owner(RID p_buffer);
+	// BUffer的初始化
 	Error _buffer_initialize(Buffer *p_buffer, const uint8_t *p_data, size_t p_data_size, uint32_t p_required_align = 32);
 
-	void update_perf_report();
+	void update_perf_report();	// 生成报告数据
 	// Flag for batching descriptor sets.
+	// 对描述符集进行分批的标记
 	bool descriptor_set_batching = true;
 	// When true, the final draw call that copies our offscreen result into the Swapchain is put into its
 	// own cmd buffer, so that the whole rendering can start early instead of having to wait for the
 	// swapchain semaphore to be signaled (which causes bubbles).
+	// 把离屏渲染结果拷贝到 Swapchain（即呈现队列）的那一步，单独放到一个命令缓冲（cmd buffer）里，
+	// 而不是跟其他渲染命令混在一起。这样做的好处是——可以让大部分渲染命令在真正等待 Swapchain 可用之
+	// 前就开始执行，避免 GPU 在等待交换链信号（semaphore）时产生“气泡”（idle）浪费。
+
+	/*
+	1. Swapchain 与信号量（Semaphore）
+		在 Vulkan 中，每帧渲染通常要先调用 vkAcquireNextImageKHR 来获取下一个可用的 Swapchain 图像，并传入一个信号量；当该图像可用时，Vulkan 会在这个信号量上发信号。
+
+		随后，我们将渲染命令提交给图形队列，提交信息里会指定等待上述信号量；只有等到它被信号化，GPU 才能真正开始渲染到该图像。
+
+	2. “GPU 气泡”（Idle Bubble）的成因
+		如果把“拷贝到 Swapchain”及之后的呈现命令，跟所有其它渲染命令放在同一个命令缓冲里，那么整个命令缓冲在提交时——由于最后还要等待 Swapchain 的信号才 “可执行到末尾”——就会导致：
+
+		前面的所有渲染命令都得等到 Swapchain 图像拿到手（信号到）后，整个缓冲才能开始执行。
+
+		期间 GPU 就会空闲（产生气泡），浪费并行能力
+	*/
+	// 用了这种方式，这个拷贝命令缓冲就需要等待两个信号：交换链信号和主渲染信号
 	bool split_swapchain_into_its_own_cmd_buffer = true;
 	uint32_t gpu_copy_count = 0;
 	uint32_t copy_bytes_count = 0;

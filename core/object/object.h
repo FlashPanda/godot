@@ -587,6 +587,7 @@ public:
 		uint32_t flags = 0;
 		bool operator<(const Connection &p_conn) const;
 
+		// 隐式/显式的类型转换，变成Variant类
 		operator Variant() const;
 
 		Connection() {}
@@ -603,7 +604,9 @@ private:
 	ObjectGDExtension *_extension = nullptr;
 	GDExtensionClassInstancePtr _extension_instance = nullptr;
 
+	// 信号数据
 	struct SignalData {
+		// 槽位
 		struct Slot {
 			int reference_count = 0;
 			Connection conn;
@@ -611,10 +614,16 @@ private:
 		};
 
 		MethodInfo user;
+		// 哈希图
+		// Callable是key
+		// Slot是value
 		HashMap<Callable, Slot, HashableHasher<Callable>> slot_map;
 		bool removable = false;
 	};
 
+	// 信号图
+	// 名字是key
+	// 信号数据是value
 	HashMap<StringName, SignalData> signal_map;
 	List<Connection> connections;
 #ifdef DEBUG_ENABLED
