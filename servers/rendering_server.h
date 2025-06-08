@@ -64,6 +64,14 @@ class RenderingServer : public Object {
 	int mm_policy = 0;
 	bool render_loop_enabled = true;
 
+
+	/*
+		用于将底层渲染管线中存储的原始表面数据（以字节向量形式的顶点、属性、蒙皮信息和索引数据）
+		以及相关元信息（格式标志、顶点/索引长度、包围盒和 UV 缩放）解码并打包成一个 GDScript 可
+		访问的 Variant Array。这个 Array 由多个子数组组成，每个子数组对应一类顶点属性（如位置、
+		法线、切线、UV、骨骼权重/索引、索引列表等），并正是 mesh_surface_get_arrays() 等公开 API
+		返回给用户的内容。
+	*/
 	Array _get_array_from_surface(uint64_t p_format,
 		Vector<uint8_t> p_vertex_data,
 		Vector<uint8_t> p_attrib_data,
@@ -74,18 +82,24 @@ class RenderingServer : public Object {
 		const AABB &p_aabb,
 		const Vector4 &p_uv_scale) const;
 
+	// 二维和三维的比较容差
 	const Vector2 SMALL_VEC2 = Vector2(CMP_EPSILON, CMP_EPSILON);
 	const Vector3 SMALL_VEC3 = Vector3(CMP_EPSILON, CMP_EPSILON, CMP_EPSILON);
 
+	// 获取当前引擎注册的所有全局 shader uniform 名称列表，可以给脚本语言用。
 	virtual TypedArray<StringName> _global_shader_parameter_get_list() const;
 
 protected:
+	// 这一块感觉就是测试用的。
 	RID _make_test_cube();
-	void _free_internal_rids();
+	void _free_internal_rids();		
 	RID test_texture;
 	RID white_texture;
 	RID test_material;
 
+	// 是将脚本层（GDScript/C#）传入的网格表面属性数组（顶点、法线、UV、骨骼等）
+	// 解包、打包成底层渲染子系统可消费的字节流，并在此过程中计算出必要的元信息
+	// （如包围盒、骨骼包围盒、UV 缩放），最后返回一个 Error 值指示执行结果或参数合法性
 	Error _surface_set_data(Array p_arrays,
 		uint64_t p_format,
 		uint32_t *p_offsets,
@@ -103,8 +117,8 @@ protected:
 		Vector<AABB> &r_bone_aabb,
 		Vector4 &r_uv_scale);
 
-	static RenderingServer *(*create_func)();
-	static void _bind_methods();
+	static RenderingServer *(*create_func)();	// 创建函数指针
+	static void _bind_methods();	// 绑定方法到脚本。
 
 #ifndef DISABLE_DEPRECATED
 	void _environment_set_fog_bind_compat_84792(RID p_env, bool p_enable, const Color &p_light_color, float p_light_energy, float p_sun_scatter, float p_density, float p_height, float p_height_density, float p_aerial_perspective, float p_sky_affect);
@@ -116,7 +130,9 @@ protected:
 #endif
 
 public:
+	// 获取单例
 	static RenderingServer *get_singleton();
+	// 创建函数，其实就是调用上面的create_func
 	static RenderingServer *create();
 
 	enum {

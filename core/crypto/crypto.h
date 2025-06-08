@@ -37,6 +37,7 @@
 #include "core/io/resource_saver.h"
 #include "core/object/ref_counted.h"
 
+// 用于加密
 class CryptoKey : public Resource {
 	GDCLASS(CryptoKey, Resource);
 

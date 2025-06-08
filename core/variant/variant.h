@@ -82,6 +82,29 @@ typedef Vector<Vector3> PackedVector3Array;
 typedef Vector<Color> PackedColorArray;
 typedef Vector<Vector4> PackedVector4Array;
 
+/*
+一个贯穿C++和脚本语言的类型，算是一个“胶水”类型。
+
+使用示例：
+# GDScript 中，Variant 隐式用作任何变量
+var v = 42               # 实际上 v 是一个 Variant(Type.Int)
+print(v.get_type())      # 输出 1，即 Variant.Type.Int
+v = "Hello, Godot!"      # 重新赋值后变为 Variant.Type.String
+
+// C++ 中，手动操作 Variant
+Variant foo = 3.14;
+switch (foo.get_type()) {
+	case Variant::DOUBLE:
+		print_line("这是一个浮点数");
+		break;
+	case Variant::STRING:
+		print_line("这是一个字符串");
+		break;
+	// …
+}
+
+
+*/
 class Variant {
 public:
 	// If this changes the table in variant_op must be updated
