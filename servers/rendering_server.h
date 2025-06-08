@@ -136,30 +136,50 @@ public:
 	static RenderingServer *create();
 
 	enum {
+		/*
+			用来标记“无索引数组”或索引数组为空的错误状态。在调用需要索引数据的方法时，如果传入此值表示不使用索引
+		*/
 		NO_INDEX_ARRAY = -1,
+
+		// 顶点骨骼权重数组的大小，表示每个顶点最多可受 4 根骨骼影响（常见于蒙皮动画的顶点数据布局）
 		ARRAY_WEIGHTS_SIZE = 4,
+
+		// 2D 画布节点（CanvasItem）的最小 Z 层，用于控制渲染顺序，不可低于该值
 		CANVAS_ITEM_Z_MIN = -4096,
+
+		// 2D 画布节点的最大 Z 层，用于控制渲染顺序，不可高于该值。
 		CANVAS_ITEM_Z_MAX = 4096,
+
+		// 后期处理辉光（Glow）效果所支持的最大级数（mip 级别数）
 		MAX_GLOW_LEVELS = 7,
+
+		// 引擎可支持的最大鼠标（或触控）光标数量（在实际渲染中此常量现已废弃，不再使用）
 		MAX_CURSORS = 8,
+
+		// 2D 场景中可同时存在的最大定向光数量，用于限制光照批处理
 		MAX_2D_DIRECTIONAL_LIGHTS = 8,
+
+		// 单个 Mesh 资源所能包含的最大子面（surface）数量，每个 surface 附带独立的顶点/索引数组和材质
 		MAX_MESH_SURFACES = 256
 	};
 
 	/* TEXTURE API */
 
+	// 纹理类型
 	enum TextureType {
-		TEXTURE_TYPE_2D,
-		TEXTURE_TYPE_LAYERED,
-		TEXTURE_TYPE_3D,
+		TEXTURE_TYPE_2D,		// 2D纹理
+		TEXTURE_TYPE_LAYERED,	// 分层纹理
+		TEXTURE_TYPE_3D,		// 3D纹理
 	};
 
+	// 分层纹理类型
 	enum TextureLayeredType {
-		TEXTURE_LAYERED_2D_ARRAY,
-		TEXTURE_LAYERED_CUBEMAP,
-		TEXTURE_LAYERED_CUBEMAP_ARRAY,
+		TEXTURE_LAYERED_2D_ARRAY,		// 2D数组
+		TEXTURE_LAYERED_CUBEMAP,	// 六面体贴图
+		TEXTURE_LAYERED_CUBEMAP_ARRAY,	// 六面体贴图数组
 	};
 
+	// 六面体贴图的各个方向
 	enum CubeMapLayer {
 		CUBEMAP_LAYER_LEFT,
 		CUBEMAP_LAYER_RIGHT,
@@ -169,20 +189,36 @@ public:
 		CUBEMAP_LAYER_BACK
 	};
 
+	// 纯虚：2D纹理创建
 	virtual RID texture_2d_create(const Ref<Image> &p_image) = 0;
+	// 纯虚：2D分层纹理创建
 	virtual RID texture_2d_layered_create(const Vector<Ref<Image>> &p_layers, TextureLayeredType p_layered_type) = 0;
+	// 纯虚：3D纹理创建
 	virtual RID texture_3d_create(Image::Format, int p_width, int p_height, int p_depth, bool p_mipmaps, const Vector<Ref<Image>> &p_data) = 0; //all slices, then all the mipmaps, must be coherent
+	// 纯虚：额外纹理创建
+	// 用于创建一个“外部”纹理，底层不会分配或管理图像数据，而是将平台提供的硬件缓冲（如 Android 的 AHardwareBuffer 或 EGLImage）包装成一个可由 Godot 使用的纹理 RID
 	virtual RID texture_external_create(int p_width, int p_height, uint64_t p_external_buffer = 0) = 0;
+	// 纯虚：纹理代理创建
+	// 曾用于创建一个“代理”纹理（ProxyTexture），可以在不复制底层图像的情况下包裹另一个纹理；但在 Godot 4 中此功能已移除，调用后什么也不做，并始终返回无效 RID。
 	virtual RID texture_proxy_create(RID p_base) = 0;
 
+	// 纯虚：从原生的句柄创建纹理
 	virtual RID texture_create_from_native_handle(TextureType p_type, Image::Format p_format, uint64_t p_native_handle, int p_width, int p_height, int p_depth, int p_layers = 1, TextureLayeredType p_layered_type = TEXTURE_LAYERED_2D_ARRAY) = 0;
 
+	//纯虚：2D纹理更新
 	virtual void texture_2d_update(RID p_texture, const Ref<Image> &p_image, int p_layer = 0) = 0;
+	// 纯虚：3D纹理更新
 	virtual void texture_3d_update(RID p_texture, const Vector<Ref<Image>> &p_data) = 0;
+	// 纯虚：额外纹理更新
 	virtual void texture_external_update(RID p_texture, int p_width, int p_height, uint64_t p_external_buffer = 0) = 0;
+	// 纯虚：代理纹理更新
 	virtual void texture_proxy_update(RID p_texture, RID p_proxy_to) = 0;
 
 	// These two APIs can be used together or in combination with the others.
+	// Godot 的这三个纯虚方法分别用于在渲染服务器内部创建“占位”纹理（Placeholder Texture）对象，
+	// 只会返回一个空的 RID 用于后续的纹理 API 调用，不会在 GPU 上传任何像素数据，主要用于项目以
+	// 专用服务器模式导出、资源所在模块被禁用或实时延迟加载真实纹理等场景，以避免因缺少真实纹理而
+	// 导致渲染失败或引擎崩溃。
 	virtual RID texture_2d_placeholder_create() = 0;
 	virtual RID texture_2d_layered_placeholder_create(TextureLayeredType p_layered_type) = 0;
 	virtual RID texture_3d_placeholder_create() = 0;
@@ -191,18 +227,135 @@ public:
 	virtual Ref<Image> texture_2d_layer_get(RID p_texture, int p_layer) const = 0;
 	virtual Vector<Ref<Image>> texture_3d_get(RID p_texture) const = 0;
 
+	// 纯虚：替换纹理
+	// 将已有纹理 p_texture 的底层数据替换为另一个纹理 p_by_texture，但保留原有的 RID 不变
 	virtual void texture_replace(RID p_texture, RID p_by_texture) = 0;
+	// 纯虚：设置纹理尺寸
+	// 在不上传新像素数据的情况下，强制覆盖纹理 p_texture 的宽高元信息，使后续渲染时以新的尺寸进行采样和布局。
 	virtual void texture_set_size_override(RID p_texture, int p_width, int p_height) = 0;
 
+	// 纯虚：设置/获取纹理路径
 	virtual void texture_set_path(RID p_texture, const String &p_path) = 0;
 	virtual String texture_get_path(RID p_texture) const = 0;
 
+	// 纯虚：获取纹理格式
 	virtual Image::Format texture_get_format(RID p_texture) const = 0;
 
+	// 纹理检查回调函数指针
 	typedef void (*TextureDetectCallback)(void *);
 
+	/*
+	关于detect到底要detect什么？
+
+	下面对“detect”回调的本质做一个剖析，帮助你理解它在 Godot 渲染管线中究竟“检测”的是什么。
+
+## 一、检测回调的定位
+
+Godot 的渲染服务器（`RenderingServer`）在上传或更新纹理资源时，会根据高层资源（如 `Texture2D`、`Texture3D`、`TextureLayered`）的用途，在渲染线程里对纹理做一系列“分类”处理——比如：
+
+* 它是**3D 体积纹理**，还是普通的 2D 纹理？
+* 它应当被当作**法线贴图**（normal map）来解码（线性空间、需要翻转绿通道）？
+* 它应当被当作**粗糙度贴图**（roughness map）来读取单通道灰度？
+* 它应当被当作**sRGB 纹理**来做伽马校正？
+
+在这些判断发生的时刻，渲染服务器就会调用事先通过 `texture_set_detect_*_callback` 注册的函数，让上层（插件、编辑器、导入器等）有机会“听到”这一分类事件，并执行额外逻辑（如调整采样器设置、标记资源类型、触发编辑器刷新等）。
+
+## 二、典型触发时机
+
+1. **首次上传**：当你第一次调用 `texture_2d_create`、`texture_3d_create`、`texture_external_create` 等接口创建 GPU 纹理时。
+2. **动态更新**：调用 `texture_replace`、`texture_update` 之类方法修改纹理数据后。
+3. **导入流程**：Godot 在导入资源时，Importer 会给纹理 Resource 打上“这是法线贴图”“这是高光贴图”等标记，渲染服务器在看到这些标记时也会执行对应的检测回调。
+
+只要渲染服务器内部判断出“这个 RID 对应的纹理应当被当作 X 类型处理”，就会触发 `texture_set_detect_X_callback` 注册的回调。
+
+## 三、检测内容到底是什么？
+
+* **语义分类**：不是对像素内容做图像分析，而是根据资源类型、导入标记或文件名后缀（如 `_normal`、`_roughness`）、压缩格式等元信息，对纹理“分类”。
+* **用途判定**：将纹理送入适合的采样模式、解码空间、绑定点或渲染通道。例如：
+
+  * 法线贴图要用线性采样、不做 sRGB 校正，并可能翻转绿通道；
+  * sRGB 纹理要在采样时做伽马转换；
+  * 3D 纹理要绑定到体积采样器；
+* **回调目的**：让外部逻辑知晓“渲染服务器已经把这个纹理当作 X 用途”，从而可以
+
+  * 在编辑器里高亮或标记该资源，
+  * 在自定义渲染插件里调整后端状态，
+  * 或者根据回调结果再做一次资源重配置（如切换过滤器、生成 MipMaps 等）。
+
+---
+
+### 调研参考
+
+* Godot 官方文档：RenderingServer 接口列表，但未对 detect 回调做详细说明
+* `servers/rendering_server.h`（GitHub 源码），包含 `texture_set_detect_*_callback` 定义，却无注释
+* 社区讨论和 Issue，均未给出深入实现细节
+
+由于公开文档和源码均未对“detect 回调”内部判断逻辑做详细注释，上述总结基于对渲染服务器整体设计和常见用法的解读。
+
+	*/
+
+	// 设置回调
+	// 3D纹理和法线贴图识别
 	virtual void texture_set_detect_3d_callback(RID p_texture, TextureDetectCallback p_callback, void *p_userdata) = 0;
 	virtual void texture_set_detect_normal_callback(RID p_texture, TextureDetectCallback p_callback, void *p_userdata) = 0;
+
+	/*
+为什么会有这么多channel？
+
+## 概要
+
+Godot 的 `TextureDetectRoughnessChannel` 枚举用于在渲染服务器或导入流程中指定从哪一个颜色通道（R/G/B/A）或灰度（GRAY）提取粗糙度数据，从而兼容各种 PBR 贴图打包惯例，并生成更准确的粗糙度 mipmaps 以减少别名与视觉伪影。 ([docs.godotengine.org][1], [docs.godotengine.org][2], [github.com][3])
+
+## PBR 通道打包背景
+
+现代 PBR 工作流程中，为了节省纹理数、减少 Draw Call，常会将多种属性打包到一张贴图的不同通道。例如，Godot 的 ORM（Occlusion-Roughness-Metallic）贴图中：R 通道存储遮挡度、G 通道存储粗糙度、B 通道存储金属度。 ([docs.godotengine.org][1])
+
+第三方工具（如 Unity、Substance Painter）也会将粗糙度（smoothness/roughness）存储在 metalness 贴图的 alpha 通道或其他通道中；不同项目或管线可能习惯不同通道。 ([reddit.com][4])
+
+Godot 在导入器中提供 “Roughness > Mode” 选项，允许用户指定哪一个颜色通道作为粗糙度源，以兼容上述多种打包方式。 ([docs.godotengine.org][2])
+
+## Godot 中的通道检测枚举
+
+在底层，Godot 的渲染服务器通过 `TextureDetectRoughnessChannel` 枚举以及相关回调，决定在生成 mipmaps 或动态更新时，使用哪一次通道来提取粗糙度。 ([github.com][3])
+
+```cpp
+// servers/rendering_server.h
+enum TextureDetectRoughnessChannel {
+	TEXTURE_DETECT_ROUGHNESS_R,
+	TEXTURE_DETECT_ROUGHNESS_G,
+	TEXTURE_DETECT_ROUGHNESS_B,
+	TEXTURE_DETECT_ROUGHNESS_A,
+	TEXTURE_DETECT_ROUGHNESS_GRAY,
+};
+```
+
+该枚举定义了五种类型：直接采样红、绿、蓝、或 alpha 通道，或使用灰度（平均或加权）通道。 ([github.com][3])
+
+在资源导入器中，例如 `editor/import/resource_importer_texture.cpp`，Godot 会调用 `Image::generate_mipmap_roughness(p_roughness_channel, …)`，根据所选通道来生成专门优化的粗糙度 mipmaps，以减少视觉伪影并改善材质过渡。 ([github.com][5])
+
+## 各枚举值含义
+
+* **`TEXTURE_DETECT_ROUGHNESS_R`**：从纹理的红色通道读取粗糙度，适用于将粗糙度存储在 R 通道的自定义管线。 ([github.com][3])
+* **`TEXTURE_DETECT_ROUGHNESS_G`**：从绿色通道读取，最常见于 ORM 贴图中的粗糙度。 ([github.com][3])
+* **`TEXTURE_DETECT_ROUGHNESS_B`**：从蓝色通道读取，某些工作流会将粗糙度打包在 B 通道。 ([github.com][3])
+* **`TEXTURE_DETECT_ROUGHNESS_A`**：从 alpha 通道读取，配合金属度贴图的 alpha 通道打包使用时非常常见。 ([docs.godotengine.org][2])
+* **`TEXTURE_DETECT_ROUGHNESS_GRAY`**：对全图做灰度处理（如通道平均或加权），适用于单通道灰度粗糙度贴图。 ([github.com][3])
+
+### 补充：与其他引擎的对比
+
+类似 three.js 的 RoughnessMipmapper，也会基于法线贴图或指定通道生成自定义粗糙度 mipmaps，以改善反射预滤波效果；Godot 的通道检测机制则更通用，兼容更多打包方式。 ([github.com][6])
+
+研究者也提出，利用法线贴图中的高频信息来动态生成或修正粗糙度 mipmaps，可以避免简单均值运算导致的细节丢失，突显了正确通道选择的重要性。 ([kosmonautblog.wordpress.com][7])
+
+[1]: https://docs.godotengine.org/en/latest/tutorials/3d/standard_material_3d.html?utm_source=chatgpt.com "Standard Material 3D and ORM Material 3D - Godot Docs"
+[2]: https://docs.godotengine.org/en/stable/tutorials/assets_pipeline/importing_images.html "Importing images — Godot Engine (stable) documentation in English"
+[3]: https://github.com/godotengine/godot/blob/master/servers/rendering_server.h?utm_source=chatgpt.com "godot/servers/rendering_server.h at master - GitHub"
+[4]: https://www.reddit.com/r/godot/comments/61hurv/setting_up_texture_maps_for_pbr_workflow_in_godot/?utm_source=chatgpt.com "Setting up texture maps for PBR workflow in Godot 3? - Reddit"
+[5]: https://github.com/godotengine/godot/blob/master/editor/import/resource_importer_texture.cpp?utm_source=chatgpt.com "godot/editor/import/resource_importer_texture.cpp at master - GitHub"
+[6]: https://github.com/donmccurdy/glTF-Transform/issues/467?utm_source=chatgpt.com "Embed custom mipmaps in KTX2 roughness textures #467 - GitHub"
+[7]: https://kosmonautblog.wordpress.com/2018/09/17/roughness-mip-maps-based-on-normal-maps/?utm_source=chatgpt.com "Roughness mip maps based on normal maps? - kosmonaut's blog"
+
+	*/
 
 	enum TextureDetectRoughnessChannel {
 		TEXTURE_DETECT_ROUGHNESS_R,
@@ -215,21 +368,31 @@ public:
 	typedef void (*TextureDetectRoughnessCallback)(void *, const String &, TextureDetectRoughnessChannel);
 	virtual void texture_set_detect_roughness_callback(RID p_texture, TextureDetectRoughnessCallback p_callback, void *p_userdata) = 0;
 
+	// 纹理信息
 	struct TextureInfo {
-		RID texture;
-		uint32_t width;
-		uint32_t height;
-		uint32_t depth;
-		Image::Format format;
-		int64_t bytes;
-		String path;
+		RID texture;		// 资源ID
+		uint32_t width;		// 宽
+		uint32_t height;	// 高
+		uint32_t depth;		// 深
+		Image::Format format;	// 图像格式
+		int64_t bytes;		// 字节数
+		String path;		// 路径
 	};
 
+	// 纯虚：调试纹理
 	virtual void texture_debug_usage(List<TextureInfo> *r_info) = 0;
 	Array _texture_debug_usage_bind();
 
+	// 纯虚：强制重新绘制纹理
 	virtual void texture_set_force_redraw_if_visible(RID p_texture, bool p_enable) = 0;
 
+	/*
+这三条方法属于在 RenderingServer 与 RenderingDevice（低级渲染后端）之间进行 纹理互操作 和 句柄获取 的接口，它们并不直接从 Image 数据或外部缓冲创建完整的 Godot 纹理，而是用于：
+
+在两套渲染 API 之间共享纹理资源（texture_rd_create / texture_get_rd_texture）
+
+获取原生 GPU 纹理句柄 以便与第三方 API 交互（texture_get_native_handle）
+	*/
 	virtual RID texture_rd_create(const RID &p_rd_texture, const RenderingServer::TextureLayeredType p_layer_type = RenderingServer::TEXTURE_LAYERED_2D_ARRAY) = 0;
 	virtual RID texture_get_rd_texture(RID p_texture, bool p_srgb = false) const = 0;
 	virtual uint64_t texture_get_native_handle(RID p_texture, bool p_srgb = false) const = 0;
