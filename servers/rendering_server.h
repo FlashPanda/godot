@@ -400,43 +400,55 @@ enum TextureDetectRoughnessChannel {
 	/* PIPELINES API */
 
 	enum PipelineSource {
-		PIPELINE_SOURCE_CANVAS,
-		PIPELINE_SOURCE_MESH,
-		PIPELINE_SOURCE_SURFACE,
-		PIPELINE_SOURCE_DRAW,
-		PIPELINE_SOURCE_SPECIALIZATION,
+		PIPELINE_SOURCE_CANVAS,		// 由 2D 画布渲染器（CanvasItem） 触发的管线编译，用于统计在执行 2D 绘制命令时新建 Shader 管线的次数
+		PIPELINE_SOURCE_MESH,	// 在 加载或处理 Mesh 资源时触发的管线编译。当首次运行场景并需要为 Mesh 创建渲染管线时，该计数会增加
+		PIPELINE_SOURCE_SURFACE,	// 在 构建表面缓存（Surface Cache） 以准备场景渲染之前触发的管线编译，该过程通常发生在场景加载阶段，可能会引起短暂卡顿
+		PIPELINE_SOURCE_DRAW,	// 在实际执行 Draw Call 绘制场景时触发的管线编译，如果某材质或着色器管线尚未编译，则会在渲染时动态编译
+		PIPELINE_SOURCE_SPECIALIZATION,	// 为了 优化当前场景 而在后台运行的管线专用化（Specialization）编译，这类编译不应阻塞主渲染线程，因此不会产生卡顿
 		PIPELINE_SOURCE_MAX
 	};
 
 	/* SHADER API */
-
+	// 着色器类型
 	enum ShaderMode {
-		SHADER_SPATIAL,
-		SHADER_CANVAS_ITEM,
-		SHADER_PARTICLES,
-		SHADER_SKY,
-		SHADER_FOG,
+		SHADER_SPATIAL,			// 3D着色器
+		SHADER_CANVAS_ITEM,		// 2D着色器
+		SHADER_PARTICLES,		// 粒子着色器
+		SHADER_SKY,				// 天空着色器
+		SHADER_FOG,				// 雾着色器
 		SHADER_MAX
 	};
 
+	// 剔除模式：禁用、剔除前面、剔除背面
 	enum CullMode {
 		CULL_MODE_DISABLED,
 		CULL_MODE_FRONT,
 		CULL_MODE_BACK,
 	};
 
+	// 纯虚：创建着色器
 	virtual RID shader_create() = 0;
+	// 纯虚：从代码创建着色器
 	virtual RID shader_create_from_code(const String &p_code, const String &p_path_hint = String()) = 0;
 
+	// 纯虚：设置着色器代码
 	virtual void shader_set_code(RID p_shader, const String &p_code) = 0;
+	// 纯虚：设置着色器路径提示
 	virtual void shader_set_path_hint(RID p_shader, const String &p_path) = 0;
+	// 纯虚：获取着色器的代码
 	virtual String shader_get_code(RID p_shader) const = 0;
+	// 纯虚：获取着色器的参数列表
 	virtual void get_shader_parameter_list(RID p_shader, List<PropertyInfo> *p_param_list) const = 0;
+	// 纯虚：获取指定 Shader 资源中某个 Uniform 参数的默认值
 	virtual Variant shader_get_parameter_default(RID p_shader, const StringName &p_param) const = 0;
 
+	// 纯虚：设置默认的纹理参数
 	virtual void shader_set_default_texture_parameter(RID p_shader, const StringName &p_name, RID p_texture, int p_index = 0) = 0;
+	// 纯虚：获取默认的纹理参数
 	virtual RID shader_get_default_texture_parameter(RID p_shader, const StringName &p_name, int p_index = 0) const = 0;
 
+	// 完整地保存一个 Shader 的多版本、多阶段原生源码，以便在不同后端（如 GLES、Vulkan、Metal 等）中按需编译和专用化。
+	// 也就是说，后端不同，代码也是有差异的。
 	struct ShaderNativeSourceCode {
 		struct Version {
 			struct Stage {
@@ -448,42 +460,63 @@ enum TextureDetectRoughnessChannel {
 		Vector<Version> versions;
 	};
 
+	// 纯虚：获取原生的着色器源码
 	virtual ShaderNativeSourceCode shader_get_native_source_code(RID p_shader) const = 0;
 
 	/* COMMON MATERIAL API */
-	// 通用材质API
+	/* 通用材质API */ 
+
+	// 材质的优先级数量
+	// Godot 会先将所有透明对象按深度（back-to-front）排序，再在同一深度顺序中按 render_priority 从小到大绘制，数值越大越“靠后”被绘制（即越“在上面”）。
 	enum {
 		MATERIAL_RENDER_PRIORITY_MIN = -128,
 		MATERIAL_RENDER_PRIORITY_MAX = 127,
 	};
 
+	// 纯虚：创建材质
 	virtual RID material_create() = 0;
+	// 纯虚：从着色器创建材质
 	virtual RID material_create_from_shader(RID p_next_pass, int p_render_priority, RID p_shader) = 0;
 
+	// 纯虚：设置着色器的材质
 	virtual void material_set_shader(RID p_shader_material, RID p_shader) = 0;
 
+	// 纯虚：设置材质的参数。
 	virtual void material_set_param(RID p_material, const StringName &p_param, const Variant &p_value) = 0;
+	// 纯虚：获取材质的某个参数的值
 	virtual Variant material_get_param(RID p_material, const StringName &p_param) const = 0;
 
+	// 纯虚：设置渲染优先级
 	virtual void material_set_render_priority(RID p_material, int priority) = 0;
 
+	// 纯虚：设置下一个材质
+	// 用于在同一个材质上串联多个渲染通道（pass），也就是在渲染完当前材质后，紧接着使用另一个材质再进行一次绘制。
+	// 形成了一个链式的多通道渲染流程，前一个材质的输出可以作为后一个材质的输入或背景
 	virtual void material_set_next_pass(RID p_material, RID p_next_material) = 0;
 
 	/* MESH API */
 
 	// 数组类型
 	enum ArrayType {
+		// RGBA16这种格式到底映射成unorm还是snorm需要看引擎自己的实现
+
 		ARRAY_VERTEX = 0, // RG32F (2D), RGB32F, RGBA16 (compressed)
-		ARRAY_NORMAL = 1, // RG16
+							// 2D数组的数据格式是：RG32F，（float x 2)
+							// 3D数组的格式是：RGB32F, (float x 3)
+							// 3D压缩后的格式是：RGBA16，(uint16_t × 4，或 int16_t x 4)
+		ARRAY_NORMAL = 1, // RG16, (int16_t x 2 或 uint16_t x 2)
 		ARRAY_TANGENT = 2, // BA16 (with normal) or A16 (with vertex, when compressed)
+							// (uint16或int16), (uint16或int16）
 		ARRAY_COLOR = 3, // RGBA8
 		ARRAY_TEX_UV = 4, // RG32F or RG16
 		ARRAY_TEX_UV2 = 5, // RG32F or RG16
-		ARRAY_CUSTOM0 = 6, // Depends on ArrayCustomFormat.
+		ARRAY_CUSTOM0 = 6, // Depends on ArrayCustomFormat.	 依赖于数组自定义的格式。
 		ARRAY_CUSTOM1 = 7,
 		ARRAY_CUSTOM2 = 8,
 		ARRAY_CUSTOM3 = 9,
 		ARRAY_BONES = 10, // RGBA16UI (x2 if 8 weights)
+							// RGBA16UI：4 通道×16 位无符号整数（uint16_t）
+							// x2 if 8 weights：当每顶点骨骼权重超过 4 个，需要用两组该格式数组来存储最多 8 个索引
 		ARRAY_WEIGHTS = 11, // RGBA16UNORM (x2 if 8 weights)
 		ARRAY_INDEX = 12, // 16 or 32 bits depending on length > 0xFFFF.
 		ARRAY_MAX = 13
