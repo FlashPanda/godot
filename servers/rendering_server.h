@@ -518,7 +518,9 @@ enum TextureDetectRoughnessChannel {
 							// RGBA16UI：4 通道×16 位无符号整数（uint16_t）
 							// x2 if 8 weights：当每顶点骨骼权重超过 4 个，需要用两组该格式数组来存储最多 8 个索引
 		ARRAY_WEIGHTS = 11, // RGBA16UNORM (x2 if 8 weights)
+							// 顶点骨骼权重数组，格式为 RGBA16UNORM，每个通道是 16 位归一化无符号整数；若每顶点使用 8 个权重，则需要两组这样的权重数组（“x2 if 8 weights”）。
 		ARRAY_INDEX = 12, // 16 or 32 bits depending on length > 0xFFFF.
+							// 索引缓冲数组，用于绘制时从顶点数组中索引顶点。若顶点总数不超过 0xFFFF （65535），则使用 16 位无符号整数；超出时自动切换为 32 位无符号整数。
 		ARRAY_MAX = 13
 	};
 
@@ -528,19 +530,20 @@ enum TextureDetectRoughnessChannel {
 
 	// 自定义数据格式
 	enum ArrayCustomFormat {
-		ARRAY_CUSTOM_RGBA8_UNORM,
-		ARRAY_CUSTOM_RGBA8_SNORM,
-		ARRAY_CUSTOM_RG_HALF,
-		ARRAY_CUSTOM_RGBA_HALF,
-		ARRAY_CUSTOM_R_FLOAT,
-		ARRAY_CUSTOM_RG_FLOAT,
-		ARRAY_CUSTOM_RGB_FLOAT,
-		ARRAY_CUSTOM_RGBA_FLOAT,
+		ARRAY_CUSTOM_RGBA8_UNORM,	// uint8_t x 4
+		ARRAY_CUSTOM_RGBA8_SNORM,	// int8_t x 4
+		ARRAY_CUSTOM_RG_HALF,		// float16 x 2
+		ARRAY_CUSTOM_RGBA_HALF,		// float16 x 4
+		ARRAY_CUSTOM_R_FLOAT,		// float
+		ARRAY_CUSTOM_RG_FLOAT,		// float x 2
+		ARRAY_CUSTOM_RGB_FLOAT,		// float x 3
+		ARRAY_CUSTOM_RGBA_FLOAT,	// float x 4
 		ARRAY_CUSTOM_MAX
 	};
 
 	enum ArrayFormat : uint64_t {
 		/* ARRAY FORMAT FLAGS */
+		// 数组格式标记
 		ARRAY_FORMAT_VERTEX = 1 << ARRAY_VERTEX,
 		ARRAY_FORMAT_NORMAL = 1 << ARRAY_NORMAL,
 		ARRAY_FORMAT_TANGENT = 1 << ARRAY_TANGENT,
@@ -555,8 +558,11 @@ enum TextureDetectRoughnessChannel {
 		ARRAY_FORMAT_WEIGHTS = 1 << ARRAY_WEIGHTS,
 		ARRAY_FORMAT_INDEX = 1 << ARRAY_INDEX,
 
+		// “蒙皮变形（Blend Shape）”数组允许携带的顶点通道掩码。这里表示只允许顶点、法线、切线三种数据
 		ARRAY_FORMAT_BLEND_SHAPE_MASK = ARRAY_FORMAT_VERTEX | ARRAY_FORMAT_NORMAL | ARRAY_FORMAT_TANGENT,
 
+		// 自定义通道
+		// 最多 4 组自定义通道的格式信息以连续位块方式存储，避免为每组通道单独分配枚举值
 		ARRAY_FORMAT_CUSTOM_BASE = (ARRAY_INDEX + 1),
 		ARRAY_FORMAT_CUSTOM_BITS = 3,
 		ARRAY_FORMAT_CUSTOM_MASK = 0x7,
@@ -565,26 +571,37 @@ enum TextureDetectRoughnessChannel {
 		ARRAY_FORMAT_CUSTOM2_SHIFT = (ARRAY_FORMAT_CUSTOM_BASE + ARRAY_FORMAT_CUSTOM_BITS * 2),
 		ARRAY_FORMAT_CUSTOM3_SHIFT = (ARRAY_FORMAT_CUSTOM_BASE + ARRAY_FORMAT_CUSTOM_BITS * 3),
 
+		// 压缩位起始
 		ARRAY_COMPRESS_FLAGS_BASE = (ARRAY_INDEX + 1 + 12),
 
+		// 数组使用2D顶点
 		ARRAY_FLAG_USE_2D_VERTICES = 1 << (ARRAY_COMPRESS_FLAGS_BASE + 0),
+		// 数组使用动态更新
 		ARRAY_FLAG_USE_DYNAMIC_UPDATE = 1 << (ARRAY_COMPRESS_FLAGS_BASE + 1),
+		// 数组使用8骨骼权重
 		ARRAY_FLAG_USE_8_BONE_WEIGHTS = 1 << (ARRAY_COMPRESS_FLAGS_BASE + 2),
 
+		// 数组标记位空的顶点数组
 		ARRAY_FLAG_USES_EMPTY_VERTEX_ARRAY = 1 << (ARRAY_COMPRESS_FLAGS_BASE + 3),
 
+		// 压缩属性
 		ARRAY_FLAG_COMPRESS_ATTRIBUTES = 1 << (ARRAY_COMPRESS_FLAGS_BASE + 4),
 		// We leave enough room for up to 5 more compression flags.
+		// 这里保留了足够的空间，预留5个压缩标记
 
+		// mesh格式版本的标记
 		ARRAY_FLAG_FORMAT_VERSION_BASE = ARRAY_COMPRESS_FLAGS_BASE + 10,
 		ARRAY_FLAG_FORMAT_VERSION_SHIFT = ARRAY_FLAG_FORMAT_VERSION_BASE,
 		// When changes are made to the mesh format, add a new version and use it for the CURRENT_VERSION.
+		// 如果网格格式改变了，增加一个新的格式版本，并且将其设置位当前版本。
 		ARRAY_FLAG_FORMAT_VERSION_1 = 0,
 		ARRAY_FLAG_FORMAT_VERSION_2 = 1ULL << ARRAY_FLAG_FORMAT_VERSION_SHIFT,
 		ARRAY_FLAG_FORMAT_CURRENT_VERSION = ARRAY_FLAG_FORMAT_VERSION_2,
 		ARRAY_FLAG_FORMAT_VERSION_MASK = 0xFF, // 8 bits version
+												// 用于在已经左移后的标志值中，隔离出那 8 位的版本号（& 0xFF）
 	};
 
+	// 静态断言，编译断言。
 	static_assert(sizeof(ArrayFormat) == 8, "ArrayFormat should be 64 bits long.");
 
 	// 五种图元类型：点、线、线带、三角形、三角形带
@@ -597,136 +614,301 @@ enum TextureDetectRoughnessChannel {
 		PRIMITIVE_MAX,
 	};
 
-	// 三角形信息封装成表面数据
+	// 单个表面数据
 	// 以表面数据为单位进行绘制而不是一个object
 	struct SurfaceData {
 		PrimitiveType primitive = PRIMITIVE_MAX;
 
-		uint64_t format = ARRAY_FLAG_FORMAT_CURRENT_VERSION;
+		uint64_t format = ARRAY_FLAG_FORMAT_CURRENT_VERSION;		// 数组格式的当前版本号
 		Vector<uint8_t> vertex_data; // Vertex, Normal, Tangent (change with skinning, blendshape).
+									// 顶点数据，包括顶点、法线、切线，会因为蒙皮改变，混合形状
 		Vector<uint8_t> attribute_data; // Color, UV, UV2, Custom0-3.
+									// 属性数据：颜色、uv、uv2、自定义0-3
 		Vector<uint8_t> skin_data; // Bone index, Bone weight.
-		uint32_t vertex_count = 0;
-		Vector<uint8_t> index_data;
-		uint32_t index_count = 0;
+									// 蒙皮数据：骨骼索引、骨骼权重
+		uint32_t vertex_count = 0;		// 顶点数量
+		Vector<uint8_t> index_data;		// 索引数据
+		uint32_t index_count = 0;		// 索引数量
 
-		AABB aabb;
-		struct LOD {
+		AABB aabb;		// 加速剔除的AABB包围盒
+		struct LOD {	// 多级细节的索引集，按 edge_length 决定开启条件
 			float edge_length = 0.0f;
 			Vector<uint8_t> index_data;
 		};
-		Vector<LOD> lods;
-		Vector<AABB> bone_aabbs;
+		Vector<LOD> lods;	// 所有LOD数据
+		Vector<AABB> bone_aabbs;	// 骨骼在网格空间下的包围盒列表，用于可视化或剔除
 
 		// Transforms used in runtime bone AABBs compute.
 		// Since bone AABBs is saved in Mesh space, but bones is in Skeleton space.
-		Transform3D mesh_to_skeleton_xform;
+		Transform3D mesh_to_skeleton_xform;	// 将网格顶点坐标转换到骨骼空间以计算 bone_aabbs
 
-		Vector<uint8_t> blend_shape_data;
+		Vector<uint8_t> blend_shape_data;	// 存储各 Blend Shape 增量顶点信息，可逐帧或插值变形
 
-		Vector4 uv_scale;
+		Vector4 uv_scale;	// 局部 UV 缩放因子，常用于光照贴图或其它 UV 变换。
+							// 这应该是有2个uv所以才是vector4
 
-		RID material;
+		RID material;	// 材质的ID
 	};
 
+	/*
+	在 Godot 的底层渲染服务器（RenderingServer）中，SurfaceData 表示单个“面”（surface）的原始顶点/索引等数据结构，而 Mesh 则是一个资源（Resource），用于将若干个面组织在一起，并以一个可复用的 RID（资源 ID）进行管理和渲染。即使已有若干 SurfaceData，依然需要先创建一个 Mesh，然后将这些面添加到该 Mesh 中，才能在引擎中使用或渲染。
+	*/
+
+	// 纯虚：从表面创建mesh
 	virtual RID mesh_create_from_surfaces(const Vector<SurfaceData> &p_surfaces, int p_blend_shape_count = 0) = 0;
+	// 纯虚：创建mesh
 	virtual RID mesh_create() = 0;
 
+
+	/*
+		Godot 中的 Blend Shape 数据以“顶点偏移量”形式（deltas）单独存储，
+		不会直接写入或覆盖 Mesh 的原始顶点缓冲区。在运行时引擎会将这些偏移
+		量按权重临时叠加到基础顶点上生成最终形变效果，基础 Mesh 数据始终保
+		持不变；只有在显式“烘焙”到新 Mesh 时，变形结果才会真正写入顶点。
+	*/
+
+	// 用于告诉引擎：某个 Mesh 资源将包含多少个 Blend Shape（形状关键帧），以便在内部为每个 surface 分配相应的数据结构和内存。
 	virtual void mesh_set_blend_shape_count(RID p_mesh, int p_blend_shape_count) = 0;
 
+	// 返回由 array_index 指定的数组在其所属缓冲区开头的字节偏移量，方便区域更新或直接映射内存时定位起点。
 	virtual uint32_t mesh_surface_get_format_offset(BitField<ArrayFormat> p_format, int p_vertex_len, int p_array_index) const;
+	// 返回顶点缓冲区内相邻两顶点位置数据之间的字节距离（步幅）。
 	virtual uint32_t mesh_surface_get_format_vertex_stride(BitField<ArrayFormat> p_format, int p_vertex_len) const;
+	// 返回法线与切线联合数据在缓冲区内的字节步幅。尽管它们与顶点位置使用同一缓冲，但二者仅相互交错，因此步幅不同于位置数据。
 	virtual uint32_t mesh_surface_get_format_normal_tangent_stride(BitField<ArrayFormat> p_format, int p_vertex_len) const;
+	// 获取顶点属性（UV、顶点色、自定义属性等）数组在其缓冲区内的字节步幅
 	virtual uint32_t mesh_surface_get_format_attribute_stride(BitField<ArrayFormat> p_format, int p_vertex_len) const;
+	// 返回蒙皮数据（骨骼索引与权重）在缓冲区内的字节步幅，保证 GPU 按顶点顺序正确读取每个顶点的所有蒙皮影响值。
 	virtual uint32_t mesh_surface_get_format_skin_stride(BitField<ArrayFormat> p_format, int p_vertex_len) const;
 
 	/// Returns stride
+	/*
+		共同负责在脚本层的数组（Array、Packed*Array 等）与引擎内部的二进制网格数据（SurfaceData）
+		之间相互转换，并提供对已有 Mesh 资源中各表面（surface）的几何、蒙皮、Blend Shape 和 LOD
+		信息的查询
+	*/
+
+	/*
+	根据 p_format（由 ArrayFormat 枚举按位或得到的位掩码）以及顶点数 p_vertex_len、索引数 p_index_len，计算各 ArrayType（顶点、法线、切线、颜色、UV、定制属性、骨骼索引、骨骼权重、索引等）在互联顶点缓冲区中的起始偏移，并返回总的顶点步长（stride）。同时，分别输出顶点位置、法线、属性（UV/颜色/自定义）和蒙皮数据的元素尺寸，以供底层渲染管线创建 GPU 缓冲使用
+	*/
 	virtual void mesh_surface_make_offsets_from_format(uint64_t p_format, int p_vertex_len, int p_index_len, uint32_t *r_offsets, uint32_t &r_vertex_element_size, uint32_t &r_normal_element_size, uint32_t &r_attrib_element_size, uint32_t &r_skin_element_size) const;
+	// 从数组数据创建表面结构
 	virtual Error mesh_create_surface_data_from_arrays(SurfaceData *r_surface_data, PrimitiveType p_primitive, const Array &p_arrays, const Array &p_blend_shapes = Array(), const Dictionary &p_lods = Dictionary(), uint64_t p_compress_format = 0);
+	// 从表面数据创建数组
 	Array mesh_create_arrays_from_surface_data(const SurfaceData &p_data) const;
+	// 获取表面数据，我觉得可以用一个重载函数来完成，因为这个函数就是调用上面的东西
+	// 或者如果要给脚本调用的化，那就不能重载
 	Array mesh_surface_get_arrays(RID p_mesh, int p_surface) const;
+	// 获取混合形状数组
 	TypedArray<Array> mesh_surface_get_blend_shape_arrays(RID p_mesh, int p_surface) const;
+	// 获取LOD字典
 	Dictionary mesh_surface_get_lods(RID p_mesh, int p_surface) const;
 
+	// 给网格增加表面数据，从数组获取数据
 	virtual void mesh_add_surface_from_arrays(RID p_mesh, PrimitiveType p_primitive, const Array &p_arrays, const Array &p_blend_shapes = Array(), const Dictionary &p_lods = Dictionary(), BitField<ArrayFormat> p_compress_format = 0);
+	// 把表面添加到网格
 	virtual void mesh_add_surface(RID p_mesh, const SurfaceData &p_surface) = 0;
 
+	// 获取混合形状数量
 	virtual int mesh_get_blend_shape_count(RID p_mesh) const = 0;
 
+	/*
+		BlendShapeMode（归一化或相对模式）的设置作用于整个 Mesh 资源，而非单个 Surface。原因在于 Blend Shape 本质上是对网格整体顶点形状的插值或偏移，其权重计算需要跨越所有 Surface 进行统一处理。Surface 仅用于将几何数据按材质分组，但并不改变形状混合的统计方式，因此 BlendShapeMode 只能在 Mesh 级别定义。
+	*/
+
 	enum BlendShapeMode {
-		BLEND_SHAPE_MODE_NORMALIZED,
-		BLEND_SHAPE_MODE_RELATIVE,
+		BLEND_SHAPE_MODE_NORMALIZED,		// 对权重进行归一化处理，使多个形状的混合结果相当于各目标形状的线性插值
+		BLEND_SHAPE_MODE_RELATIVE,			// 权重值直接作为相对于基准形状（base shape）的偏移量，相互之间不做归一化。
 	};
 
+	// 设置混合形状的模式
 	virtual void mesh_set_blend_shape_mode(RID p_mesh, BlendShapeMode p_mode) = 0;
+	// 获取混合形状的模式
 	virtual BlendShapeMode mesh_get_blend_shape_mode(RID p_mesh) const = 0;
 
+	// 更新表面的顶点区域
 	virtual void mesh_surface_update_vertex_region(RID p_mesh, int p_surface, int p_offset, const Vector<uint8_t> &p_data) = 0;
+	// 更新表面的属性区域
 	virtual void mesh_surface_update_attribute_region(RID p_mesh, int p_surface, int p_offset, const Vector<uint8_t> &p_data) = 0;
+	// 更新表面的蒙皮区域
 	virtual void mesh_surface_update_skin_region(RID p_mesh, int p_surface, int p_offset, const Vector<uint8_t> &p_data) = 0;
 
+	// 设置表面的材质
 	virtual void mesh_surface_set_material(RID p_mesh, int p_surface, RID p_material) = 0;
+	// 获取表面的材质
 	virtual RID mesh_surface_get_material(RID p_mesh, int p_surface) const = 0;
 
+	// 获取网格的表面数据
 	virtual SurfaceData mesh_get_surface(RID p_mesh, int p_surface) const = 0;
 
+	// 获取网格的表面数量
 	virtual int mesh_get_surface_count(RID p_mesh) const = 0;
 
+	/*
+	为什么需要自定义 AABB
+动态顶点偏移
+
+当你在顶点着色器里根据世界位置或其他参数对顶点进行位移时，自动计算的 AABB 只包含原始网格，无法涵盖偏移后的部分，导致物体在视图中“消失”或误判可见性。
+
+例如，GitHub 上就有人反馈同一个 Mesh 资源在不同实例上因着色器偏移而需要不同的包围盒，才不会错误剔除。
+github.com
+
+程序生成或变形网格
+
+在运行时根据逻辑生成或修改顶点数据后，如果不重新计算 AABB，会无法正确反映新范围。手动指定能省去额外的顶点遍历开销。
+
+统一控制内存与性能
+
+对大型场景中大量共用同一 Mesh 的情况，用自定义 AABB 可以避免每帧自动扫描所有顶点，减轻 CPU 负担。
+	*/
+
+	// 设置网格的自定义AABB
 	virtual void mesh_set_custom_aabb(RID p_mesh, const AABB &p_aabb) = 0;
 	virtual AABB mesh_get_custom_aabb(RID p_mesh) const = 0;
 
+	// 设置/获取路径
 	virtual void mesh_set_path(RID p_mesh, const String &p_path) = 0;
 	virtual String mesh_get_path(RID p_mesh) const = 0;
 
+	// 设置阴影网格
+	// 用简单的网格取产生阴影，这样的开销会小很多
 	virtual void mesh_set_shadow_mesh(RID p_mesh, RID p_shadow_mesh) = 0;
 
+	// 删除表面
 	virtual void mesh_surface_remove(RID p_mesh, int p_surface) = 0;
+	// 清空网格
 	virtual void mesh_clear(RID p_mesh) = 0;
 
 	/* MULTIMESH API */
 
+	/*
+MultiMesh 是 Godot 引擎中用于\*\*网格实例化（GPU Instancing）\*\*的专用资源。通过 `multimesh_create()`，你可以在 RenderingServer 上创建一个 MultiMesh 资源的句柄（RID），并在后续的所有 `multimesh_*` 接口中使用它。这个资源允许一次性提交成千上万的相同网格实例，只需一次绘制调用，大幅降低 API 调用开销，提高渲染性能。([docs.godot.community][1], [docs.godotengine.org][2])
+
+## MultiMesh 资源概述
+
+MultiMesh 是 Godot 提供的“低级网格实例化”解决方案，旨在替代大量单独的 `MeshInstance3D` 节点的逐个绘制方式。
+
+* **批量实例化**：一次 API 调用即可渲染成千上万个网格实例，避免了重复的节点提交与渲染指令生成。([docs.godotengine.org][2], [docs.godotengine.org][3])
+* **资源类型**：在 Godot 资源系统中，MultiMesh 继承自 `Resource`，可以在加载时缓存，也可在运行时通过 RenderingServer 动态创建与销毁。([docs.godot.community][1])
+
+## multimesh\_create() 的作用
+
+* **创建 RID**：调用 `RenderingServer.multimesh_create()` 会在渲染服务器内部生成一个空的 MultiMesh 资源，并返回其 RID。该 RID 是后续所有 `multimesh_*` 函数的唯一标识。([docs.godot.community][1], [github.com][4])
+* **生命周期管理**：使用完毕后，需通过 `RenderingServer.free_rid(rid)` 手动释放，避免内存泄漏。([docs.godot.community][1])
+
+## 为什么将多个 Mesh 视为一个资源
+
+1. **减少绘制调用（Draw Call）数量**
+
+   * 单独渲染每个 `MeshInstance3D` 会产生对应数量的 API 调用，随实例数量增加线性增长，严重消耗 CPU 开销。
+   * MultiMesh 在 GPU 端使用硬件实例化，一次调用即可绘制所有实例，调用次数恒定为 1。([github.com][5], [reddit.com][6])
+2. **共享几何数据**
+
+   * 多个实例共享同一份顶点与索引数据，只需在实例缓冲区中更新变换矩阵或自定义数据，极大节约内存与带宽。([docs.godotengine.org][2])
+
+## 使用场景示例
+
+* **植被与草地**：在大面积地形上散布数千棵树或草丛，用 MultiMesh 绘制，性能几乎不受实例数量影响。([docs.godotengine.org][7])
+* **粒子与小物件**：需渲染大量相同模型的粒子效果、子弹、石子等，使用 MultiMesh 可避免过多节点开销。([godotforums.org][8])
+
+## 示例代码
+
+```gdscript
+# GDScript：创建并使用 MultiMesh
+var mm_rid = RenderingServer.multimesh_create()             # 创建 RID
+RenderingServer.multimesh_set_mesh(mm_rid, mesh.get_rid())  # 绑定基础网格
+RenderingServer.multimesh_set_instance_count(mm_rid, 1000) # 设置实例数量
+
+# 填充每个实例的变换矩阵
+for i in range(1000):
+	var xform = Transform3D(Basis(), Vector3(randf()*10,0,randf()*10))
+	RenderingServer.multimesh_set_instance_transform(mm_rid, i, xform)
+
+# 在场景中实例化
+var instance_rid = RenderingServer.instance_create()
+RenderingServer.instance_set_base(instance_rid, mm_rid)
+```
+
+上述代码中，`multimesh_create()` 返回的 RID 可用于后续所有 MultiMesh 操作，最终通过 `instance_set_base` 将其挂载到场景实例上。([github.com][4])
+
+---
+
+MultiMesh 将成百上千个相同网格实例打包成一个资源提交给渲染管线，是 Godot 中提升批量渲染性能的核心手段。通过 `multimesh_create()` 创建并管理该资源，即可显著降低 CPU 与 GPU 间的通信开销。
+
+[1]: https://docs.godot.community/classes/class_renderingserver.html?utm_source=chatgpt.com "RenderingServer - Godot Docs"
+[2]: https://docs.godotengine.org/en/stable/classes/class_multimesh.html?utm_source=chatgpt.com "MultiMesh — Godot Engine (stable) documentation in English"
+[3]: https://docs.godotengine.org/en/4.3/classes/class_multimesh.html?utm_source=chatgpt.com "MultiMesh — Godot Engine (4.3) documentation in English"
+[4]: https://github.com/godotengine/godot/blob/master/scene/resources/multimesh.cpp?utm_source=chatgpt.com "godot/scene/resources/multimesh.cpp at master - GitHub"
+[5]: https://github.com/godotengine/godot/issues/17472?utm_source=chatgpt.com "MultiMesh: Support different material per instance #17472 - GitHub"
+[6]: https://www.reddit.com/r/godot/comments/1fozyli/rendering_server_and_instancing/?utm_source=chatgpt.com "Rendering server and instancing : r/godot - Reddit"
+[7]: https://docs.godotengine.org/en/3.1/tutorials/3d/using_multi_mesh_instance.html?utm_source=chatgpt.com "Using MultiMeshInstance - Godot Docs"
+[8]: https://godotforums.org/d/36544-multimesh3d-via-renderingserver?utm_source=chatgpt.com "MultiMesh3D via RenderingServer - Godot Forums"
+
+	*/
 	virtual RID multimesh_create() = 0;
 
+	// 变换的格式，是2D还是3D
 	enum MultimeshTransformFormat {
 		MULTIMESH_TRANSFORM_2D,
 		MULTIMESH_TRANSFORM_3D,
 	};
 
+	// 物理插值时速度和质量的侧重
 	enum MultimeshPhysicsInterpolationQuality {
 		MULTIMESH_INTERP_QUALITY_FAST,
 		MULTIMESH_INTERP_QUALITY_HIGH,
 	};
 
+	// 多网格分配数据空间
 	virtual void multimesh_allocate_data(RID p_multimesh, int p_instances, MultimeshTransformFormat p_transform_format, bool p_use_colors = false, bool p_use_custom_data = false) = 0;
+	// 多网格获取实例数量
 	virtual int multimesh_get_instance_count(RID p_multimesh) const = 0;
 
+	// 多网格设置单个网格
 	virtual void multimesh_set_mesh(RID p_multimesh, RID p_mesh) = 0;
+	// 设置实例的变换3D
 	virtual void multimesh_instance_set_transform(RID p_multimesh, int p_index, const Transform3D &p_transform) = 0;
+	// 设置实例的变换2D
 	virtual void multimesh_instance_set_transform_2d(RID p_multimesh, int p_index, const Transform2D &p_transform) = 0;
+	// 设置实例的颜色
 	virtual void multimesh_instance_set_color(RID p_multimesh, int p_index, const Color &p_color) = 0;
+	// 设置实例的自定义数据
 	virtual void multimesh_instance_set_custom_data(RID p_multimesh, int p_index, const Color &p_color) = 0;
 
+	// 获取多网格中的那个主网格资源ID
 	virtual RID multimesh_get_mesh(RID p_multimesh) const = 0;
+	// 获取多网格的AABB
 	virtual AABB multimesh_get_aabb(RID p_multimesh) const = 0;
 
+	// 设置/获取多网格中主网格的自定义aabb
 	virtual void multimesh_set_custom_aabb(RID p_mesh, const AABB &p_aabb) = 0;
 	virtual AABB multimesh_get_custom_aabb(RID p_mesh) const = 0;
 
+	// 获取多网格实例的变换
 	virtual Transform3D multimesh_instance_get_transform(RID p_multimesh, int p_index) const = 0;
 	virtual Transform2D multimesh_instance_get_transform_2d(RID p_multimesh, int p_index) const = 0;
 	virtual Color multimesh_instance_get_color(RID p_multimesh, int p_index) const = 0;
 	virtual Color multimesh_instance_get_custom_data(RID p_multimesh, int p_index) const = 0;
+
+	/*
+	在 Godot 的渲染服务器（RenderingServer）中，multimesh_set_buffer、multimesh_get_buffer 和 multimesh_get_buffer_rd_rid 三个函数用于对 MultiMesh 的底层实例数据进行批量读写和获取其在渲染设备上的资源句柄。其中，multimesh_set_buffer 接受一个连续的浮点数组（Vector<float>），一次性上传所有实例的变换、颜色和自定义数据；multimesh_get_buffer 则以同样的格式将当前缓冲区数据复制回用户并返回；而 multimesh_get_buffer_rd_rid 则返回底层的渲染设备（RenderingDevice）缓冲区资源 ID，可用于直接绑定到 compute shader 或自定义渲染管线中
+	*/
 
 	virtual void multimesh_set_buffer(RID p_multimesh, const Vector<float> &p_buffer) = 0;
 	virtual RID multimesh_get_buffer_rd_rid(RID p_multimesh) const = 0;
 	virtual Vector<float> multimesh_get_buffer(RID p_multimesh) const = 0;
 
 	// Interpolation.
+	// 对buffer进行插值
 	virtual void multimesh_set_buffer_interpolated(RID p_multimesh, const Vector<float> &p_buffer_curr, const Vector<float> &p_buffer_prev) = 0;
+	// 对物理进行插值
 	virtual void multimesh_set_physics_interpolated(RID p_multimesh, bool p_interpolated) = 0;
+	// 物理插值，设置质量侧重
 	virtual void multimesh_set_physics_interpolation_quality(RID p_multimesh, MultimeshPhysicsInterpolationQuality p_quality) = 0;
+	// 重置物理插值
 	virtual void multimesh_instance_reset_physics_interpolation(RID p_multimesh, int p_index) = 0;
 
+	// 设置实例可见性
 	virtual void multimesh_set_visible_instances(RID p_multimesh, int p_visible) = 0;
 	virtual int multimesh_get_visible_instances(RID p_multimesh) const = 0;
 
