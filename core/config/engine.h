@@ -38,6 +38,17 @@
 template <typename T>
 class TypedArray;
 
+/**
+ * 不是指具体的渲染器或物理模块，而是指核心运行时的“引擎实例”.
+ * 一个从 C++ 代码层面管理整个应用生命周期、全局参数和全局单例（singleton）的核心类。
+ * 无论是运行时帧率、物理步长、时间缩放，还是插件/模块注册、许可证信息查询，都通过这个 Engine 单例来完成。
+ * 其核心功能为：
+ *		全局单例与脚本语言管理
+ *		运行时参数控制
+ *		构建与版本信息查询
+ *
+ * 虽然真正控制 App 启动、循环迭代、关闭的是 Main 类及其 MainLoop（通常是 SceneTree）实例，但 Engine 类提供对这一循环框架的辅助支持
+ */
 class Engine {
 public:
 	struct Singleton {

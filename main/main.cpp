@@ -947,42 +947,65 @@ int Main::test_entrypoint(int argc, char *argv[], bool &tests_need_run) {
  */
 
 Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_phase) {
+	// 将当前线程设置为主线程
 	Thread::make_main_thread();
+	// 当前线程是节点安全线程
 	set_current_thread_safe_for_nodes(true);
 
+	// 作为系统的单例进行初始化
 	OS::get_singleton()->initialize();
 
 	// Benchmark tracking must be done after `OS::get_singleton()->initialize()` as on some
 	// platforms, it's used to set up the time utilities.
+	// 书签式追踪必须在初始化之后，因为在某些平台初始化方法里会设置一些时间的通用信息。
+	// 也就是说没法追踪初始化的耗时。
 	OS::get_singleton()->benchmark_begin_measure("Startup", "Main::Setup");
 
+	// 创建引擎。
+	// 这个Engine可以理解为一个app的抽象，是应用程序的实例。
 	engine = memnew(Engine);
 
 	MAIN_PRINT("Main: Initialize CORE");
 
+	// 注册核心类型
 	register_core_types();
+	// 注册核心驱动类型，包括图片加载和资源保存
 	register_core_driver_types();
 
 	MAIN_PRINT("Main: Initialize Globals");
 
+	// 输入映射
 	input_map = memnew(InputMap);
+	// 全局配置
 	globals = memnew(ProjectSettings);
 
+	// 注册核心设置
+	// 向全局 ProjectSettings（通常变量名为 globals）中添加默认的引擎配置项。
+	// 使用 GLOBAL_DEF 宏定义各种默认值，例如网络超时、线程池大小、TLS 证书路径等，
+	// 这样在没有用户 project.godot 文件覆盖时也能保证引擎有合理的运行参数。
 	register_core_settings(); //here globals are present
 
+	// 语言翻译和本地化的服务
 	translation_server = memnew(TranslationServer);
+	// 性能对象
 	performance = memnew(Performance);
+	// GD注册性能类
 	GDREGISTER_CLASS(Performance);
+	// 添加性能的单例对象
 	engine->add_singleton(Engine::Singleton("Performance", performance));
 
 	// Only flush stdout in debug builds by default, as spamming `print()` will
 	// decrease performance if this is enabled.
+	// 仅在调试版本中默认启用刷新 stdout，否则为了性能默认关闭。
+	// 在 Main::setup() 中注册配置项：
+	// 用于在项目设置（ProjectSettings）中注册“打印时是否立即刷新标准输出（stdout）”的默认值，并区分调试与发布版本的行为。
 	GLOBAL_DEF_RST("application/run/flush_stdout_on_print", false);
 	GLOBAL_DEF_RST("application/run/flush_stdout_on_print.debug", true);
 
 	MAIN_PRINT("Main: Parse CMDLine");
 
 	/* argument parsing and main creation */
+	// 参数解析
 	List<String> args;
 	List<String> main_args;
 	List<String> user_args;
@@ -995,6 +1018,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	}
 
 	// Add arguments received from macOS LaunchService (URL schemas, file associations).
+	// 从macOS的LaunchService中获取的参数
 	for (const String &arg : platform_args) {
 		args.push_back(arg);
 	}
@@ -1013,6 +1037,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	bool skip_breakpoints = false;
 	String main_pack;
 	bool quiet_stdout = false;
+	// 是否用单独线程渲染，三种状态：-1未设置，0否，1是
 	int separate_thread_render = -1; // Tri-state: -1 = not set, 0 = false, 1 = true.
 
 	String remotefs;
@@ -1023,10 +1048,11 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	bool force_res = false;
 	bool delta_smoothing_override = false;
 
-	String default_renderer = "";
-	String default_renderer_mobile = "";
-	String renderer_hints = "";
+	String default_renderer = "";			// 默认渲染器
+	String default_renderer_mobile = "";	// 移动端渲染器
+	String renderer_hints = "";		// 提示信息
 
+	// 用来打包数据的实例
 	packed_data = PackedData::get_singleton();
 	if (!packed_data) {
 		packed_data = memnew(PackedData);
@@ -1035,6 +1061,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 #ifdef MINIZIP_ENABLED
 
 	//XXX: always get_singleton() == 0x0
+	// 压缩实例
 	zip_packed_data = ZipArchive::get_singleton();
 	//TODO: remove this temporary fix
 	if (!zip_packed_data) {
@@ -1046,6 +1073,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 	// Exit error code used in the `goto error` conditions.
 	// It's returned as the program exit code. ERR_HELP is special cased and handled as success (0).
+	// 参数解析中，错误或者无效参数的返回
 	Error exit_err = ERR_INVALID_PARAMETER;
 
 	I = args.front();
@@ -1064,15 +1092,18 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 #endif
 
 #ifdef TOOLS_ENABLED
+		// 调试、版本、禁用崩溃处理器
 		if (arg == "--debug" ||
 				arg == "--verbose" ||
 				arg == "--disable-crash-handler") {
 			forwardable_cli_arguments[CLI_SCOPE_TOOL].push_back(arg);
 			forwardable_cli_arguments[CLI_SCOPE_PROJECT].push_back(arg);
 		}
+		// 单窗口
 		if (arg == "--single-window") {
 			forwardable_cli_arguments[CLI_SCOPE_TOOL].push_back(arg);
 		}
+		// 音频驱动器、显示驱动器、渲染方法、渲染驱动器、xr模式
 		if (arg == "--audio-driver" ||
 				arg == "--display-driver" ||
 				arg == "--rendering-method" ||
@@ -1084,6 +1115,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			}
 		}
 		// If gpu is specified, both editor and debug instances started from editor will inherit.
+		// GPU索引
 		if (arg == "--gpu-index") {
 			if (N) {
 				const String &next_arg = N->get();
@@ -1095,15 +1127,20 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		}
 #endif
 
+		// 添加用户参数
 		if (adding_user_args) {
 			user_args.push_back(arg);
-		} else if (arg == "-h" || arg == "--help" || arg == "/?") { // display help
+		}
+		// 显示帮助
+		else if (arg == "-h" || arg == "--help" || arg == "/?") { // display help
 
 			show_help = true;
 			exit_err = ERR_HELP; // Hack to force an early exit in `main()` with a success code.
 			goto error;
 
-		} else if (arg == "--version") {
+		}
+		// 版本号，当前版本4.4
+		else if (arg == "--version") {
 			print_line(get_full_version_string());
 			exit_err = ERR_HELP; // Hack to force an early exit in `main()` with a success code.
 			goto error;
@@ -1111,7 +1148,9 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		} else if (arg == "-v" || arg == "--verbose") { // verbose output
 
 			OS::get_singleton()->_verbose_stdout = true;
-		} else if (arg == "-q" || arg == "--quiet") { // quieter output
+		}
+		// 静默输出
+		else if (arg == "-q" || arg == "--quiet") { // quieter output
 
 			quiet_stdout = true;
 
@@ -1154,7 +1193,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				OS::get_singleton()->print("Missing audio driver argument, aborting.\n");
 				goto error;
 			}
-		} else if (arg == "--audio-output-latency") {
+		} else if (arg == "--audio-output-latency") {	// 音频输出延迟。
 			if (N) {
 				audio_output_latency = N->get().to_int();
 				N = N->next();
@@ -3167,6 +3206,7 @@ Error Main::setup2(bool p_show_boot_logo) {
 	{
 		OS::get_singleton()->benchmark_begin_measure("Servers", "Rendering");
 
+		// 这里持有的就是RenderServer的单例地址
 		rendering_server = memnew(RenderingServerDefault(OS::get_singleton()->is_separate_thread_rendering_enabled()));
 
 		rendering_server->init();
@@ -3250,6 +3290,7 @@ Error Main::setup2(bool p_show_boot_logo) {
 			}
 		}
 
+		// 从全局配制中获取清除色，然后设置到3D渲染服务器中
 		Color clear = GLOBAL_DEF_BASIC("rendering/environment/defaults/default_clear_color", Color(0.3, 0.3, 0.3));
 		RenderingServer::get_singleton()->set_default_clear_color(clear);
 
@@ -3544,6 +3585,7 @@ void Main::setup_boot_logo() {
 		boot_bg_color = GLOBAL_DEF_BASIC("application/boot_splash/bg_color", (editor || project_manager) ? boot_splash_editor_bg_color : boot_splash_bg_color);
 #endif
 		if (boot_logo.is_valid()) {
+			// 设置启动logo
 			RenderingServer::get_singleton()->set_boot_image(boot_logo, boot_bg_color, boot_logo_scale, boot_logo_filter);
 
 		} else {
@@ -3569,6 +3611,7 @@ void Main::setup_boot_logo() {
 		}
 #endif
 	}
+	// 渲染环境中的默认清除色
 	RenderingServer::get_singleton()->set_default_clear_color(
 			GLOBAL_GET("rendering/environment/defaults/default_clear_color"));
 }

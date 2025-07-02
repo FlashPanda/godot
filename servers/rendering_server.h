@@ -2220,8 +2220,10 @@ MultiMesh 将成百上千个相同网格实例打包成一个资源提交给渲�
 
 	/* CAMERA EFFECTS */
 
+	// 创建相机属性
 	virtual RID camera_attributes_create() = 0;
 
+	// 景深模糊的质量
 	enum DOFBlurQuality {
 		DOF_BLUR_QUALITY_VERY_LOW,
 		DOF_BLUR_QUALITY_LOW,
@@ -2229,326 +2231,526 @@ MultiMesh 将成百上千个相同网格实例打包成一个资源提交给渲�
 		DOF_BLUR_QUALITY_HIGH,
 	};
 
+	// 设置景深模糊的质量，以及是否使用抖动
 	virtual void camera_attributes_set_dof_blur_quality(DOFBlurQuality p_quality, bool p_use_jitter) = 0;
 
+	// “散景”（Bokeh）高光的几何形状
 	enum DOFBokehShape {
-		DOF_BOKEH_BOX,
-		DOF_BOKEH_HEXAGON,
-		DOF_BOKEH_CIRCLE
+		DOF_BOKEH_BOX,		// 方形
+		DOF_BOKEH_HEXAGON,	// 六边形
+		DOF_BOKEH_CIRCLE		// 圆形
 	};
 
+	// 设置散景的几何形状
 	virtual void camera_attributes_set_dof_blur_bokeh_shape(DOFBokehShape p_shape) = 0;
 
+	// 设置景深模糊效果的各项参数。这些参数在功能上与 CameraAttributesPractical 中的对应字段完全一致，用以控制焦外成像的开启、焦距位置、过渡带宽和整体模糊强度
+	// p_far_enable（bool）：是否启用“远处”模糊（焦点之后）。
+	// p_far_distance（float）：远处焦平面距离，即开始出现模糊的深度位置。
+	// p_far_transition（float）：从清晰到模糊的过渡带宽。
+	// p_near_enable（bool）：是否启用“近处”模糊（焦点之前）。
+	// p_near_distance（float）：近处焦平面距离，即从镜头前景开始模糊的深度位置。
+	// p_near_transition（float）：近处清晰–模糊过渡带宽。
+	// p_amount（float）：整体模糊强度系数，叠加远近模糊效果。
 	virtual void camera_attributes_set_dof_blur(RID p_camera_attributes, bool p_far_enable, float p_far_distance, float p_far_transition, bool p_near_enable, float p_near_distance, float p_near_transition, float p_amount) = 0;
+	// 设置渲染器所使用的固定曝光值（Exposure Value, EV）及其归一化系数，用于在渲染计算中调整场景整体亮度并压缩动态范围
+	// p_multiplier（float）：曝光乘数，直接影响最终像素亮度。
+	// p_exposure_normalization（float）：归一化系数，通常根据 EV100 计算，用以校正物理曝光模型
 	virtual void camera_attributes_set_exposure(RID p_camera_attributes, float p_multiplier, float p_exposure_normalization) = 0;
+	// 启用或禁用动态曝光调节，使相机可根据场景亮度自动增减曝光值，模仿真实相机的自动 ISO 调节功能
+	// p_enable（bool）：是否开启自动曝光。
+	// p_min_sensitivity / p_max_sensitivity（float）：ISO 感光度范围，用于限定自动曝光的上下限。
+	// p_speed（float）：曝光调整速度，值越大响应越快。
+	// p_scale（float）：缩放因子，用于对感光度曲线进行线性调整。
 	virtual void camera_attributes_set_auto_exposure(RID p_camera_attributes, bool p_enable, float p_min_sensitivity, float p_max_sensitivity, float p_speed, float p_scale) = 0;
 
 	/* SCENARIO API */
+	// 场景（Scenario） 是 3D 世界的可视上下文，用于统一管理可视实例、环境（Environment）、相机后期参数（CameraAttributes）以及后期合成管线（Compositor）。
 
 	virtual RID scenario_create() = 0;
 
+	// 设置环境
 	virtual void scenario_set_environment(RID p_scenario, RID p_environment) = 0;
+	// 设置回落环境
 	virtual void scenario_set_fallback_environment(RID p_scenario, RID p_environment) = 0;
+	// 设置相机属性
 	virtual void scenario_set_camera_attributes(RID p_scenario, RID p_camera_attributes) = 0;
+	// 设置组合器
 	virtual void scenario_set_compositor(RID p_scenario, RID p_compositor) = 0;
 
 	/* INSTANCING API */
 
+	// 所有的实例类型
 	enum InstanceType {
-		INSTANCE_NONE,
-		INSTANCE_MESH,
-		INSTANCE_MULTIMESH,
-		INSTANCE_PARTICLES,
-		INSTANCE_PARTICLES_COLLISION,
-		INSTANCE_LIGHT,
-		INSTANCE_REFLECTION_PROBE,
-		INSTANCE_DECAL,
-		INSTANCE_VOXEL_GI,
-		INSTANCE_LIGHTMAP,
-		INSTANCE_OCCLUDER,
-		INSTANCE_VISIBLITY_NOTIFIER,
-		INSTANCE_FOG_VOLUME,
+		INSTANCE_NONE,		// 未指定类型的实例，占位或默认值
+		INSTANCE_MESH,		// 一个普通的网格实例，用于渲染 MeshInstance3D 等节点。
+		INSTANCE_MULTIMESH,		// 批量渲染的多网格实例，对应 MultiMeshInstance3D，可显著减少 draw call。
+		INSTANCE_PARTICLES,		// GPU 粒子发射器实例，对应 GPUParticles3D，用于高效渲染粒子系统。
+		INSTANCE_PARTICLES_COLLISION,		// GPU 粒子碰撞形状实例，用于粒子与世界交互的碰撞检测。
+		INSTANCE_LIGHT,		// 灯光实例，如 DirectionalLight3D、OmniLight3D 等。
+		INSTANCE_REFLECTION_PROBE,	// 反射探针实例，用于环境盒映射和光照反射。
+		INSTANCE_DECAL,		// 贴花实例，例如在地面或墙壁上渲染污渍、标记等贴花效果。
+		INSTANCE_VOXEL_GI,		// 体素全局光照实例，驱动体素化 GI 系统。 
+		INSTANCE_LIGHTMAP,		// 光照贴图实例，用于静态光照贴图渲染。
+		INSTANCE_OCCLUDER,		// 遮挡剔除实例，对应可用于屏蔽其他对象的遮挡体。
+		INSTANCE_VISIBLITY_NOTIFIER,		// 可见性通知器实例，当对象进入或离开视野时触发事件。
+		INSTANCE_FOG_VOLUME,		// 雾体积实例，用于渲染区域雾效。
 		INSTANCE_MAX,
 
 		INSTANCE_GEOMETRY_MASK = (1 << INSTANCE_MESH) | (1 << INSTANCE_MULTIMESH) | (1 << INSTANCE_PARTICLES)
 	};
 
+	// 创建一个新的渲染实例，并同时设置它的基础资源（Base）和场景（Scenario）
 	virtual RID instance_create2(RID p_base, RID p_scenario);
 
+	// 创建空实例
 	virtual RID instance_create() = 0;
 
+	// 将实例的基础资源设置为任意可显示的 3D 对象（网格、粒子、灯光、反射探针、贴花、光照贴图、体素 GI、可见性通知器等），否则该实例不会在场景中被渲染。
 	virtual void instance_set_base(RID p_instance, RID p_base) = 0;
+	// 将实例关联到指定的场景（Scenario），决定它在哪个 3D 世界中被渲染。
 	virtual void instance_set_scenario(RID p_instance, RID p_scenario) = 0;
+	// 定义实例参与渲染的图层掩码，对应于 VisualInstance3D.layers，可控制实例在哪些渲染层中可见。
 	virtual void instance_set_layer_mask(RID p_instance, uint32_t p_mask) = 0;
+	// 设置深度排序偏移量，并在使用实例原点还是包围盒中心进行深度排序之间切换，影响渲染顺序和遮挡关系。
 	virtual void instance_set_pivot_data(RID p_instance, float p_sorting_offset, bool p_use_aabb_center) = 0;
+	// 设置实例的世界空间变换，相当于 Node3D.global_transform，控制实例的位置、旋转和缩放。
 	virtual void instance_set_transform(RID p_instance, const Transform3D &p_transform) = 0;
+	// 开启或关闭物理插值，使实例在物理帧之间平滑移动。
 	virtual void instance_set_interpolated(RID p_instance, bool p_interpolated) = 0;
+	// 清除当前物理插值状态，保证下一个物理步骤立即生效，适用于瞬时位置跳跃等场景。
 	virtual void instance_reset_physics_interpolation(RID p_instance) = 0;
+	// 附加一个唯一的对象 ID，用于编辑器或自定义剔除查询（instances_cull_ *系列），确保基于 AABB、凸形或射线的剔除能正确识别对应实例。
 	virtual void instance_attach_object_instance_id(RID p_instance, ObjectID p_id) = 0;
+	// 为网格实例的特定混合形状（BlendShape）设置权重，驱动形态变化或面部动画等效果。
 	virtual void instance_set_blend_shape_weight(RID p_instance, int p_shape, float p_weight) = 0;
+	// 为实例的指定表面索引应用覆盖材质（Override Material），等价于 MeshInstance3D.set_surface_override_material，可在运行时替换单一表面材质。
 	virtual void instance_set_surface_override_material(RID p_instance, int p_surface, RID p_material) = 0;
+	// 启用或禁用实例的渲染显示，相当于 Node3D.visible，可临时隐藏实例而不删除。
 	virtual void instance_set_visible(RID p_instance, bool p_visible) = 0;
 
+	// 为实例设置自定义的包围盒（AABB），在视锥剔除时使用，等价于 GeometryInstance3D.custom_aabb，可优化剔除表现或扩展可见范围。
 	virtual void instance_set_custom_aabb(RID p_instance, AABB aabb) = 0;
 
+	// 将一个骨骼资源（如 Skeleton3D）附加到几何实例上，用于驱动网格的骨骼蒙皮动画；如果之前已附加过其他骨骼，则会先移除旧的骨骼再绑定新骨骼。
 	virtual void instance_attach_skeleton(RID p_instance, RID p_skeleton) = 0;
 
+	// 在视锥剔除时，为实例的 AABB 增加一个额外的边界余量，以避免对象在摄像机边缘处被过早剔除；等价于 GeometryInstance3D.extra_cull_margin。
 	virtual void instance_set_extra_visibility_margin(RID p_instance, real_t p_margin) = 0;
+	// 指定另一个实例作为可见性父级，当父级在场景中被隐藏时，子实例也会随之隐藏；等价于 Node3D.visibility_parent。
 	virtual void instance_set_visibility_parent(RID p_instance, RID p_parent_instance) = 0;
 
+	// 启用后会同时忽略视锥剔除和遮挡剔除，保证该实例始终被渲染；与仅忽略遮挡剔除的 GeometryInstance3D.ignore_occlusion_culling 不同。
 	virtual void instance_set_ignore_culling(RID p_instance, bool p_enabled) = 0;
 
 	// Don't use these in a game!
+	// 返回与给定轴对齐包围盒相交的所有实例的对象 ID 列表；仅考虑继承自 VisualInstance3D 的节点，且必须提供待查询的场景（scenario）RID。
 	virtual Vector<ObjectID> instances_cull_aabb(const AABB &p_aabb, RID p_scenario = RID()) const = 0;
+	// 返回与由一组平面定义的凸形体相交的所有实例的对象 ID 列表；同样需要场景 RID，且会强制更新所有待渲染资源。
 	virtual Vector<ObjectID> instances_cull_ray(const Vector3 &p_from, const Vector3 &p_to, RID p_scenario = RID()) const = 0;
+	// 返回被指定射线（从 p_from 到 p_to）穿过的所有实例的对象 ID 列表；常用于编辑器中的拾取或可视化调试。
 	virtual Vector<ObjectID> instances_cull_convex(const Vector<Plane> &p_convex, RID p_scenario = RID()) const = 0;
 
+	// 根据给定的轴对齐包围盒（AABB）查询，与其相交的所有实例 ID，并返回 PackedInt64Array。
 	PackedInt64Array _instances_cull_aabb_bind(const AABB &p_aabb, RID p_scenario = RID()) const;
+	// 查询一条从 p_from 到 p_to 的射线与之相交的所有实例 ID。
 	PackedInt64Array _instances_cull_ray_bind(const Vector3 &p_from, const Vector3 &p_to, RID p_scenario = RID()) const;
+	// 查询与由一组平面定义的凸形体相交的所有实例 ID。
 	PackedInt64Array _instances_cull_convex_bind(const TypedArray<Plane> &p_convex, RID p_scenario = RID()) const;
 
+	// 控制几何实例在渲染服务器层面的行为
 	enum InstanceFlags {
-		INSTANCE_FLAG_USE_BAKED_LIGHT,
-		INSTANCE_FLAG_USE_DYNAMIC_GI,
-		INSTANCE_FLAG_DRAW_NEXT_FRAME_IF_VISIBLE,
-		INSTANCE_FLAG_IGNORE_OCCLUSION_CULLING,
+		INSTANCE_FLAG_USE_BAKED_LIGHT,		// 允许该实例参与烘焙光照计算。
+		INSTANCE_FLAG_USE_DYNAMIC_GI,		// 允许该实例参与动态全局光照（Voxel GI、SDFGI 等）。
+		INSTANCE_FLAG_DRAW_NEXT_FRAME_IF_VISIBLE,		// 如果当前帧可见，则请求在下一帧强制绘制该实例。
+		INSTANCE_FLAG_IGNORE_OCCLUSION_CULLING,	// 忽略遮挡剔除，始终绘制该实例（不影响视锥剔除）。
 		INSTANCE_FLAG_MAX
 	};
 
+	// 定义了实例投射阴影的不同模式
 	enum ShadowCastingSetting {
-		SHADOW_CASTING_SETTING_OFF,
-		SHADOW_CASTING_SETTING_ON,
-		SHADOW_CASTING_SETTING_DOUBLE_SIDED,
-		SHADOW_CASTING_SETTING_SHADOWS_ONLY,
+		SHADOW_CASTING_SETTING_OFF,				// 不投射阴影，可用于微小或无需阴影的对象以提升性能。
+		SHADOW_CASTING_SETTING_ON,				// 正常投射阴影，仅考虑视锥剔除的可见面。
+		SHADOW_CASTING_SETTING_DOUBLE_SIDED,	// 双面投射阴影，不剔除背面，可能更准确但性能略有下降。
+		SHADOW_CASTING_SETTING_SHADOWS_ONLY,	// 仅渲染阴影，不渲染实体网格本身，常用于视觉效果或调试。
 	};
 
+	// 渐隐效果的模式
 	enum VisibilityRangeFadeMode {
-		VISIBILITY_RANGE_FADE_DISABLED,
-		VISIBILITY_RANGE_FADE_SELF,
-		VISIBILITY_RANGE_FADE_DEPENDENCIES,
+		VISIBILITY_RANGE_FADE_DISABLED,		// 禁用距离渐隐效果，实例要么完全可见，要么完全被剔除。
+		VISIBILITY_RANGE_FADE_SELF,			// 仅对自身进行距离渐隐，实例在接近或远离摄像机时根据设定范围平滑淡入淡出。
+		VISIBILITY_RANGE_FADE_DEPENDENCIES,		// 对所有依赖于此实例的子实例一起应用距离渐隐，常用于绑定骨骼或粒子系统的整体渐隐。
 	};
 
+	// 启用或禁用指定的 InstanceFlags 标志，用于控制诸如烘焙光照、动态 GI、下一帧强制绘制、忽略遮挡剔除等行为。
 	virtual void instance_geometry_set_flag(RID p_instance, InstanceFlags p_flags, bool p_enabled) = 0;
+	// 设置实例的阴影投射模式，支持关闭、单面投射、双面投射或仅投射阴影四种选项，等同于 GeometryInstance3D.cast_shadow。
 	virtual void instance_geometry_set_cast_shadows_setting(RID p_instance, ShadowCastingSetting p_shadow_casting_setting) = 0;
+	// 用指定材质覆盖实例的全部表面，等同于 MeshInstance3D.set_surface_override_material。
 	virtual void instance_geometry_set_material_override(RID p_instance, RID p_material) = 0;
+	// 在原有材质之上叠加第二套材质，可用于环境贴花或高光效果。
 	virtual void instance_geometry_set_material_overlay(RID p_instance, RID p_material) = 0;
+	// 设置实例的最小和最大可见距离及其渐隐边缘，并指定 VisibilityRangeFadeMode 渐隐模式，用于摄像机距离相关的剔除和淡入淡出控制。
 	virtual void instance_geometry_set_visibility_range(RID p_instance, float p_min, float p_max, float p_min_margin, float p_max_margin, VisibilityRangeFadeMode p_fade_mode) = 0;
+	// 为实例绑定一个光照贴图资源，并指定 UV 变换矩阵及切片索引，支持立方体贴图和 2D 光照图。
 	virtual void instance_geometry_set_lightmap(RID p_instance, RID p_lightmap, const Rect2 &p_lightmap_uv_scale, int p_lightmap_slice) = 0;
+	// 设置实例的 LOD（Level of Detail）偏移值，用于驱动多 LOD 网格的切换距离。
 	virtual void instance_geometry_set_lod_bias(RID p_instance, float p_lod_bias) = 0;
+	//调整实例的整体透明度（0.0–1.0），等同于材质中透明通道的统一倍数缩放。
 	virtual void instance_geometry_set_transparency(RID p_instance, float p_transparency) = 0;
 
+	// 在指定的几何体实例上设置一个 per-instance 着色器统一变量，其名称由 StringName 指定，值由 Variant 提供，等效于 GeometryInstance3D.set_instance_shader_parameter()。
+	// 要使参数可按实例生效，着色器中必须使用 instance uniform 而非普通 uniform 声明，否则修改将作用于所有使用同一 ShaderMaterial 的实例。
 	virtual void instance_geometry_set_shader_parameter(RID p_instance, const StringName &, const Variant &p_value) = 0;
+	// 返回指定几何体实例上当前生效的 per-instance 着色器统一变量的值，等效于 GeometryInstance3D.get_instance_shader_parameter()。
 	virtual Variant instance_geometry_get_shader_parameter(RID p_instance, const StringName &) const = 0;
+	// 返回着色器中为该 per-instance 参数声明时的默认值，用于在未调用 set 时查询默认行为，等效于 GeometryInstance3D.get_instance_shader_parameter() 获取的初始值。
 	virtual Variant instance_geometry_get_shader_parameter_default_value(RID p_instance, const StringName &) const = 0;
+	// 以 PropertyInfo 格式（包含 name、class_name、type、hint、hint_string、usage 等字段）返回所有在该几何体实例上可用的 per-instance 着色器统一变量列表，等效于 GeometryInstance3D.get_shader_parameter_list()。
 	virtual void instance_geometry_get_shader_parameter_list(RID p_instance, List<PropertyInfo> *p_parameters) const = 0;
 
 	/* Bake 3D objects */
 
+	// BakeChannels 枚举定义了 bake_render_uv2 返回的多张烘焙图像中，各张图像所代表的通道索引；
 	enum BakeChannels {
-		BAKE_CHANNEL_ALBEDO_ALPHA,
-		BAKE_CHANNEL_NORMAL,
-		BAKE_CHANNEL_ORM,
-		BAKE_CHANNEL_EMISSION
+		BAKE_CHANNEL_ALBEDO_ALPHA,		// 输出图像格式为 Image.FORMAT_RGBA8，.rgb 通道存储漫反射颜色（Albedo），.a 通道存储透明度（Alpha）。
+		BAKE_CHANNEL_NORMAL,			// 输出图像格式为 Image.FORMAT_RGBA8，.rgb 通道存储每像素法线，按 normal * 0.5 + 0.5 编码，.a 通道未使用。
+		BAKE_CHANNEL_ORM,				// 输出图像格式为 Image.FORMAT_RGBA8，.r 通道存储环境遮蔽（AO），.g 存储粗糙度（Roughness），.b 存储金属度（Metallic），.a 存储次表面散射量（SSS Amount）。
+		BAKE_CHANNEL_EMISSION			// 输出图像格式为 Image.FORMAT_RGBAH，.rgb 通道存储自发光颜色（Emission），.a 通道未使用。
 	};
 
+	// 在第二 UV 通道上，对给定的基础资源进行逐通道渲染烘焙，按指定分辨率输出一组 Image。
 	virtual TypedArray<Image> bake_render_uv2(RID p_base, const TypedArray<RID> &p_material_overrides, const Size2i &p_image_size) = 0;
 
 	/* CANVAS (2D) */
 
+	// 生成一个新的、空的 2D 画布，返回对应的 RID 以供后续引用和操作
 	virtual RID canvas_create() = 0;
+	// 在指定偏移下复制（镜像）单个画布项，等同于 canvas_set_item_repeat(item, mirroring, 1)
 	virtual void canvas_set_item_mirroring(RID p_canvas, RID p_item, const Point2 &p_mirroring) = 0;
+	//  按 repeat_size 偏移重复绘制 times 次，适合网格状平铺效果
 	virtual void canvas_set_item_repeat(RID p_item, const Point2 &p_repeat_size, int p_repeat_times) = 0;
+	// 对整个画布内的所有绘制命令施加色彩乘法调制，类似于对所有节点统一设置 modulate 属性
 	virtual void canvas_set_modulate(RID p_canvas, const Color &p_color) = 0;
+	// 可将某个画布挂到另一画布之下，并指定相对缩放
 	virtual void canvas_set_parent(RID p_canvas, RID p_parent, float p_scale) = 0;
 
+	// 切换画布是否响应全局 DPI/stretch 缩放，true 时禁用自动缩放，适合像素级精确渲染
 	virtual void canvas_set_disable_scale(bool p_disable) = 0;
 
 	/* CANVAS TEXTURE */
+
+	/**
+	 *
+	 * 2D CanvasTexture 的管理方法，可在不依赖节点树的情况下创建并操作多通道纹理资源。利用 canvas_texture_create() 可以生成一个新的 CanvasTexture 并返回对应的 RID，用于后续的所有 canvas_texture_* 调用；通过 CanvasTextureChannel 枚举可指定漫反射、法线和高光三种通道，并使用 canvas_texture_set_channel() 为各通道绑定不同的纹理资源。canvas_texture_set_shading_parameters() 则允许配置基础颜色与高光强度，以模拟材质的漫反射与镜面反射特性；额外的 canvas_texture_set_texture_filter() 与 canvas_texture_set_texture_repeat() 可分别统一设置过滤与重复模式，影响后续所有绘制命令的采样与平铺行为。
+	 */
+
+	// 创建一个新的 CanvasTexture 资源，并返回其 RID
 	virtual RID canvas_texture_create() = 0;
 
+	// 三个纹理通道
 	enum CanvasTextureChannel {
-		CANVAS_TEXTURE_CHANNEL_DIFFUSE,
-		CANVAS_TEXTURE_CHANNEL_NORMAL,
-		CANVAS_TEXTURE_CHANNEL_SPECULAR,
+		CANVAS_TEXTURE_CHANNEL_DIFFUSE,		// 漫反射
+		CANVAS_TEXTURE_CHANNEL_NORMAL,		// 法线
+		CANVAS_TEXTURE_CHANNEL_SPECULAR,	// 镜面
 	};
+	// 为指定的 CanvasTexture 的某个通道绑定新的纹理资源 RID
 	virtual void canvas_texture_set_channel(RID p_canvas_texture, CanvasTextureChannel p_channel, RID p_texture) = 0;
+	// 设置 CanvasTexture 的基础颜色 (base_color) 和高光强度 (shininess)，等价于 CanvasTexture.specular_color 与 CanvasTexture.specular_shininess，用于控制材质的镜面反射效果。
 	virtual void canvas_texture_set_shading_parameters(RID p_canvas_texture, const Color &p_base_color, float p_shininess) = 0;
 
 	// Takes effect only for new draw commands.
+	// 设置后续绘制命令使用的采样过滤模式（如线性过滤或最近邻采样），影响 CanvasTexture 在渲染时的图像质量与抗锯齿表现。
 	virtual void canvas_texture_set_texture_filter(RID p_canvas_texture, CanvasItemTextureFilter p_filter) = 0;
+	// 设置纹理的重复（平铺）模式（如平铺、镜像或钳制），决定在纹理坐标超出 [0,1] 范围时的显示行为，仅对新的绘制命令生效。
 	virtual void canvas_texture_set_texture_repeat(RID p_canvas_texture, CanvasItemTextureRepeat p_repeat) = 0;
 
 	/* CANVAS ITEM */
 
+	// 创建画布项
 	virtual RID canvas_item_create() = 0;
+	// 设置画布项的父节点
 	virtual void canvas_item_set_parent(RID p_item, RID p_parent) = 0;
 
+	// 设置画布项的默认纹理滤波模式
 	virtual void canvas_item_set_default_texture_filter(RID p_item, CanvasItemTextureFilter p_filter) = 0;
+	// 设置画布项的纹理重复模式
 	virtual void canvas_item_set_default_texture_repeat(RID p_item, CanvasItemTextureRepeat p_repeat) = 0;
 
+	// 设置画布项的可见性
 	virtual void canvas_item_set_visible(RID p_item, bool p_visible) = 0;
+	// 为 CanvasItem 指定 2D 光照层掩码，只有与 Light2D 的掩码匹配时才会受到该光源影响，等同于节点层面的 CanvasItem.light_mask 属性
 	virtual void canvas_item_set_light_mask(RID p_item, int p_mask) = 0;
 
+	// 设置可见的时候是否更新
 	virtual void canvas_item_set_update_when_visible(RID p_item, bool p_update) = 0;
 
+	// 设置画布项的变换
 	virtual void canvas_item_set_transform(RID p_item, const Transform2D &p_transform) = 0;
+	// 设置画布项的裁剪
 	virtual void canvas_item_set_clip(RID p_item, bool p_clip) = 0;
+	// 当 p_enable = true 时，启用多通道签名距离场（MSDF）渲染模式，适用于字体渲染或使用 msdfgen 等工具生成的 SDF 图像，从而在任意缩放下保持边缘锐利
+	// 在默认模式下，该 CanvasItem 使用普通纹理采样；切换至距离场模式后，渲染管线将基于距离场算法计算像素边界，以获得更精准的边缘抗锯齿效果
 	virtual void canvas_item_set_distance_field_mode(RID p_item, bool p_enable) = 0;
+	// 当 p_use_custom_rect = true 时，为 CanvasItem 指定一个自定义可见性矩形 p_rect，该矩形用于剔除操作；若为 false，则使用引擎自动计算的包围盒进行剔除
+	// 自定义矩形可以显著减少大量 2D 实例的 CPU 剔除开销，常用于动态生成的精灵或 TileMap 等场景中，以提高渲染性能
 	virtual void canvas_item_set_custom_rect(RID p_item, bool p_custom_rect, const Rect2 &p_rect = Rect2()) = 0;
+	// 对 CanvasItem 及其所有子项施加色彩乘法调制，p_color 的 RGBA 分量会逐像素乘以原始颜色，从而一次性改变整组图元的整体色相或透明度
 	virtual void canvas_item_set_modulate(RID p_item, const Color &p_color) = 0;
+	// 对 CanvasItem 本身施加色彩乘法调制，而不影响其子项，以实现父项局部高亮或暗化，而子元素保持原色
+	// 等价于节点层面的 CanvasItem.self_modulate，在需要单独标记某些父级元素时非常有用
 	virtual void canvas_item_set_self_modulate(RID p_item, const Color &p_color) = 0;
+	// 为该 CanvasItem 设置渲染可见性层编号 p_visibility_layer，仅当 Viewport 的画布剔除掩码与该层匹配时，该项才会被渲染，支持多视口或分层渲染场景
+	// 该机制可精细控制不同 2D 元素在同一或多个视口中的渲染过滤，实现复杂的 UI 层次和特效分离
 	virtual void canvas_item_set_visibility_layer(RID p_item, uint32_t p_visibility_layer) = 0;
-
+	// 当 p_enable = true 时，强制让该 CanvasItem 在其父项之后绘制，突破默认“子项在父项之上”的绘制顺序，方便实现底层背景或阴影等效果
+	// 相当于节点层面的 CanvasItem.show_behind_parent，可用于制作分层 UI、动态阴影或背景装饰等场景
 	virtual void canvas_item_set_draw_behind_parent(RID p_item, bool p_enable) = 0;
 
+	// 用于在 Godot 的 9-切片（nine-patch）绘制中，控制纹理沿某一轴（水平或垂直）如何填充目标区域。
+	// 九宫格填充
 	enum NinePatchAxisMode {
-		NINE_PATCH_STRETCH,
-		NINE_PATCH_TILE,
-		NINE_PATCH_TILE_FIT,
+		NINE_PATCH_STRETCH,		// 在需要的区域对纹理块进行拉伸填充，保证覆盖整个区域，但会导致图块形变。
+		NINE_PATCH_TILE,		// 以原始尺寸将纹理块重复平铺，既不会扭曲图块，也可无缝衔接，但要求素材本身能平滑拼接。
+		NINE_PATCH_TILE_FIT,	// 同样以原始尺寸平铺，但当剩余空间不能完整容纳一个瓦片时，会对最后一块做适度拉伸，以确保每块图像都能完整显示。
 	};
 
+	// 在 p_item 指定的 CanvasItem 上，从 p_from 到 p_to 绘制一条直线，可指定颜色、线宽和是否抗锯齿
 	virtual void canvas_item_add_line(RID p_item, const Point2 &p_from, const Point2 &p_to, const Color &p_color, float p_width = -1.0, bool p_antialiased = false) = 0;
+	// 绘制一系列按顺序连接的线段，p_points 为顶点列表，p_colors 为每段线段的颜色，同样支持线宽和抗锯齿设置
 	virtual void canvas_item_add_polyline(RID p_item, const Vector<Point2> &p_points, const Vector<Color> &p_colors, float p_width = -1.0, bool p_antialiased = false) = 0;
+	// 绘制多段不连续的线段集合，每对相邻顶点间绘制一段线，可为每段指定不同颜色，适合同时绘制多条独立折线
 	virtual void canvas_item_add_multiline(RID p_item, const Vector<Point2> &p_points, const Vector<Color> &p_colors, float p_width = -1.0, bool p_antialiased = false) = 0;
+	// 在 p_rect 区域内绘制一个实心矩形，p_color 控制填充色，支持可选抗锯齿
 	virtual void canvas_item_add_rect(RID p_item, const Rect2 &p_rect, const Color &p_color, bool p_antialiased = false) = 0;
+	// 以 p_pos 为圆心、p_radius 为半径绘制实心圆，p_color 控制填充色，并可选择是否抗锯齿
 	virtual void canvas_item_add_circle(RID p_item, const Point2 &p_pos, float p_radius, const Color &p_color, bool p_antialiased = false) = 0;
+	// 将 p_texture 绘制到矩形 p_rect 中，p_tile 控制是否平铺、p_modulate 用于色彩调制、p_transpose 可交换 UV 坐标
 	virtual void canvas_item_add_texture_rect(RID p_item, const Rect2 &p_rect, RID p_texture, bool p_tile = false, const Color &p_modulate = Color(1, 1, 1), bool p_transpose = false) = 0;
+	// 仅绘制纹理中 p_src_rect 区域映射到目标 p_rect，支持色彩调制、转置和 UV 裁剪 
 	virtual void canvas_item_add_texture_rect_region(RID p_item, const Rect2 &p_rect, RID p_texture, const Rect2 &p_src_rect, const Color &p_modulate = Color(1, 1, 1), bool p_transpose = false, bool p_clip_uv = false) = 0;
+	// 针对多通道签名距离场（MSDF）纹理添加绘制命令，可指定轮廓宽度 p_outline_size、像素范围 p_px_range 和缩放 p_scale，适合高质量可缩放文本或图形
 	virtual void canvas_item_add_msdf_texture_rect_region(RID p_item, const Rect2 &p_rect, RID p_texture, const Rect2 &p_src_rect, const Color &p_modulate = Color(1, 1, 1), int p_outline_size = 0, float p_px_range = 1.0, float p_scale = 1.0) = 0;
+	// 使用 LCD SDF 技术绘制文本纹理区域，以获得更清晰的子像素抗锯齿效果
 	virtual void canvas_item_add_lcd_texture_rect_region(RID p_item, const Rect2 &p_rect, RID p_texture, const Rect2 &p_src_rect, const Color &p_modulate = Color(1, 1, 1)) = 0;
+	// 在 p_rect 区域内绘制九切片图像
 	virtual void canvas_item_add_nine_patch(RID p_item, const Rect2 &p_rect, const Rect2 &p_source, RID p_texture, const Vector2 &p_topleft, const Vector2 &p_bottomright, NinePatchAxisMode p_x_axis_mode = NINE_PATCH_STRETCH, NinePatchAxisMode p_y_axis_mode = NINE_PATCH_STRETCH, bool p_draw_center = true, const Color &p_modulate = Color(1, 1, 1)) = 0;
+	// 按顶点 p_points、颜色 p_colors、UV 列表 p_uvs 和纹理 p_texture 绘制任意原始几何体，等同于低级三角带或风格化图形命令
 	virtual void canvas_item_add_primitive(RID p_item, const Vector<Point2> &p_points, const Vector<Color> &p_colors, const Vector<Point2> &p_uvs, RID p_texture) = 0;
+	// 绘制填充多边形，可选地指定 UV 和纹理，实现多边形贴图或纯色填充，常用于自定义形状
 	virtual void canvas_item_add_polygon(RID p_item, const Vector<Point2> &p_points, const Vector<Color> &p_colors, const Vector<Point2> &p_uvs = Vector<Point2>(), RID p_texture = RID()) = 0;
+	// 以索引列表 p_indices、顶点列表 p_points、颜色 p_colors、UV 列表 p_uvs，以及可选骨骼索引 p_bones 与权重 p_weights 创建带骨骼蒙皮信息的三角形网格，适合骨骼动画
 	virtual void canvas_item_add_triangle_array(RID p_item, const Vector<int> &p_indices, const Vector<Point2> &p_points, const Vector<Color> &p_colors, const Vector<Point2> &p_uvs = Vector<Point2>(), const Vector<int> &p_bones = Vector<int>(), const Vector<float> &p_weights = Vector<float>(), RID p_texture = RID(), int p_count = -1) = 0;
+	// 将一个 2D 网格资源 p_mesh 绘制到 CanvasItem 上，可附加 p_transform 变换和色彩调制
 	virtual void canvas_item_add_mesh(RID p_item, const RID &p_mesh, const Transform2D &p_transform = Transform2D(), const Color &p_modulate = Color(1, 1, 1), RID p_texture = RID()) = 0;
+	// 绘制 p_mesh 对应的 MultiMesh 批量实例化渲染，极大提升大量重复图元的性能
 	virtual void canvas_item_add_multimesh(RID p_item, RID p_mesh, RID p_texture = RID()) = 0;
+	// 在 CanvasItem 上绘制一个 Particles2D 粒子系统实例，配合 p_texture 贴图使用
 	virtual void canvas_item_add_particles(RID p_item, RID p_particles, RID p_texture) = 0;
+	// 为后续所有绘制命令设置 2D 变换矩阵 p_transform，相当于修改渲染管线内的 extra_matrix uniform
 	virtual void canvas_item_add_set_transform(RID p_item, const Transform2D &p_transform) = 0;
+	// 控制是否在绘制时忽略 CanvasItem 的当前裁剪区域，true 时命令不受裁剪盒限制，可用于强制覆盖显示 
 	virtual void canvas_item_add_clip_ignore(RID p_item, bool p_ignore) = 0;
+	// 将帧动画切片命令添加至 CanvasItem，p_animation_length 为总时长，p_slice_begin/p_slice_end 定义当前切片区间，p_offset 为时间偏移，方便按分段播放或循环
 	virtual void canvas_item_add_animation_slice(RID p_item, double p_animation_length, double p_slice_begin, double p_slice_end, double p_offset) = 0;
 
+	// 启用后，子 CanvasItem 会根据它们的 Y 坐标进行自动排序，Y 值低的先绘制、Y 值高的后绘制，用于实现类似 “Y 排序” 的视觉深度效果
 	virtual void canvas_item_set_sort_children_by_y(RID p_item, bool p_enable) = 0;
+	// 手动设置 CanvasItem 的全局 Z 索引，值越大则越晚绘制（越“靠前”）
+	// 该属性等价于节点层面的 CanvasItem.z_index，常用于精确控制渲染顺序
 	virtual void canvas_item_set_z_index(RID p_item, int p_z) = 0;
+	// 当启用时，Z 索引将被视为相对于父项的偏移量；否则，Z 索引为绝对值，覆盖父项的 Z 设置。通常用于在父子层级中实现局部 Z 偏移
 	virtual void canvas_item_set_z_as_relative_to_parent(RID p_item, bool p_enable) = 0;
+	// 将该 CanvasItem 在绘制后复制到后备缓冲区的指定矩形区域 p_rect，以便后续重用或实现延迟渲染特效
 	virtual void canvas_item_set_copy_to_backbuffer(RID p_item, bool p_enable, const Rect2 &p_rect) = 0;
 
+	// 将一个骨骼资源（Skeleton2D）绑定到此 CanvasItem，允许在该画布项上应用骨骼动画
 	virtual void canvas_item_attach_skeleton(RID p_item, RID p_skeleton) = 0;
 
+	// 清空此 CanvasItem 上所有已提交的绘制命令，通常在每帧或内容刷新前调用，以避免遗留旧图形
 	virtual void canvas_item_clear(RID p_item) = 0;
+	// 设置此 CanvasItem 在渲染队列中的绘制顺序索引，值越大则越晚绘制；可与 z_index 配合，实现更细粒度的渲染控制
 	virtual void canvas_item_set_draw_index(RID p_item, int p_index) = 0;
 
+	// 为 CanvasItem 指定一个自定义 ShaderMaterial 或 CanvasItemMaterial，用于替换默认的材质渲染管线
 	virtual void canvas_item_set_material(RID p_item, RID p_material) = 0;
 
+	// 启用后，该 CanvasItem 将继承父项的材质设置，等同于节点层面的 use_parent_material 属性，用于统一一组项的着色器效果
 	virtual void canvas_item_set_use_parent_material(RID p_item, bool p_enable) = 0;
 
+	// 在实例级别为材质着色器动态设置 Uniform 参数 p_name 为 p_value，可实现实时变更效果
 	virtual void canvas_item_set_instance_shader_parameter(RID p_item, const StringName &, const Variant &p_value) = 0;
+	// 查询当前实例化着色器参数的值 
 	virtual Variant canvas_item_get_instance_shader_parameter(RID p_item, const StringName &) const = 0;
+	// 获取此着色器参数的默认值，用于重置或做对比
 	virtual Variant canvas_item_get_instance_shader_parameter_default_value(RID p_item, const StringName &) const = 0;
+	// 列出所有可实例化的着色器参数及其类型信息，便于在运行时遍历或 UI 编辑器中展示 
 	virtual void canvas_item_get_instance_shader_parameter_list(RID p_item, List<PropertyInfo> *p_parameters) const = 0;
 
+	// 当启用后，系统将在 p_item 进入或离开指定区域 p_area 时分别调用 p_enter_callable 和 p_exit_callable，可用于触发区域内的显隐逻辑或性能优化（如按需加载）
 	virtual void canvas_item_set_visibility_notifier(RID p_item, bool p_enable, const Rect2 &p_area, const Callable &p_enter_callbable, const Callable &p_exit_callable) = 0;
 
+	// CanvasGroup 节点对其子 CanvasItem 节点的渲染与裁剪行为
 	enum CanvasGroupMode {
-		CANVAS_GROUP_MODE_DISABLED,
-		CANVAS_GROUP_MODE_CLIP_ONLY,
-		CANVAS_GROUP_MODE_CLIP_AND_DRAW,
+		CANVAS_GROUP_MODE_DISABLED,			// 子节点会正常绘制在父节点之上，且不会受到父节点的裁剪限制
+		CANVAS_GROUP_MODE_CLIP_ONLY,		// 父节点仅作为裁剪区域使用，本身不参与绘制；子节点的绘制内容会被裁剪到父节点的可视区域内。
+		CANVAS_GROUP_MODE_CLIP_AND_DRAW,	// 父节点既参与自身的绘制，也用作对子节点的裁剪；先绘制父节点，再将子节点裁剪到父节点可视区域。
 		CANVAS_GROUP_MODE_TRANSPARENT,
 	};
 
+	// 为指定的 CanvasItem 启用高级裁剪/分组绘制模式，子项会先绘制到一个临时缓冲区，再作为单一对象进行混合或裁剪
+	/*
+	CanvasGroupMode：控制父级对其子项的绘制和裁剪行为，如仅裁剪、裁剪并绘制、透明组合等。
+	p_clear_margin：在执行组内绘制前，对裁剪区域按像素进行扩展，以避免边缘 artefact（默认 5px）。
+	p_fit_empty：当组内没有子项时，是否仍然渲染一个空的裁剪区域（默认 false）。
+	p_fit_margin：在 p_fit_empty = true 时，对该空白区域执行额外的边缘填充或缩放（默认 0px）。
+	p_blur_mipmaps：是否在生成或采样 MIP 贴图时启用模糊，以在变换和缩放时保持更平滑的视觉效果（默认 false）。
+	*/
 	virtual void canvas_item_set_canvas_group_mode(RID p_item, CanvasGroupMode p_mode, float p_clear_margin = 5.0, bool p_fit_empty = false, float p_fit_margin = 0.0, bool p_blur_mipmaps = false) = 0;
 
+	// 开启“调试 CanvasItem 重绘”模式，运行时会在每次触发 redraw 请求时以闪烁的方式可视化这一操作，有助于排查过度重绘或低性能模式下的重绘触发情况
 	virtual void canvas_item_set_debug_redraw(bool p_enabled) = 0;
+	// 查询当前此调试模式是否已开启；该模式可通过命令行 --debug-canvas-item-redraw 或编辑器菜单 Debug → Debug CanvasItem Redraw 打开与关闭
 	virtual bool canvas_item_get_debug_redraw() const = 0;
 
+	// 开启此 CanvasItem 的物理插值，会在物理帧间平滑过渡其位置与变换，避免因高频物理更新而出现跳帧
 	virtual void canvas_item_set_interpolated(RID p_item, bool p_interpolated) = 0;
+	// 在当前物理时刻取消插值缓存，使该项在下一帧直接应用新位置，适用于需要瞬时移动而非平滑过渡的场景
 	virtual void canvas_item_reset_physics_interpolation(RID p_item) = 0;
+	// 同时更新该项的“上一个”和“当前” Transform，用于在大世界坐标系（如原点漂移）中平移整个场景时，保持插值连续性，避免视觉抖动
 	virtual void canvas_item_transform_physics_interpolation(RID p_item, const Transform2D &p_transform) = 0;
 
 	/* CANVAS LIGHT */
+	// 创建画布光源
 	virtual RID canvas_light_create() = 0;
 
+	// 两种类型的画布光源：点和方向
 	enum CanvasLightMode {
 		CANVAS_LIGHT_MODE_POINT,
 		CANVAS_LIGHT_MODE_DIRECTIONAL,
 	};
 
+
+	// 设置光源类型
 	virtual void canvas_light_set_mode(RID p_light, CanvasLightMode p_mode) = 0;
 
+	// 将光源附加到画布上
 	virtual void canvas_light_attach_to_canvas(RID p_light, RID p_canvas) = 0;
+	// 启用光源
 	virtual void canvas_light_set_enabled(RID p_light, bool p_enabled) = 0;
+	// 设置光源的变换
 	virtual void canvas_light_set_transform(RID p_light, const Transform2D &p_transform) = 0;
+	// 设置光源的颜色
 	virtual void canvas_light_set_color(RID p_light, const Color &p_color) = 0;
+	// 设置光源相对于画布平面的“高度”，用于模拟光源的垂直距离，影响光照衰减与阴影投射。
 	virtual void canvas_light_set_height(RID p_light, float p_height) = 0;
+	// 设置光源的能量
 	virtual void canvas_light_set_energy(RID p_light, float p_energy) = 0;
+	// 限定光源仅对 Z 索引（CanvasItem.z_index）在 [p_min_z, p_max_z] 区间内的项产生影响，实现层级分离的照明
 	virtual void canvas_light_set_z_range(RID p_light, int p_min_z, int p_max_z) = 0;
+	// 设置光源仅影响可见性层编号在 [p_min_layer, p_max_layer] 范围内的 CanvasItem，可配合多视口或分层渲染场景使用。
 	virtual void canvas_light_set_layer_range(RID p_light, int p_min_layer, int p_max_layer) = 0;
+	// 为光源指定影响掩码，仅对满足位掩码条件的 CanvasItem 生效，用于精细剔除不需要被照亮的对象。 
 	virtual void canvas_light_set_item_cull_mask(RID p_light, int p_mask) = 0;
+	// 设定投射阴影时的剔除掩码，仅与此掩码匹配的 CanvasItem 才会被考虑在阴影计算中，优化性能。
 	virtual void canvas_light_set_item_shadow_cull_mask(RID p_light, int p_mask) = 0;
 
+	// 仅对方向光模式有效，用于定义光线投射的最大“可见”距离，超出此距离后不再对 CanvasItem 产生照明或阴影
 	virtual void canvas_light_set_directional_distance(RID p_light, float p_distance) = 0;
 
+	// 设置自定义光照纹理在屏幕空间的缩放比例，用于细化光照图案或动画效果
 	virtual void canvas_light_set_texture_scale(RID p_light, float p_scale) = 0;
+	// 关联一个自定义 Texture2D 资源，作为光照投影纹理，支持丰富的遮光和光斑效果。
 	virtual void canvas_light_set_texture(RID p_light, RID p_texture) = 0;
+	// 调整光照纹理的 UV 偏移，可用于实时滚动或对齐灯光投影图案。
 	virtual void canvas_light_set_texture_offset(RID p_light, const Vector2 &p_offset) = 0;
 
+	// 光源的混合模式
 	enum CanvasLightBlendMode {
-		CANVAS_LIGHT_BLEND_MODE_ADD,
-		CANVAS_LIGHT_BLEND_MODE_SUB,
-		CANVAS_LIGHT_BLEND_MODE_MIX,
+		CANVAS_LIGHT_BLEND_MODE_ADD,		// 将光的颜色值直接加到底色上，产生叠加式增亮效果，是默认且最常用的照明方式
+		CANVAS_LIGHT_BLEND_MODE_SUB,		// 将底色减去光的颜色，得到“负光”或局部暗化效果，可用于特殊的反向照明或艺术化效果，虽然不符合物理真实却在一些场景中非常实用
+		CANVAS_LIGHT_BLEND_MODE_MIX,		// 根据光源贴图的透明度（Alpha）对光色与场景色进行线性插值，产生更柔和或基于贴图形状的过渡效果，常用于聚光灯、纹理化光晕等需精准控制边缘的场景
 	};
 
+	// 设置混合模式
 	virtual void canvas_light_set_blend_mode(RID p_light, CanvasLightBlendMode p_mode) = 0;
 
 	enum CanvasLightShadowFilter {
-		CANVAS_LIGHT_FILTER_NONE,
-		CANVAS_LIGHT_FILTER_PCF5,
-		CANVAS_LIGHT_FILTER_PCF13,
+		CANVAS_LIGHT_FILTER_NONE,		// 不对阴影应用任何过滤，直接使用原始深度贴图生成的阴影，这会得到最清晰但最锯齿感严重的阴影
+		CANVAS_LIGHT_FILTER_PCF5,		// 使用 5 点采样的 PCF（Percentage-Closer Filtering）算法对阴影进行平滑：对目标像素周围 5 个样本进行深度比较并取平均，从而减少硬边缘和锯齿
+		CANVAS_LIGHT_FILTER_PCF13,		// 使用 13 点采样的 PCF 算法，采样更多点以获得更柔和的阴影过渡，代价是更高的 GPU 运算开销
 		CANVAS_LIGHT_FILTER_MAX
 	};
 
+	// 启用或禁用指定光源的阴影。当 p_enabled = true 时，光源会投射阴影；否则将不再计算或渲染阴影
 	virtual void canvas_light_set_shadow_enabled(RID p_light, bool p_enabled) = 0;
+	// 设置阴影的过滤（滤波）模式
 	virtual void canvas_light_set_shadow_filter(RID p_light, CanvasLightShadowFilter p_filter) = 0;
+	// 配置阴影的颜色调制，通过传入 p_color 的 RGBA 分量来改变阴影的色调与透明度，常用于实现非黑色或部分透明的阴影效果 
 	virtual void canvas_light_set_shadow_color(RID p_light, const Color &p_color) = 0;
+	// 调整阴影的渐变长度或“平滑度”，数值越低边缘越柔和、过渡越宽；数值越高边缘越锐利。该设置影响阴影梯度的计算范围，用于在性能与视觉质量之间做平衡
 	virtual void canvas_light_set_shadow_smooth(RID p_light, float p_smooth) = 0;
 
+	// 开启或关闭光源的位置与变换的物理插值。当 p_interpolated = true 时，光源将在物理更新帧与渲染帧之间平滑过渡，减少抖动；否则光源将在渲染时直接采用最新物理位置，出现“跳跃”效果 
 	virtual void canvas_light_set_interpolated(RID p_light, bool p_interpolated) = 0;
+	// 在当前物理时刻重置光源的插值缓存，使光源在下一帧立即应用新位置，而非从上一位置渐变，常用于需要瞬时移动而非平滑过渡的特效场景
 	virtual void canvas_light_reset_physics_interpolation(RID p_light) = 0;
+	// 同时更新光源“上一帧”和“当前”存储的变换矩阵，以避免在进行大范围坐标系移动（如原点漂移）时产生插值错位或抖动，保证视觉一致性
 	virtual void canvas_light_transform_physics_interpolation(RID p_light, const Transform2D &p_transform) = 0;
 
 	/* CANVAS LIGHT OCCLUDER */
 
+	// 在渲染服务器中创建一个新的光源遮挡器（LightOccluder2D），并返回其 RID；完成使用后应调用 free_rid() 释放该资源
 	virtual RID canvas_light_occluder_create() = 0;
+	// 将指定的遮挡器附加到某个画布（Canvas）上，若其之前已挂载至其他画布，则会自动移除旧关联
 	virtual void canvas_light_occluder_attach_to_canvas(RID p_occluder, RID p_canvas) = 0;
+	// 启用或禁用该遮挡器；false 时不会再参与阴影计算和渲染
 	virtual void canvas_light_occluder_set_enabled(RID p_occluder, bool p_enabled) = 0;
+	// 设置遮挡器的形状
 	virtual void canvas_light_occluder_set_polygon(RID p_occluder, RID p_polygon) = 0;
+	// 是否将该多边形纳入实时生成的签名距离场（SDF）中，以供自定义着色器使用
 	virtual void canvas_light_occluder_set_as_sdf_collision(RID p_occluder, bool p_enable) = 0;
+	// 设置变换矩阵
 	virtual void canvas_light_occluder_set_transform(RID p_occluder, const Transform2D &p_xform) = 0;
+	// 设置光照掩码
 	virtual void canvas_light_occluder_set_light_mask(RID p_occluder, int p_mask) = 0;
 
+	// 开启或关闭该遮挡器的物理插值；启用后会在渲染帧与物理帧间平滑过渡位置，避免跳帧抖动
 	virtual void canvas_light_occluder_set_interpolated(RID p_occluder, bool p_interpolated) = 0;
+	// 在本次物理更新周期内重置插值缓存，使遮挡器瞬时应用新位置，而非从旧位置渐变，适合瞬移场景
 	virtual void canvas_light_occluder_reset_physics_interpolation(RID p_occluder) = 0;
+	// 同时更新遮挡器的“上一帧”和“当前”存储变换，用于大世界原点漂移等场景，避免插值错位
 	virtual void canvas_light_occluder_transform_physics_interpolation(RID p_occluder, const Transform2D &p_transform) = 0;
 
 	/* CANVAS LIGHT OCCLUDER POLYGON */
+	// 这段代码提供了一组与2D画布遮挡多边形和阴影贴图相关的底层接口，用于创建和配置 LightOccluder2D 的遮挡多边形、设置其剔除模式、调整阴影纹理大小，以及获取 CanvasItem 的调试矩形信息。
 
+	// 创建一个新的遮挡多边形资源，并返回其RID标识符。
 	virtual RID canvas_occluder_polygon_create() = 0;
+	// 设置遮挡多边形的顶点列表及是否闭合。
 	virtual void canvas_occluder_polygon_set_shape(RID p_occluder_polygon, const Vector<Vector2> &p_shape, bool p_closed) = 0;
 
+	// 定义多边形的剔除模式，可禁用、顺时针剔除或逆时针剔除。
 	enum CanvasOccluderPolygonCullMode {
 		CANVAS_OCCLUDER_POLYGON_CULL_DISABLED,
 		CANVAS_OCCLUDER_POLYGON_CULL_CLOCKWISE,
 		CANVAS_OCCLUDER_POLYGON_CULL_COUNTER_CLOCKWISE,
 	};
 
+	// 为指定的遮挡多边形设置剔除模式。
 	virtual void canvas_occluder_polygon_set_cull_mode(RID p_occluder_polygon, CanvasOccluderPolygonCullMode p_mode) = 0;
-
+	// 配置2D阴影渲染所用阴影纹理贴图的大小（以像素为单位，向上取整到2的幂）。
 	virtual void canvas_set_shadow_texture_size(int p_size) = 0;
-
+	
+	// 获取画布的大小 
 	Rect2 debug_canvas_item_get_rect(RID p_item);
 	virtual Rect2 _debug_canvas_item_get_rect(RID p_item) = 0;
 
 	/* GLOBAL SHADER UNIFORMS */
 
+	// 定义了 Godot 渲染服务器（RenderingServer）中全局 shader 参数（即 global uniform）的各种类型，
+	// 用于在运行时通过接口（如 RenderingServer.global_shader_parameter_add）向所有 shader 统一传递数据。
+	// 它不仅决定了 GPU 端的 uniform 类型（如 bool, vec3, mat4, sampler2D 等），还影响了编辑器中参数的 UI 类型展示（如 Vector3、Color、Texture2D 等）。
 	enum GlobalShaderParameterType {
 		GLOBAL_VAR_TYPE_BOOL,
 		GLOBAL_VAR_TYPE_BVEC2,
@@ -2582,76 +2784,105 @@ MultiMesh 将成百上千个相同网格实例打包成一个资源提交给渲�
 		GLOBAL_VAR_TYPE_MAX
 	};
 
+	// 添加全局着色器参数
 	virtual void global_shader_parameter_add(const StringName &p_name, GlobalShaderParameterType p_type, const Variant &p_value) = 0;
+	// 移除全局着色器参数
 	virtual void global_shader_parameter_remove(const StringName &p_name) = 0;
 	virtual Vector<StringName> global_shader_parameter_get_list() const = 0;
 
+	// 将名为 name 的全局 uniform 变量设置为 value。此操作会直接写入渲染服务器，而不会强制同步 CPU 与 GPU，因此性能开销极小，适合频繁更新。
 	virtual void global_shader_parameter_set(const StringName &p_name, const Variant &p_value) = 0;
+	// 与普通 set 不同，此方法在内部生成一个相当于 ShaderGlobalsOverride 节点的覆盖层（override），允许在特定场景或节点范围内临时改变全局 uniform 的值。该覆盖层可在不修改项目设置全局参数的前提下生效。
 	virtual void global_shader_parameter_set_override(const StringName &p_name, const Variant &p_value) = 0;
 
+	// 返回当前全局 uniform name 的值
 	virtual Variant global_shader_parameter_get(const StringName &p_name) const = 0;
+	// 查询全局 uniform name 的类型
 	virtual GlobalShaderParameterType global_shader_parameter_get_type(const StringName &p_name) const = 0;
 
+	// 在引擎启动或场景初始化时，从项目设置（project.godot）的 “Shader Globals” 部分加载所有已注册的全局参数，并根据 load_textures 决定是否附带加载其默认纹理。
 	virtual void global_shader_parameters_load_settings(bool p_load_textures) = 0;
+	// 清除当前所有已注册的全局 uniform 参数，将渲染服务器重置到无全局 uniform 的状态。此操作多用于项目重置或切换大规模渲染配置时。
 	virtual void global_shader_parameters_clear() = 0;
 
+	// 将 GlobalShaderParameterType 枚举值映射到底层着色器所使用的数据类型编号（如 GPU API 定义的常量），以便在底层渲染设备中正确创建对应的 uniform 布局和缓冲区。
 	static int global_shader_uniform_type_get_shader_datatype(GlobalShaderParameterType p_type);
 
 	/* FREE */
-
+	// 释放资源
 	virtual void free(RID p_rid) = 0; // Free RIDs associated with the rendering server.
 
 	/* INTERPOLATION */
-
+	// 启用物理插值
 	virtual void set_physics_interpolation_enabled(bool p_enabled) = 0;
 
 	/* EVENT QUEUING */
 
+	// 帧绘制完成后的回调
 	virtual void request_frame_drawn_callback(const Callable &p_callable) = 0;
 
+	// 渲染绘制
 	virtual void draw(bool p_swap_buffers = true, double frame_step = 0.0) = 0;
+	// 同步
 	virtual void sync() = 0;
+	// 状态检测
 	virtual bool has_changed() const = 0;
+	// 初始化
 	virtual void init();
+	// 渲染之后的操作
 	virtual void finish() = 0;
+	// 每帧的更新
 	virtual void tick() = 0;
+	// 渲染前的准备
 	virtual void pre_draw(bool p_will_draw) = 0;
 
 	/* STATUS INFORMATION */
 
+	// 性能统计指标数
 	enum RenderingInfo {
-		RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME,
-		RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME,
-		RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME,
-		RENDERING_INFO_TEXTURE_MEM_USED,
-		RENDERING_INFO_BUFFER_MEM_USED,
-		RENDERING_INFO_VIDEO_MEM_USED,
-		RENDERING_INFO_PIPELINE_COMPILATIONS_CANVAS,
-		RENDERING_INFO_PIPELINE_COMPILATIONS_MESH,
-		RENDERING_INFO_PIPELINE_COMPILATIONS_SURFACE,
-		RENDERING_INFO_PIPELINE_COMPILATIONS_DRAW,
-		RENDERING_INFO_PIPELINE_COMPILATIONS_SPECIALIZATION,
+		RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME,		// 一帧的所有对象数
+		RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME,	// 一帧的所有图元数
+		RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME,	// 一帧的所有drawcall数
+		RENDERING_INFO_TEXTURE_MEM_USED,		// 纹理内存使用情况
+		RENDERING_INFO_BUFFER_MEM_USED,			// 缓冲内存使用情况。
+		RENDERING_INFO_VIDEO_MEM_USED,			// 现存使用量
+		RENDERING_INFO_PIPELINE_COMPILATIONS_CANVAS,	// 画布编译次数
+		RENDERING_INFO_PIPELINE_COMPILATIONS_MESH,		// 网格编译次数
+		RENDERING_INFO_PIPELINE_COMPILATIONS_SURFACE,	// 表面编译次数
+		RENDERING_INFO_PIPELINE_COMPILATIONS_DRAW,		// 绘制编译次数
+		RENDERING_INFO_PIPELINE_COMPILATIONS_SPECIALIZATION,	// 优化编译次数
 		RENDERING_INFO_MAX
 	};
 
+	// 返回指定类型的渲染统计数据
 	virtual uint64_t get_rendering_info(RenderingInfo p_info) = 0;
+	// 显卡名
 	virtual String get_video_adapter_name() const = 0;
+	// 显卡供应商
 	virtual String get_video_adapter_vendor() const = 0;
+	// 显卡类型
 	virtual RenderingDevice::DeviceType get_video_adapter_type() const = 0;
+	// 显卡驱动API版本
 	virtual String get_video_adapter_api_version() const = 0;
 
+	// 性能分析
 	struct FrameProfileArea {
-		String name;
-		double gpu_msec;
-		double cpu_msec;
+		String name;		// 阶段名
+		double gpu_msec;	// GPU消耗
+		double cpu_msec;	// CPU消耗
 	};
 
+	// 用于开启或关闭帧级性能剖析
 	virtual void set_frame_profiling_enabled(bool p_enable) = 0;
+	// 获取帧数据
 	virtual Vector<FrameProfileArea> get_frame_profile() = 0;
+	// 获取帧编号
 	virtual uint64_t get_frame_profile_frame() = 0;
 
+	// 获取帧设置时间
 	virtual double get_frame_setup_time_cpu() const = 0;
 
+	// 设置GI使用半分辨率
 	virtual void gi_set_use_half_resolution(bool p_enable) = 0;
 
 	/* TESTING */
@@ -2661,15 +2892,22 @@ MultiMesh 将成百上千个相同网格实例打包成一个资源提交给渲�
 	virtual RID get_test_texture();
 	virtual RID get_white_texture();
 
+	// 在 SDFGI（基于体素的全局光照）调试视图中选定一个探针（probe），通过 position 与 dir 确定该探针在视图中的位置和朝向，便于可视化查看探针采样结果
 	virtual void sdfgi_set_debug_probe_select(const Vector3 &p_position, const Vector3 &p_dir) = 0;
 
+	// 创建一个球网格体
 	virtual RID make_sphere_mesh(int p_lats, int p_lons, real_t p_radius);
 
+	// 用网格数据填充表面
 	virtual void mesh_add_surface_from_mesh_data(RID p_mesh, const Geometry3D::MeshData &p_mesh_data);
+	// 用平面添加表面
 	virtual void mesh_add_surface_from_planes(RID p_mesh, const Vector<Plane> &p_planes);
 
+	// 设置启动图片
 	virtual void set_boot_image(const Ref<Image> &p_image, const Color &p_color, bool p_scale, bool p_use_filter = true) = 0;
+	// 获取默认清除色
 	virtual Color get_default_clear_color() = 0;
+	// 设置默认清除色
 	virtual void set_default_clear_color(const Color &p_color) = 0;
 
 #ifndef DISABLE_DEPRECATED
@@ -2680,31 +2918,47 @@ MultiMesh 将成百上千个相同网格实例打包成一个资源提交给渲�
 	};
 	virtual bool has_feature(Features p_feature) const = 0;
 #endif
+	// 返回 true 如果操作系统支持指定的功能标签
 	virtual bool has_os_feature(const String &p_feature) const = 0;
 
+	// 生成调试线框
 	virtual void set_debug_generate_wireframes(bool p_generate) = 0;
 
+	// 设置垂直同步模式
 	virtual void call_set_vsync_mode(DisplayServer::VSyncMode p_mode, DisplayServer::WindowID p_window) = 0;
 
+	// 是否是低后端
 	virtual bool is_low_end() const = 0;
 
+	// 设置输出GPU分析
 	virtual void set_print_gpu_profile(bool p_enable) = 0;
 
+	// 获取最大视口尺寸
 	virtual Size2i get_maximum_viewport_size() const = 0;
 
+	// 获取渲染设备
 	RenderingDevice *get_rendering_device() const;
+	// 创建本地渲染设备
 	RenderingDevice *create_local_rendering_device() const;
 
+	// 是否启用了渲染循环
 	bool is_render_loop_enabled() const;
+	// 设置启用渲染循环
 	void set_render_loop_enabled(bool p_enabled);
 
+	// 是否在渲染线程上
 	virtual bool is_on_render_thread() = 0;
+	// 在渲染线程上调用
 	virtual void call_on_render_thread(const Callable &p_callable) = 0;
 
+	// 获取当前渲染驱动名
 	String get_current_rendering_driver_name() const;
+	// 获取当前渲染方法
 	String get_current_rendering_method() const;
 
-#ifdef TOOLS_ENABLED
+#ifdef TOOLS_ENABLED	// Godot 的工具模式（TOOLS_ENABLED）下，用于在编辑器中扩展和定制化功能。
+
+	// 在调用特定方法时动态提供参数补全列表
 	virtual void get_argument_options(const StringName &p_function, int p_idx, List<String> *r_options) const override;
 #endif
 
@@ -2713,7 +2967,9 @@ MultiMesh 将成百上千个相同网格实例打包成一个资源提交给渲�
 
 #ifdef TOOLS_ENABLED
 	typedef void (*SurfaceUpgradeCallback)();
+	// 注册一个类型为 void (*)() 的回调函数，当渲染服务器检测到底层“surface”资源需要升级（例如材质或网格格式变更）时，会调用此回调。
 	void set_surface_upgrade_callback(SurfaceUpgradeCallback p_callback);
+	// 控制在执行“surface”资源自动升级时，是否向用户发出警告提示。传入 true 时，编辑器会在升级过程中弹出提醒；传入 false 则静默完成升级。
 	void set_warn_on_surface_upgrade(bool p_warn);
 #endif
 
@@ -2723,17 +2979,31 @@ MultiMesh 将成百上千个相同网格实例打包成一个资源提交给渲�
 
 private:
 	// Binder helpers
+
+	// 创建一个 二维层叠纹理（Texture2DArray／ImageTextureLayered），将传入的多层 Image 拼接为一个分层纹理，并返回对应的 RID，后续可用于材质或着色器采样
 	RID _texture_2d_layered_create(const TypedArray<Image> &p_layers, TextureLayeredType p_layered_type);
+	// 创建一个 三维纹理（ImageTexture3D），指定像素格式、宽高深和是否生成 Mipmaps，并用 p_data 中的多张 Image 填充各层数据，返回对应的 RID，常用于体积渲染、LUT、密度场等场景 
 	RID _texture_3d_create(Image::Format p_format, int p_width, int p_height, int p_depth, bool p_mipmaps, const TypedArray<Image> &p_data);
+	// 使用新的三维纹理更新纹理资源
 	void _texture_3d_update(RID p_texture, const TypedArray<Image> &p_data);
+	// 获取纹理的image资源
 	TypedArray<Image> _texture_3d_get(RID p_texture) const;
+	// 获取着色器的参数列表
 	TypedArray<Dictionary> _shader_get_shader_parameter_list(RID p_shader) const;
+	// 用表面数据创建网格资源
+	// 表面数据包括：Dictionary 数组（每个字典描述一个面—包括顶点、法线、UV、索引等）
 	RID _mesh_create_from_surfaces(const TypedArray<Dictionary> &p_surfaces, int p_blend_shape_count);
+	// 将一个表面的数据添加到网格中
 	void _mesh_add_surface(RID p_mesh, const Dictionary &p_surface);
+	// 获取网格的某个面数据
 	Dictionary _mesh_get_surface(RID p_mesh, int p_idx);
+	// 获取几何实例的着色器参数列表
 	TypedArray<Dictionary> _instance_geometry_get_shader_parameter_list(RID p_instance) const;
+	// 获取画布单元实例的着色器参数列表
 	TypedArray<Dictionary> _canvas_item_get_instance_shader_parameter_list(RID p_item) const;
+	// 烘焙某个实例或者资源
 	TypedArray<Image> _bake_render_uv2(RID p_base, const TypedArray<RID> &p_material_overrides, const Size2i &p_image_size);
+	// 设置粒子的尾迹绑定姿态
 	void _particles_set_trail_bind_poses(RID p_particles, const TypedArray<Transform3D> &p_bind_poses);
 #ifdef TOOLS_ENABLED
 	SurfaceUpgradeCallback surface_upgrade_callback = nullptr;
@@ -2742,6 +3012,7 @@ private:
 };
 
 // Make variant understand the enums.
+// 让Variant动态类型“理解”这些枚举
 VARIANT_ENUM_CAST(RenderingServer::TextureType);
 VARIANT_ENUM_CAST(RenderingServer::TextureLayeredType);
 VARIANT_ENUM_CAST(RenderingServer::CubeMapLayer);
@@ -2830,6 +3101,7 @@ VARIANT_ENUM_CAST(RenderingServer::Features);
 #endif
 
 // Alias to make it easier to use.
+// 设置一个别名，让它用起来更容易。
 #define RS RenderingServer
 
 #endif // RENDERING_SERVER_H

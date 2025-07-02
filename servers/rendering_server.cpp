@@ -3562,6 +3562,8 @@ void RenderingServer::set_render_loop_enabled(bool p_enabled) {
 	render_loop_enabled = p_enabled;
 }
 
+// 在进入构造函数的时候，对象的内存已经分配完毕
+// 所以在构造函数里是可以使用this指针的。
 RenderingServer::RenderingServer() {
 	//ERR_FAIL_COND(singleton);
 
