@@ -1201,7 +1201,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				OS::get_singleton()->print("Missing audio output latency argument, aborting.\n");
 				goto error;
 			}
-		} else if (arg == "--text-driver") {
+		} else if (arg == "--text-driver") {		// 文字驱动
 			if (N) {
 				text_driver = N->get();
 				N = N->next();
@@ -1210,7 +1210,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				goto error;
 			}
 
-		} else if (arg == "--display-driver") { // force video driver
+		} else if (arg == "--display-driver") { // force video driver（显卡驱动）
 
 			if (N) {
 				display_driver = N->get();
@@ -1246,7 +1246,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				OS::get_singleton()->print("Missing display driver argument, aborting.\n");
 				goto error;
 			}
-		} else if (arg == "--rendering-method") {
+		} else if (arg == "--rendering-method") {		// 渲染方法
 			if (N) {
 				rendering_method = N->get();
 				N = N->next();
@@ -1254,7 +1254,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				OS::get_singleton()->print("Missing renderer name argument, aborting.\n");
 				goto error;
 			}
-		} else if (arg == "--rendering-driver") {
+		} else if (arg == "--rendering-driver") {		// 渲染驱动
 			if (N) {
 				rendering_driver = N->get();
 				N = N->next();
@@ -1271,7 +1271,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		} else if (arg == "-w" || arg == "--windowed") { // force windowed window
 
 			init_windowed = true;
-		} else if (arg == "--gpu-index") {
+		} else if (arg == "--gpu-index") {	// 指定GPU索引
 			if (N) {
 				Engine::singleton->gpu_idx = N->get().to_int();
 				N = N->next();
@@ -1280,20 +1280,25 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				goto error;
 			}
 		} else if (arg == "--gpu-validation") {
-			Engine::singleton->use_validation_layers = true;
+			Engine::singleton->use_validation_layers = true;	// 激活vulkan的验证层。
 #ifdef DEBUG_ENABLED
 		} else if (arg == "--gpu-abort") {
-			Engine::singleton->abort_on_gpu_errors = true;
+			Engine::singleton->abort_on_gpu_errors = true;		// 忽略GPU的错误
 #endif
 		} else if (arg == "--generate-spirv-debug-info") {
-			Engine::singleton->generate_spirv_debug_info = true;
+			Engine::singleton->generate_spirv_debug_info = true;		// 生成ｓｐｉｒｖ调试信息
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
 		} else if (arg == "--extra-gpu-memory-tracking") {
-			Engine::singleton->extra_gpu_memory_tracking = true;
+			Engine::singleton->extra_gpu_memory_tracking = true;		// 使用额外的GPU内存追踪（就是显存追踪）
 		} else if (arg == "--accurate-breadcrumbs") {
-			Engine::singleton->accurate_breadcrumbs = true;
+			// 于在 Vulkan 渲染管线里为每个 “breadcrumb” 插入显式的 GPU 内存屏障，
+			// 从而保证在发生 GPU 崩溃或设备丢失时，所记录的最后一个 breadcrumb （即最后执行的渲染命令）是真实、可靠的
+
+			// 诊断 GPU 崩溃：当 GPU 因渲染错误（如设备丢失、资源越界）而崩溃时，Godot 会捕获错误并打印最后若干个 breadcrumbs，以倒序方式显示最近执行的渲染命令。
+			// 快速定位问题：通过这些数值，开发者可以结合渲染代码或渲染图（render graph）来确定是哪一次提交导致了问题‍
+			Engine::singleton->accurate_breadcrumbs = true;		// 启用Vulkan的breadcrumb
 #endif
-		} else if (arg == "--tablet-driver") {
+		} else if (arg == "--tablet-driver") {		// 笔平板（pen tablet）输入驱动
 			if (N) {
 				tablet_driver = N->get();
 				N = N->next();
@@ -1302,6 +1307,12 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				goto error;
 			}
 		} else if (arg == "--delta-smoothing") {
+			/**
+			 * 控制 帧时间增量（delta time）的平滑处理。它的主要作用是对游戏主循环中传递
+			 * 给 _process(delta) 和 _physics_process(delta) 的原始 delta 值进行滤波，
+			 * 平滑掉因操作系统计时器精度、VSync 同步和 GPU 工作间隙导致的突发波动，从而
+			 * 减少运动和动画中的抖动，显著提升视觉流畅度。该功能仅在启用 VSync 时生效
+			 */
 			if (N) {
 				String string = N->get();
 				bool recognized = false;
@@ -1325,13 +1336,13 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				goto error;
 			}
 		} else if (arg == "--single-window") { // force single window
-
+			// 强制单窗口
 			single_window = true;
 		} else if (arg == "-t" || arg == "--always-on-top") { // force always-on-top window
-
+			// 强制位于窗口顶层
 			init_always_on_top = true;
 		} else if (arg == "--resolution") { // force resolution
-
+			// 固定分辨率
 			if (N) {
 				String vm = N->get();
 
@@ -1362,7 +1373,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			}
 
 		} else if (arg == "--screen") { // set window screen
-
+			// 用那个显示器
 			if (N) {
 				init_screen = N->get().to_int();
 				init_use_custom_screen = true;
@@ -1374,7 +1385,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			}
 
 		} else if (arg == "--position") { // set window position
-
+			// 窗口位置
 			if (N) {
 				String vm = N->get();
 
@@ -1412,7 +1423,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				goto error;
 			}
 		} else if (arg == "--profiling") { // enable profiling
-
+			// 启用调试分析器
 			use_debug_profiler = true;
 
 		} else if (arg == "-l" || arg == "--language") { // language
@@ -1426,7 +1437,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			}
 
 		} else if (arg == "--remote-fs") { // remote filesystem
-
+			// 远程文件系统
 			if (N) {
 				remotefs = N->get();
 				N = N->next();
@@ -1444,7 +1455,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				goto error;
 			}
 		} else if (arg == "--render-thread") { // render thread mode
-
+			// 用单独的渲染线程
 			if (N) {
 				if (N->get() == "safe") {
 					separate_thread_render = 0;
@@ -1472,13 +1483,16 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			}
 #ifdef TOOLS_ENABLED
 		} else if (arg == "-e" || arg == "--editor") { // starts editor
-
+			// 启动编辑器
 			editor = true;
 		} else if (arg == "-p" || arg == "--project-manager") { // starts project manager
 			project_manager = true;
 		} else if (arg == "--recovery-mode") { // Enables recovery mode.
 			recovery_mode = true;
 		} else if (arg == "--debug-server") {
+			// 让 Godot 在启动时作为一个“编辑器调试服务器”（Editor Debug Server），在指定的网络地址上监听调试客户端的连接
+			// 启用后，Godot 编辑器或外部调试器可通过该地址连接到运行中的游戏，以便设置断点、单步执行、查看场景树及变量状态等
+			// URI 必须包含协议、绑定地址和端口，常见格式如 tcp://127.0.0.1:6007，支持的协议类型由 Godot 的编译配置决定，通常为 TCP
 			if (N) {
 				debug_server_uri = N->get();
 				if (!debug_server_uri.contains("://")) { // wrong address
@@ -1491,13 +1505,15 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				goto error;
 			}
 		} else if (arg == "--single-threaded-scene") {
+			// 单线程场景
 			single_threaded_scene = true;
 		} else if (arg == "--build-solutions") { // Build the scripting solution such C#
-
+			// 以“编辑器 + 命令行工具”模式运行，并在初始化完成后的主循环中自动调用 EditorNode::call_build() 来生成 C# 脚本的解决方案文件（.sln/.csproj）──也就是“构建脚本解决方案”功能
 			auto_build_solutions = true;
 			editor = true;
 			cmdline_tool = true;
 		} else if (arg == "--dump-gdextension-interface") {
+			// 让引擎在命令行模式下运行编辑器实例，并生成 gdextension_interface.h 头文件，以便用户在当前目录下获取最新的 GDExtension 接口定义。
 			// Register as an editor instance to use low-end fallback if relevant.
 			editor = true;
 			cmdline_tool = true;
@@ -1511,7 +1527,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			// Register as an editor instance to use low-end fallback if relevant.
 			editor = true;
 			cmdline_tool = true;
-			dump_extension_api = true;
+			dump_extension_api = true;	// 用来dump扩展api
 			print_line("Dumping Extension API");
 			// Hack. Not needed but otherwise we end up detecting that this should
 			// run the project instead of a cmdline tool.
@@ -1549,10 +1565,10 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		} else if (arg == "--import") {
 			editor = true;
 			cmdline_tool = true;
-			wait_for_import = true;
+			wait_for_import = true;		// 等待输入
 			quit_after = 1;
 		} else if (arg == "--export-release" || arg == "--export-debug" ||
-				arg == "--export-pack" || arg == "--export-patch") { // Export project
+				arg == "--export-pack" || arg == "--export-patch") { // Export project（导出项目）
 			// Actually handling is done in start().
 			editor = true;
 			cmdline_tool = true;
@@ -1561,6 +1577,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		} else if (arg == "--patches") {
 			if (N) {
 				// Actually handling is done in start().
+				// 在start（）函数中完成实际处理
 				main_args.push_back(arg);
 				main_args.push_back(N->get());
 
@@ -1605,6 +1622,10 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			}
 #endif // DISABLE_DEPRECATED
 		} else if (arg == "--doctool") {
+			// 将引擎切换到「文档生成工具模式」
+			// 将 cmdline_tool 置为 true，告诉引擎无需启动编辑器界面，以命令行方式运行。
+			// 隐式启用「无头模式」（headless），通过将音频驱动和显示驱动都设为 NULL_*_DRIVER，避免创建窗口和音频输出，从而加快 API 文档（XML）生成。
+			// 把 --doctool 参数推入 main_args，以便后续在 start() 函数中统一处理，真正执行文档导出逻辑。
 			// Actually handling is done in start().
 			cmdline_tool = true;
 
@@ -1631,7 +1652,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 #endif // MODULE_GDSCRIPT_ENABLED
 #endif // TOOLS_ENABLED
 		} else if (arg == "--path") { // set path of project to start or edit
-
+			// 运行的项目，编辑或者启动
 			if (N) {
 				String p = N->get();
 				if (OS::get_singleton()->set_cwd(p) != OK) {
@@ -1647,7 +1668,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			upwards = true;
 		} else if (arg == "--quit") { // Auto quit at the end of the first main loop iteration
 			quit_after = 1;
-		} else if (arg == "--quit-after") { // Quit after the given number of iterations
+		} else if (arg == "--quit-after") { // Quit after the given number of iterations	(给定的迭代次数结束后退出）
 			if (N) {
 				quit_after = N->get().to_int();
 				N = N->next();
@@ -1673,7 +1694,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			editor = true;
 #endif
 		} else if (arg == "-b" || arg == "--breakpoints") { // add breakpoints
-
+			// 添加断点，用于对脚本或者GDExtension的调试
 			if (N) {
 				String bplist = N->get();
 				breakpoints = bplist.split(",");
@@ -1684,7 +1705,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			}
 
 		} else if (arg == "--max-fps") { // set maximum rendered FPS
-
+			// 最大FPS
 			if (N) {
 				max_fps = N->get().to_int();
 				N = N->next();
@@ -1694,7 +1715,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			}
 
 		} else if (arg == "--frame-delay") { // force frame delay
-
+			// 强制帧延迟
 			if (N) {
 				frame_delay = N->get().to_int();
 				N = N->next();
@@ -1704,7 +1725,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			}
 
 		} else if (arg == "--time-scale") { // force time scale
-
+			// 强制时间缩放
 			if (N) {
 				Engine::get_singleton()->set_time_scale(N->get().to_float());
 				N = N->next();
@@ -1723,6 +1744,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			}
 
 		} else if (arg == "-d" || arg == "--debug") {
+			// 调试
 			debug_uri = "local://";
 			OS::get_singleton()->_debug_stdout = true;
 #if defined(DEBUG_ENABLED)
@@ -1761,8 +1783,10 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				goto error;
 			}
 		} else if (arg == "--disable-render-loop") {
+			// 禁用渲染循环
 			disable_render_loop = true;
 		} else if (arg == "--fixed-fps") {
+			// 固定FPS
 			if (N) {
 				fixed_fps = N->get().to_int();
 				N = N->next();
@@ -1771,6 +1795,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 				goto error;
 			}
 		} else if (arg == "--write-movie") {
+			// 启用录制模式，渲染非实时的场景录像
 			if (N) {
 				Engine::get_singleton()->set_write_movie_path(N->get());
 				N = N->next();
@@ -1791,7 +1816,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 			editor_pseudolocalization = true;
 #endif // TOOLS_ENABLED
 		} else if (arg == "--profile-gpu") {
-			profile_gpu = true;
+			profile_gpu = true;	// ｇｐｕ性能分析
 		} else if (arg == "--disable-crash-handler") {
 			OS::get_singleton()->disable_crash_handler();
 		} else if (arg == "--skip-breakpoints") {
@@ -1894,6 +1919,8 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 	// Network file system needs to be configured before globals, since globals are based on the
 	// 'project.godot' file which will only be available through the network if this is enabled
+	// 网络文件系统需要在 globals 之前进行配置，因为 globals 是基于 'project.godot' 文件构建的，而该文件只有在启用网络文件系统后才能通过网络访问。
+
 	if (!remotefs.is_empty()) {
 		int port;
 		if (remotefs.contains_char(':')) {
@@ -1911,6 +1938,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	}
 
 	OS::get_singleton()->_in_editor = editor;
+	// 设置编辑器的启动配置
 	if (globals->setup(project_path, main_pack, upwards, editor) == OK) {
 #ifdef TOOLS_ENABLED
 		found_project = true;
@@ -1931,6 +1959,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	{
 #ifdef THREADS_ENABLED
 		if (editor || project_manager) {
+			// 初始化线程池，指定线程数量，低优先级任务的延迟时间。
 			WorkerThreadPool::get_singleton()->init(-1, 0.75);
 		} else {
 			int worker_threads = GLOBAL_GET("threading/worker_pool/max_threads");
@@ -1948,6 +1977,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		Engine::get_singleton()->set_extension_reloading_enabled(true);
 
 		// Create initialization lock file to detect crashes during startup.
+		// 创建初始化锁文件，检测启动过程中的崩溃问题
 		OS::get_singleton()->create_lock_file();
 
 		main_args.push_back("--editor");
@@ -1959,11 +1989,12 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 	if (!project_manager && !editor) {
 		// If we didn't find a project, we fall back to the project manager.
+		// 没找到一个项目，就打开项目管理器
 		project_manager = !found_project && !cmdline_tool;
 	}
 
 	if (project_manager) {
-		Engine::get_singleton()->set_project_manager_hint(true);
+		Engine::get_singleton()->set_project_manager_hint(true);		// 设置项目管理器提示
 	}
 
 	if (recovery_mode) {
@@ -1976,8 +2007,10 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	}
 #endif
 
+	// 系统单例，设置命令行
 	OS::get_singleton()->set_cmdline(execpath, main_args, user_args);
 
+	// 引擎单例，设置物理的tick次数
 	Engine::get_singleton()->set_physics_ticks_per_second(GLOBAL_DEF_BASIC(PropertyInfo(Variant::INT, "physics/common/physics_ticks_per_second", PROPERTY_HINT_RANGE, "1,1000,1"), 60));
 	Engine::get_singleton()->set_max_physics_steps_per_frame(GLOBAL_DEF_BASIC(PropertyInfo(Variant::INT, "physics/common/max_physics_steps_per_frame", PROPERTY_HINT_RANGE, "1,100,1"), 8));
 	Engine::get_singleton()->set_physics_jitter_fix(GLOBAL_DEF(PropertyInfo(Variant::FLOAT, "physics/common/physics_jitter_fix", PROPERTY_HINT_RANGE, "0,2,0.001,or_greater"), 0.5));
@@ -1987,6 +2020,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	}
 
 	// Initialize user data dir.
+	// 初始化用户数据路径
 	OS::get_singleton()->ensure_user_data_dir();
 
 	OS::get_singleton()->set_low_processor_usage_mode(GLOBAL_DEF("application/run/low_processor_mode", false));
@@ -1998,6 +2032,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		OS::get_singleton()->set_delta_smoothing(GLOBAL_GET("application/run/delta_smoothing"));
 	}
 
+	// 一些全局配置信息
 	GLOBAL_DEF("debug/settings/stdout/print_fps", false);
 	GLOBAL_DEF("debug/settings/stdout/print_gpu_profile", false);
 	GLOBAL_DEF("debug/settings/stdout/verbose_stdout", false);
@@ -2006,22 +2041,27 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 		OS::get_singleton()->_verbose_stdout = GLOBAL_GET("debug/settings/stdout/verbose_stdout");
 	}
 
+	// 注册核心的单例
 	register_early_core_singletons();
+	// 初始化模块
 	initialize_modules(MODULE_INITIALIZATION_LEVEL_CORE);
+	// 注册核心的扩展
 	register_core_extensions(); // core extensions must be registered after globals setup and before display
 
-	ResourceUID::get_singleton()->load_from_cache(true); // load UUIDs from cache.
+	ResourceUID::get_singleton()->load_from_cache(true); // load UUIDs from cache.（从缓存中加载UUID）
 
 	if (ProjectSettings::get_singleton()->has_custom_feature("dedicated_server")) {
 		audio_driver = NULL_AUDIO_DRIVER;
 		display_driver = NULL_DISPLAY_DRIVER;
 	}
 
+	// 网络调试器配置
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "network/limits/debugger/max_chars_per_second", PROPERTY_HINT_RANGE, "256,4096,1,or_greater"), 32768);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "network/limits/debugger/max_queued_messages", PROPERTY_HINT_RANGE, "128,8192,1,or_greater"), 2048);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "network/limits/debugger/max_errors_per_second", PROPERTY_HINT_RANGE, "1,200,1,or_greater"), 400);
 	GLOBAL_DEF(PropertyInfo(Variant::INT, "network/limits/debugger/max_warnings_per_second", PROPERTY_HINT_RANGE, "1,200,1,or_greater"), 400);
 
+	// 引擎调试器初始化，用来调试脚本的
 	EngineDebugger::initialize(debug_uri, skip_breakpoints, breakpoints, []() {
 		if (editor_pid) {
 			DisplayServer::get_singleton()->enable_for_stealing_focus(editor_pid);
@@ -2103,6 +2143,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	Logger::set_flush_stdout_on_print(GLOBAL_GET("application/run/flush_stdout_on_print"));
 
 	{
+		// 驱动提示
 		String driver_hints = "";
 		String driver_hints_with_d3d12 = "";
 		String driver_hints_with_metal = "";
@@ -2475,6 +2516,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	}
 
 	default_renderer = renderer_hints.get_slice(",", 0);
+	// 渲染器，渲染方法，驱动程序
 	GLOBAL_DEF_RST_BASIC(PropertyInfo(Variant::STRING, "rendering/renderer/rendering_method", PROPERTY_HINT_ENUM, renderer_hints), default_renderer);
 	GLOBAL_DEF_RST_BASIC("rendering/renderer/rendering_method.mobile", default_renderer_mobile);
 	GLOBAL_DEF_RST_BASIC("rendering/renderer/rendering_method.web", "gl_compatibility"); // This is a bit of a hack until we have WebGPU support.
@@ -2604,6 +2646,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	OS::get_singleton()->_separate_thread_render = separate_thread_render;
 
 	/* Determine audio and video drivers */
+	// 确定音频和视频驱动（所谓驱动，是和操作系统息息相关的）
 
 	// Display driver, e.g. X11, Wayland.
 	// Make sure that headless is the last one, which it is assumed to be by design.
