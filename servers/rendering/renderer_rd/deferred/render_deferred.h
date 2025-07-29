@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  render_forward_clustered.h                                            */
+/*  render_deferred.h													  */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -775,4 +775,4 @@ public:
 };
 } // namespace RendererSceneRenderImplementation
 
-#endif // RENDER_FORWARD_CLUSTERED_H
+#endif // RENDER_DEFERRED_H

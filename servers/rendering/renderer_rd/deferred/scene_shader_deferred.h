@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  scene_shader_forward_clustered.h                                      */
+/*  scene_shader_deferred.h												  */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -28,18 +28,18 @@
 /* SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                 */
 /**************************************************************************/
 
-#ifndef SCENE_SHADER_FORWARD_CLUSTERED_H
-#define SCENE_SHADER_FORWARD_CLUSTERED_H
+#ifndef SCENE_SHADER_DEFERRED_H
+#define SCENE_SHADER_DEFERRED_H
 
 #include "../storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/pipeline_hash_map_rd.h"
-#include "servers/rendering/renderer_rd/shaders/forward_clustered/scene_forward_clustered.glsl.gen.h"
+#include "servers/rendering/renderer_rd/shaders/deferred/scene_deferred.glsl.gen.h"
 
 namespace RendererSceneRenderImplementation {
 
 class SceneShaderDeferred {
 private:
-	static SceneShaderDeferred*singleton;
+	static SceneShaderDeferred* singleton;
 	static Mutex singleton_mutex;
 
 public:
@@ -314,7 +314,7 @@ public:
 		return static_cast<SceneShaderDeferred*>(singleton)->_create_material_func(static_cast<ShaderData *>(p_shader));
 	}
 
-	SceneForwardClusteredShaderRD shader;
+	SceneDeferredShaderRD shader;
 	ShaderCompiler compiler;
 
 	RID default_shader;
@@ -357,4 +357,4 @@ public:
 
 } // namespace RendererSceneRenderImplementation
 
-#endif // SCENE_SHADER_FORWARD_CLUSTERED_H
+#endif // SCENE_SHADER_DEFERRED_H

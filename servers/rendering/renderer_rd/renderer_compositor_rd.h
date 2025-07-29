@@ -58,7 +58,7 @@ protected:
 	RendererRD::ParticlesStorage *particles_storage = nullptr;
 	RendererRD::TextureStorage *texture_storage = nullptr;
 	RendererRD::Fog *fog = nullptr;
-	RendererSceneRenderRD *scene = nullptr;
+	RendererSceneRenderRD *scene = nullptr;		// 渲染场景的的渲染器，和server并不是一个概念范围
 
 	enum BlitMode {
 		BLIT_MODE_NORMAL,
