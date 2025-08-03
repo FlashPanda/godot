@@ -41,6 +41,34 @@
 #include "servers/xr/xr_interface.h"
 #endif // _3D_DISABLED
 
+
+/*
+简短结论：**Viewport 在 Godot 里不是纯“虚拟”概念，它是一个真实的引擎对象/节点，拥有自己的渲染目标和状态；同时你也可以把它当成一块“虚拟屏幕”来用。** 根 Viewport 通常直接对应窗口内容，其它 Viewport 多半是离屏渲染到纹理。 ([Godot Engine documentation][1], [Godot Engine documentation][2])
+
+**和 Window 的关系**
+在 Godot 4，`Window` 继承自 `Viewport`，SceneTree 创建的根 Viewport（主窗口）是所有场景添加的父节点/渲染起点。 ([Godot Engine documentation][3], [Stack Overflow][4])
+
+**Viewport 具备的“实体”特征**（说明它不只是概念）：
+
+* 有自己的渲染缓冲区，可输出成 `ViewportTexture`。 ([Godot Engine documentation][5], [Godot Engine documentation][6])
+* 可拥有独立的 2D/3D World、相机、甚至音频监听器。 ([Godot Engine documentation][2])
+* 可以嵌套在其他 Viewport 中，形成子视图/分屏等。 ([Godot Engine documentation][2], [Godot Engine documentation][1])
+
+**如何理解：**
+
+* 当它附着在窗口（root 或某个 Window 节点）上时，更像“实体窗口的内容缓冲”。
+* 当你单独放一个 SubViewport 去渲染，再把结果贴到材质或 UI 上时，它像“虚拟屏幕/渲染目标”。 ([Godot Engine documentation][6], [Godot Engine documentation][5])
+
+所以答案不是二选一：Viewport 既是引擎中的实体资源（节点 + 渲染目标），又常被当作虚拟屏幕来灵活使用。 ([Godot Engine documentation][1], [Godot Engine documentation][2])
+
+[1]: https://docs.godotengine.org/en/4.4/tutorials/rendering/viewports.html?utm_source=chatgpt.com "Using Viewports — Godot Engine (4.4) documentation in English"
+[2]: https://docs.godotengine.org/en/stable/classes/class_viewport.html?utm_source=chatgpt.com "Viewport — Godot Engine (stable) documentation in English"
+[3]: https://docs.godotengine.org/en/stable/tutorials/scripting/scene_tree.html?utm_source=chatgpt.com "Using SceneTree — Godot Engine (stable) documentation in English"
+[4]: https://stackoverflow.com/questions/78137350/what-is-the-main-scene-in-a-godot-game?utm_source=chatgpt.com "What is the main scene in a Godot game? - Stack Overflow"
+[5]: https://docs.godotengine.org/en/stable/classes/class_viewporttexture.html?utm_source=chatgpt.com "ViewportTexture — Godot Engine (stable) documentation in English"
+[6]: https://docs.godotengine.org/en/4.4/tutorials/shaders/using_viewport_as_texture.html?utm_source=chatgpt.com "Using a SubViewport as a texture - Godot Docs"
+
+*/
 class RendererViewport {
 public:
 	struct CanvasBase {

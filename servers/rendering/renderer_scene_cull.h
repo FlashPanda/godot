@@ -53,6 +53,16 @@
 
 class RenderingLightCuller;
 
+// RendererSceneCull 负责场景可见性/遮挡裁剪这一步，但这一步也必须依赖并匹配当前“渲染方式”的数据结构与流程，所以让它继承 RenderingMethod 以便共享/覆写同一套接口。
+
+/*
+什么时候值得动这刀子？
+你要引入新的渲染方法/裁剪算法（例如 GPU-driven culling、Hi-Z occlusion、meshlet 级裁剪），现有继承会越改越乱。
+
+想做多线程/任务系统重构，裁剪必须可独立调度。
+
+想把渲染后端更“引擎无关”地复用（库化）。
+*/
 class RendererSceneCull : public RenderingMethod {
 public:
 	RendererSceneRender *scene_render = nullptr;

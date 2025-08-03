@@ -2087,6 +2087,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	// and even if file logging is disabled in the Project Settings.
 	// `--log-file` can be used with any path (including absolute paths outside the project folder),
 	// so check for filesystem access if it's used.
+	// 指定日志路径，检查文件系统
 	if (FileAccess::get_create_func(!log_file.is_empty() ? FileAccess::ACCESS_FILESYSTEM : FileAccess::ACCESS_USERDATA) &&
 			(!log_file.is_empty() || (!project_manager && !editor && GLOBAL_GET("debug/file_logging/enable_file_logging")))) {
 		// Don't create logs for the project manager as they would be written to
@@ -2117,6 +2118,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 #endif
 	}
 
+	// 区分是编辑器模式，还是game模式
 	if (editor || project_manager) {
 		Engine::get_singleton()->set_editor_hint(true);
 		use_custom_res = false;
@@ -2611,14 +2613,17 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 	GLOBAL_DEF_BASIC("internationalization/locale/include_text_server_data", false);
 
+	// 为什么这两个需要单列出来？
 	OS::get_singleton()->_allow_hidpi = GLOBAL_DEF("display/window/dpi/allow_hidpi", true);
 	OS::get_singleton()->_allow_layered = GLOBAL_DEF("display/window/per_pixel_transparency/allowed", false);
 
 #ifdef TOOLS_ENABLED
 	if (editor || project_manager) {
 		// The editor and project manager always detect and use hiDPI if needed.
+		// 编辑器模式下默认用hi DPI
 		OS::get_singleton()->_allow_hidpi = true;
 		// Disable Vulkan overlays in editor, they cause various issues.
+		// 禁用Vulkan的覆写，这会引起问题，问题在Github上有记录
 		OS::get_singleton()->set_environment("DISABLE_MANGOHUD", "1"); // GH-57403.
 		OS::get_singleton()->set_environment("DISABLE_RTSS_LAYER", "1"); // GH-57937.
 		OS::get_singleton()->set_environment("DISABLE_VKBASALT", "1");
@@ -2638,6 +2643,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 
 	if (editor || project_manager) {
 		// Editor and project manager cannot run with rendering in a separate thread (they will crash on startup).
+		// 编辑器模式下不能用单独的渲染线程，会引起崩溃问题
 		separate_thread_render = 0;
 	}
 #if !defined(THREADS_ENABLED)
@@ -2672,6 +2678,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 	}
 
 	// Make sure that dummy is the last one, which it is assumed to be by design.
+	// 请确保名为 dummy 的那个（比如驱动/占位项）在列表里是最后一个，因为程序的设计默认它就在最后。
 	DEV_ASSERT(NULL_AUDIO_DRIVER == AudioDriverManager::get_driver(AudioDriverManager::get_driver_count() - 1)->get_name());
 	for (int i = 0; i < AudioDriverManager::get_driver_count(); i++) {
 		if (audio_driver == AudioDriverManager::get_driver(i)->get_name()) {
@@ -2764,6 +2771,7 @@ Error Main::setup(const char *execpath, int argc, char *argv[], bool p_second_ph
 #endif // TOOLS_ENABLED
 #endif // _3D_DISABLED
 
+	// 设置延迟多少帧
 	Engine::get_singleton()->set_frame_delay(frame_delay);
 
 	message_queue = memnew(MessageQueue);

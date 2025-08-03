@@ -58,7 +58,7 @@ class RenderingServerDefault : public RenderingServer {
 	static int changes;
 	RID test_cube;
 
-	List<Callable> frame_drawn_callbacks;
+	List<Callable> frame_drawn_callbacks;		// 帧绘制之后的回调
 
 	static void _changes_changed() {}
 
@@ -75,8 +75,8 @@ class RenderingServerDefault : public RenderingServer {
 
 	mutable CommandQueueMT command_queue;
 
-	Thread::ID server_thread = Thread::MAIN_ID;
-	WorkerThreadPool::TaskID server_task_id = WorkerThreadPool::INVALID_TASK_ID;
+	Thread::ID server_thread = Thread::MAIN_ID;		// 服务器线程
+	WorkerThreadPool::TaskID server_task_id = WorkerThreadPool::INVALID_TASK_ID;	// 服务器任务ID，工作线程池中的任务ID
 	bool exit = false;
 	bool create_thread = false;
 
@@ -192,11 +192,13 @@ public:
 	FUNCRIDTEX1(texture_proxy, RID)
 
 	// Called directly, not through the command queue.
+	// 直接调用，而不是通过命令队列调用
 	virtual RID texture_create_from_native_handle(TextureType p_type, Image::Format p_format, uint64_t p_native_handle, int p_width, int p_height, int p_depth, int p_layers = 1, TextureLayeredType p_layered_type = TEXTURE_LAYERED_2D_ARRAY) override {
 		return RSG::texture_storage->texture_create_from_native_handle(p_type, p_format, p_native_handle, p_width, p_height, p_depth, p_layers, p_layered_type);
 	}
 
 	//these go through command queue if they are in another thread
+	// 如果在另一个线程调用，这些会经过命令队列
 	FUNC3(texture_2d_update, RID, const Ref<Image> &, int)
 	FUNC2(texture_3d_update, RID, const Vector<Ref<Image>> &)
 	FUNC4(texture_external_update, RID, int, int, uint64_t)
@@ -245,6 +247,7 @@ public:
 
 	FUNCRIDSPLIT(shader)
 
+	// 从代码创建着色器
 	virtual RID shader_create_from_code(const String &p_code, const String &p_path_hint = String()) override {
 		RID shader = RSG::material_storage->shader_allocate();
 		bool using_server_thread = Thread::get_caller_id() == server_thread;
@@ -281,6 +284,7 @@ public:
 
 	FUNCRIDSPLIT(material)
 
+	// 从着色器中创建材质
 	virtual RID material_create_from_shader(RID p_next_pass, int p_render_priority, RID p_shader) override {
 		RID material = RSG::material_storage->material_allocate();
 		bool using_server_thread = Thread::get_caller_id() == server_thread;
@@ -320,6 +324,7 @@ public:
 #define ServerName RendererMeshStorage
 #define server_name RSG::mesh_storage
 
+	// 从表面创建网格数据
 	virtual RID mesh_create_from_surfaces(const Vector<SurfaceData> &p_surfaces, int p_blend_shape_count = 0) override {
 		RID mesh = RSG::mesh_storage->mesh_allocate();
 
@@ -346,6 +351,7 @@ public:
 		return mesh;
 	}
 
+	// 设置形状混合数量
 	FUNC2(mesh_set_blend_shape_count, RID, int)
 
 	FUNCRIDSPLIT(mesh)
@@ -456,7 +462,7 @@ public:
 	FUNC2(light_directional_set_sky_mode, RID, LightDirectionalSkyMode)
 
 	/* PROBE API */
-
+	// 反射探针（ReflectionProbe）会捕捉其影响区域内的环境成一张立方体贴图，用来给区域内物体提供“反射”和“环境光”信息，从而让金属、光滑表面等看起来有正确的环境反射
 	FUNCRIDSPLIT(reflection_probe)
 
 	FUNC2(reflection_probe_set_update_mode, RID, ReflectionProbeUpdateMode)
@@ -517,6 +523,7 @@ public:
 	FUNC2(decal_set_emission_energy, RID, float)
 	FUNC2(decal_set_albedo_mix, RID, float)
 	FUNC2(decal_set_modulate, RID, const Color &)
+	// 这个 Decal 要投在哪些层上的物体
 	FUNC2(decal_set_cull_mask, RID, uint32_t)
 	FUNC4(decal_set_distance_fade, RID, bool, float, float)
 	FUNC3(decal_set_fade, RID, float, float)
@@ -640,6 +647,9 @@ public:
 #define ServerName RendererUtilities
 #define server_name RSG::utilities
 
+/*
+	它本质上是一个“盒状 AABB 区域 + 进入/离开回调”的机制：当这个区域的任何部分进入摄像机视锥（在屏幕上可见）时触发 entered，离开时触发 exited。Godot 4 的对应节点是 VisibleOnScreenNotifier2D/3D，会发出 screen_entered / screen_exited 信号。
+	*/
 	FUNCRIDSPLIT(visibility_notifier)
 	FUNC2(visibility_notifier_set_aabb, RID, const AABB &)
 	FUNC3(visibility_notifier_set_callbacks, RID, const Callable &, const Callable &)
