@@ -75,6 +75,12 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 	uint64_t time_usec = OS::get_singleton()->get_ticks_usec();
 
 	RENDER_TIMESTAMP("Prepare Render Frame");
+	// Test log
+	//static int frame_count = 0; // 静态变量，只初始化一次
+	//frame_count++;
+	//if (frame_count % 60 == 0) { // 每 60 帧打印一次 (如果 60 FPS，大约每秒打印一次)
+	//	OS::get_singleton()->print("这是一条测试消息，帧数：%d\n", frame_count); // 添加换行符以更好地格式化
+	//}
 	// 场景更新
 	RSG::scene->update(); //update scenes stuff before updating instances
 	// 画布更新
