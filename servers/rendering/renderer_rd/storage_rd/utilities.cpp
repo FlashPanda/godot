@@ -290,8 +290,11 @@ bool Utilities::has_os_feature(const String &p_feature) const {
 }
 
 void Utilities::update_memory_info() {
+	// 纹理内存
 	texture_mem_cache = RenderingDevice::get_singleton()->get_memory_usage(RenderingDevice::MEMORY_TEXTURES);
+	// 缓冲内存
 	buffer_mem_cache = RenderingDevice::get_singleton()->get_memory_usage(RenderingDevice::MEMORY_BUFFERS);
+	// 总内存数据
 	total_mem_cache = RenderingDevice::get_singleton()->get_memory_usage(RenderingDevice::MEMORY_TOTAL);
 }
 

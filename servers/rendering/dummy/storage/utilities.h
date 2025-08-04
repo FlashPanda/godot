@@ -37,6 +37,12 @@
 #include "servers/rendering/storage/utilities.h"
 #include "texture_storage.h"
 
+/*
+	RenderDummy 是 Godot 引擎中用于“无渲染”环境（如无头服务器、文档生成、CI 测试）
+	的虚拟渲染后端。它实现了所有渲染相关接口（如 RendererUtilities、RendererTextureStorage
+	等）但内部只做空操作或最小化管理，以便在没有真实 GPU 或窗口的情况下仍能创建、管理和释放
+	资源，从而保证引擎核心逻辑和工具链（如 --headless、--doctool）正常运行。
+*/
 namespace RendererDummy {
 
 class Utilities : public RendererUtilities {

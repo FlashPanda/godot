@@ -192,8 +192,9 @@ void RenderingServerDefault::_draw(bool p_swap_buffers, double frame_step) {
 		}
 	}
 
-	// 更新内存信息
+	// 更新内存统计信息
 	RSG::utilities->update_memory_info();
+
 }
 
 void RenderingServerDefault::_run_post_draw_steps() {
