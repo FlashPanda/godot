@@ -49,6 +49,12 @@ void RendererCompositorRD::blit_render_targets_to_screen(DisplayServer::WindowID
 
 	for (int i = 0; i < p_amount; i++) {
 		RID rd_texture = texture_storage->render_target_get_rd_texture(p_render_targets[i].render_target);
+		// 同步读取数据
+		PackedByteArray textureData = RD::get_singleton()->texture_get_data(rd_texture, 0);
+		Size2i textureSize = RD::get_singleton()->texture_size(rd_texture);
+		Image img = Image::create_from_data(textureSize.width, textureSize.height, false, Image::FORMAT_RGBA8, textureData);
+		img.save_png("user://render_target.png");
+
 		ERR_CONTINUE(rd_texture.is_null());
 
 		if (!render_target_descriptors.has(rd_texture) || !RD::get_singleton()->uniform_set_is_valid(render_target_descriptors[rd_texture])) {
