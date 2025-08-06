@@ -311,6 +311,15 @@ void RendererViewport::_draw_3d(Viewport *p_viewport) {
 		xr_interface,
 		&p_viewport->render_info);
 
+	// Test
+	// 没啥数据
+	//static int count = 0;
+	//++count;
+	//if (count == 120) {
+	//	String str = vformat("user://shadow_atlas.png");
+	//	RSG::rasterizer->output_shadow_atlas_to_image(p_viewport->shadow_atlas, str);
+	//}
+	
 	RENDER_TIMESTAMP("< Render 3D Scene");
 #endif // _3D_DISABLED
 }
@@ -941,6 +950,10 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 	int objects_drawn = 0;
 	int draw_calls_used = 0;
 
+	// Test
+	//static int count = 0;
+	//++count;
+
 	// 正向遍历视口，执行真正的渲染。
 	for (int i = 0; i < sorted_active_viewports.size(); i++) {
 		Viewport *vp = sorted_active_viewports[i];
@@ -1009,6 +1022,15 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 			// 进行视口绘制
 			/**********通往渲染器的路径***********/ 
 			_draw_viewport(vp);
+
+			// Test
+			// 我把每个viewport都输出看看里面到底是啥妖魔鬼怪。
+			// 结果是只有i=1，和i=8的时候有输出。i=1的时候是3D编辑器视口，i=8的时候整个编辑器的样子。
+			//if (count == 120) {
+			//	String str = vformat("user://render_target%d.png", i);
+			//	RSG::rasterizer->output_rendertarget_to_image(vp->render_target, str);
+
+			//}
 
 			if (vp->viewport_to_screen != DisplayServer::INVALID_WINDOW_ID && (!vp->viewport_render_direct_to_screen || !RSG::rasterizer->is_low_end())) {
 				//copy to screen if set as such

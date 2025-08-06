@@ -382,6 +382,18 @@ RasterizerGLES3::RasterizerGLES3() {
 RasterizerGLES3::~RasterizerGLES3() {
 }
 
+
+void RasterizerGLES3::output_rendertarget_to_image(RID render_target_id, String output_path)
+{
+
+}
+
+
+void RasterizerGLES3::output_shadow_atlas_to_image(RID shadow_atlas_id, String output_path)
+{
+
+}
+
 void RasterizerGLES3::_blit_render_target_to_screen(RID p_render_target, DisplayServer::WindowID p_screen, const Rect2 &p_screen_rect, uint32_t p_layer, bool p_first) {
 	GLES3::RenderTarget *rt = GLES3::TextureStorage::get_singleton()->get_render_target(p_render_target);
 

@@ -383,3 +383,22 @@ RendererCompositorRD::~RendererCompositorRD() {
 	memdelete(framebuffer_cache);
 	ShaderRD::set_shader_cache_dir(String());
 }
+
+void RendererCompositorRD::output_rendertarget_to_image(RID render_target_id, String output_path)
+{
+	RID rd_texture = texture_storage->render_target_get_rd_texture(render_target_id);
+	PackedByteArray texture_data = RD::get_singleton()->texture_get_data(rd_texture, 0);
+	Size2i texture_size = RD::get_singleton()->texture_size(rd_texture);
+	RD::TextureFormat texture_format = RD::get_singleton()->texture_get_format(rd_texture);
+	Ref<Image> img = Image::create_from_data(texture_size.width, texture_size.height, false, Image::FORMAT_RGBA8, texture_data);
+	img->save_png(output_path);
+}
+
+void RendererCompositorRD::output_shadow_atlas_to_image(RID shadow_atlas_id, String output_path)
+{
+	Ref<Image> rd_texture = texture_storage->texture_2d_get(shadow_atlas_id);
+
+	if (!rd_texture.is_null()) {
+		rd_texture->save_png(output_path);
+	}
+}
