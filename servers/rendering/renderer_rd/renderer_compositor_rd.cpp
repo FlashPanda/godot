@@ -47,13 +47,32 @@ void RendererCompositorRD::blit_render_targets_to_screen(DisplayServer::WindowID
 	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin_for_screen(p_screen);
 	ERR_FAIL_COND(draw_list == RD::INVALID_ID);
 
+	// Test
+	//static int count = 0;
+	//count++;
+	//if (count == 120) {
+	//	int x = 0;
+	//}
 	for (int i = 0; i < p_amount; i++) {
 		RID rd_texture = texture_storage->render_target_get_rd_texture(p_render_targets[i].render_target);
-		// 同步读取数据
-		PackedByteArray textureData = RD::get_singleton()->texture_get_data(rd_texture, 0);
-		Size2i textureSize = RD::get_singleton()->texture_size(rd_texture);
-		Image img = Image::create_from_data(textureSize.width, textureSize.height, false, Image::FORMAT_RGBA8, textureData);
-		img.save_png("user://render_target.png");
+
+		{
+		/*
+			可以保存数据，但是会提示出错：
+			  ERROR: servers\rendering\rendering_device.cpp:6370 - Found open draw list at the end of the frame, this should never happen (further drawing will likely not work).
+			不知道为什么会有这个报错。在一帧结束的时候draw list里还有数据。
+			在编辑里里会把整窗口保存下来，在game里就是一个game的场景截图。
+		*/
+		//if (count == 120) {
+		//	// 同步读取数据
+		//	PackedByteArray textureData = RD::get_singleton()->texture_get_data(rd_texture, 0);
+		//	Size2i textureSize = RD::get_singleton()->texture_size(rd_texture);
+		//	Ref<Image> img = Image::create_from_data(textureSize.width, textureSize.height, false, Image::FORMAT_RGBA8, textureData);
+		//	String str = vformat("user://render_target%d.png", i);
+		//	img->save_png(str);
+		//}
+		}
+
 
 		ERR_CONTINUE(rd_texture.is_null());
 
