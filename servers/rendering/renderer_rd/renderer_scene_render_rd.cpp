@@ -1310,6 +1310,7 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 	// 调用内部渲染方法，传递准备好的数据和清除颜色
 	// 该函数会处理深度预渲染、不透明/透明物体渲染、后期处理等完整流程
 	_render_scene(&render_data, clear_color);
+
 }
 
 void RendererSceneRenderRD::render_material(const Transform3D &p_cam_transform, const Projection &p_cam_projection, bool p_cam_orthogonal, const PagedArray<RenderGeometryInstance *> &p_instances, RID p_framebuffer, const Rect2i &p_region) {

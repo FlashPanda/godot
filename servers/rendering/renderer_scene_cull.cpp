@@ -3770,7 +3770,11 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		&sdfgi_update_data,
 		r_render_info);
 
-	// 再获取一次相机数据信息，这个没看懂
+	// Test
+	// 如果不出意外，在这里，color和depth纹理中的数据都应该有了，那么可以获取并输出了。
+	// 这里不太好输出，到函数中去输出吧。
+
+	// 将当前相机的数据设置成上一帧的相机数据
 	if (p_viewport.is_valid()) {
 		RSG::viewport->viewport_set_prev_camera_data(p_viewport, p_camera_data);
 	}
