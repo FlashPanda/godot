@@ -725,6 +725,8 @@ uint32_t RenderSceneBuffersRD::get_color_usage_bits(bool p_resolve, bool p_msaa,
 	DEV_ASSERT((!p_resolve && !p_msaa) || (p_resolve != p_msaa));
 
 	uint32_t usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_INPUT_ATTACHMENT_BIT;
+	// Test
+	usage_bits |= RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
 	if (p_msaa) {
 		usage_bits |= RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
 	} else if (p_resolve) {

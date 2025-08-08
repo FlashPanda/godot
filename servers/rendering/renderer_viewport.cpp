@@ -37,6 +37,7 @@
 #include "renderer_scene_cull.h"
 #include "rendering_server_globals.h"
 #include "storage/texture_storage.h"
+#include "renderer_rd/storage_rd/render_scene_buffers_rd.h"
 
 static Transform2D _canvas_get_transform(RendererViewport::Viewport *p_viewport, RendererCanvasCull::Canvas *p_canvas, RendererViewport::Viewport::CanvasData *p_canvas_data, const Vector2 &p_vp_size) {
 	Transform2D xf = p_viewport->global_transform;
@@ -402,6 +403,23 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 		}
 		// 通过3D渲染器的路径。
 		_draw_3d(p_viewport);
+
+		// Test
+		// 纹理的格式要拿出来看看
+		static int count = 1;
+		++count;
+		if (count == 120) {
+			RenderSceneBuffers* buffer_raw = p_viewport->render_buffers.ptr();
+			RenderSceneBuffersRD* rd_raw = Object::cast_to<RenderSceneBuffersRD>(buffer_raw);
+			if (rd_raw) {
+				RID color_texture = rd_raw->get_texture(RB_SCOPE_BUFFERS, RB_TEX_COLOR);
+				RD::TextureFormat texture_format = rd_raw->get_texture_format(RB_SCOPE_BUFFERS, RB_TEX_COLOR);
+				Size2i texture_size = rd_raw->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_COLOR, 0);
+				PackedByteArray data_raw = RD::get_singleton()->texture_get_data(color_texture, 0);
+				Image img;
+				img.create_from_data(texture_size.x, texture_size.y, false, Image::FORMAT_RGBA8, data_raw);
+			}
+		}
 	}
 
 	// 需要绘制2D
