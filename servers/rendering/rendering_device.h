@@ -1743,6 +1743,10 @@ private:
 
 	void _draw_list_set_push_constant(DrawListID p_list, const Vector<uint8_t> &p_data, uint32_t p_data_size);
 	void _compute_list_set_push_constant(ComputeListID p_list, const Vector<uint8_t> &p_data, uint32_t p_data_size);
+
+	// Debug
+public:
+	void save_texture_to_file(RID p_texture, uint32_t p_layer, const TextureFormat &p_format, Size2i p_size, String p_path);
 };
 
 VARIANT_ENUM_CAST(RenderingDevice::DeviceType)

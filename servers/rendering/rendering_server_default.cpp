@@ -34,35 +34,10 @@
 #include "renderer_canvas_cull.h"
 #include "renderer_scene_cull.h"
 #include "rendering_server_globals.h"
-#include "core/io/file_access.h"
-#include "core/io/dir_access.h"
 
 // careful, these may run in different threads than the rendering server
 
 int RenderingServerDefault::changes = 0;
-
-// 下面的方式可以写文件，这是一种跨平台的方式
-//// 文件输出，写入到user://logs/rendering_draw.log
-//String log_path = "user://logs/rendering_draw.log";
-//// 确保目录存在
-//Ref<DirAccess> da = DirAccess::create(DirAccess::ACCESS_USERDATA);
-//if (da.ptr() && !da->dir_exists("user://logs")) {
-//	da->make_dir_recursive("user://logs");
-//}
-//
-////memdelete(da);
-//
-//// 打开文件并写入
-//Ref<FileAccess> f = FileAccess::open(log_path, FileAccess::READ_WRITE);
-//if (f.ptr()) {
-//	f->seek_end();
-//	String log_line = vformat("this is a test");
-//	f->store_string(log_line);
-//	f->close();
-//	//memdelete(f);
-//}
-//else {
-//}
 
 /* FREE */
 

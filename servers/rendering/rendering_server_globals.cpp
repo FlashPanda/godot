@@ -29,6 +29,9 @@
 /**************************************************************************/
 
 #include "rendering_server_globals.h"
+#include "core/os/time.h"
+#include "core/io/file_access.h"
+#include "core/io/dir_access.h"
 
 bool RenderingServerGlobals::threaded = false;
 
@@ -47,3 +50,31 @@ RendererCompositor *RenderingServerGlobals::rasterizer = nullptr;
 RendererCanvasCull *RenderingServerGlobals::canvas = nullptr;
 RendererViewport *RenderingServerGlobals::viewport = nullptr;
 RenderingMethod *RenderingServerGlobals::scene = nullptr;
+
+void RenderingServerGlobals::write_log_to_file(String in_string) {
+	// 下面的方式可以写文件，这是一种跨平台的方式
+	// 文件输出，写入到user://logs/rendering_draw.log
+	String log_path = "user://logs/rendering_draw.log";
+	// 确保目录存在
+	Ref<DirAccess> da = DirAccess::create(DirAccess::ACCESS_USERDATA);
+	if (da.ptr() && !da->dir_exists("user://logs")) {
+		da->make_dir_recursive("user://logs");
+	}
+	
+	
+	// 打开文件并写入
+	static Ref<FileAccess> f = FileAccess::open(log_path, FileAccess::READ_WRITE);
+	if (f.ptr()) {
+		f->seek_end();
+		String iso_local = Time::get_singleton()->get_datetime_string_from_system(false, false); // 本地 ISO
+		// 打印
+		CharString u8 = iso_local.utf8();
+		CharString time_u8 = iso_local.utf8();
+		String log_line = vformat("[%s] %s\n", time_u8.get_data(), u8.get_data());
+		f->store_string(log_line);
+		f->close();
+		//memdelete(f);
+	}
+	else {
+	}
+}

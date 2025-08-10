@@ -68,6 +68,8 @@ public:
 	static RendererCanvasCull *canvas;
 	static RendererViewport *viewport;
 	static RenderingMethod *scene;
+
+	static void write_log_to_file(String in_string);
 };
 
 #define RSG RenderingServerGlobals

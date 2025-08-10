@@ -410,14 +410,12 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 		++count;
 		if (count == 120) {
 			RenderSceneBuffers* buffer_raw = p_viewport->render_buffers.ptr();
-			RenderSceneBuffersRD* rd_raw = Object::cast_to<RenderSceneBuffersRD>(buffer_raw);
+			RenderSceneBuffersRD *rd_raw = Object::cast_to<RenderSceneBuffersRD>(buffer_raw);
 			if (rd_raw) {
 				RID color_texture = rd_raw->get_texture(RB_SCOPE_BUFFERS, RB_TEX_COLOR);
 				RD::TextureFormat texture_format = rd_raw->get_texture_format(RB_SCOPE_BUFFERS, RB_TEX_COLOR);
 				Size2i texture_size = rd_raw->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_COLOR, 0);
-				PackedByteArray data_raw = RD::get_singleton()->texture_get_data(color_texture, 0);
-				Image img;
-				img.create_from_data(texture_size.x, texture_size.y, false, Image::FORMAT_RGBA8, data_raw);
+				RD::get_singleton()->save_texture_to_file(color_texture, 0, texture_format, texture_size, "user://color_buffer.png");
 			}
 		}
 	}

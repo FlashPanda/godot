@@ -8273,3 +8273,58 @@ static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_STORAGE_IMAGE_READ_
 static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_ATTACHMENT_COLOR_READ_WRITE, RDG::RESOURCE_USAGE_ATTACHMENT_COLOR_READ_WRITE));
 static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE, RDG::RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE));
 static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_MAX, RDG::RESOURCE_USAGE_MAX));
+
+void RenderingDevice::save_texture_to_file(RID p_texture, uint32_t p_layer, const TextureFormat &p_format, Size2i p_size, String p_path) {
+	PackedByteArray data_raw = texture_get_data(p_texture, p_layer);
+	if (data_raw.size() == 0)
+	{
+		OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
+		return;
+	}
+
+	if (p_size.x == 0 || p_size.y == 0) {
+		OS::get_singleton()->print("p_size.x == 0 || p_size.y == 0\n");
+		return;
+	}
+
+	OS::get_singleton()->print("p_size = (%d, %d)\n", p_size.x, p_size.y); // 添加换行符以更好地格式化
+	OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
+
+	switch (p_format.format) {
+	case DATA_FORMAT_R16G16B16_SFLOAT:
+	case DATA_FORMAT_R16G16B16A16_SFLOAT:
+	{
+		// 从GPU中获取的数据会有以后最后的对齐位置，所以data_raw是8字节对齐
+		const uint16_t *half_ptr = reinterpret_cast<const uint16_t *>(&data_raw[0]);
+
+		size_t pixel_count = p_size.x * p_size.y;
+		Ref<Image> img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
+		for (size_t i = 0; i < pixel_count; ++i) {
+			// 取半精度值
+			uint16_t hR = half_ptr[i * 4 + 0];
+			uint16_t hG = half_ptr[i * 4 + 1];
+			uint16_t hB = half_ptr[i * 4 + 2];
+			// 半精度转 float （Godot 提供的工具函数）
+			float fR = Math::half_to_float(hR);
+			float fG = Math::half_to_float(hG);
+			float fB = Math::half_to_float(hB);
+			// clamp 到 [0,1] 并写入 Image
+			Color c = Color(CLAMP(fR, 0.0f, 1.0f),
+					CLAMP(fG, 0.0f, 1.0f),
+					CLAMP(fB, 0.0f, 1.0f));
+			int x = int(i % p_size.x);
+			int y = int(i / p_size.x);
+			img->set_pixel(x, y, c);
+		}
+		img->save_png(p_path);
+		CharString u8 = p_path.utf8();
+		OS::get_singleton()->print("Save file to {%s} success!\n", u8.get_data());
+	}
+	break;
+	default :
+	{
+		OS::get_singleton()->print("p_format.format = %d, save failed!\n", p_format.format);
+	}
+	break;
+	}
+}
