@@ -8321,6 +8321,34 @@ void RenderingDevice::save_texture_to_file(RID p_texture, uint32_t p_layer, cons
 		OS::get_singleton()->print("Save file to {%s} success!\n", u8.get_data());
 	}
 	break;
+	case DATA_FORMAT_D32_SFLOAT_S8_UINT:
+	{
+		size_t pixel_count = p_size.x * p_size.y;
+		Ref<Image> img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
+		Ref<Image> stencil_img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
+
+		const float* depth_ptr = reinterpret_cast<const float*>(&data_raw[0]);
+		for (size_t i = 0; i < pixel_count; i += 2) {
+			// 深度值输出
+			Color c = Color(depth_ptr[i], depth_ptr[i], depth_ptr[i]);
+			int x = int(i % p_size.x);
+			int y = int(i / p_size.y);
+			img->set_pixel(x, y, c);
+
+			// 模板值输出
+			uint8_t stencil_data = data_raw[i * 8 + 4];
+			float stencil_color = stencil_data * 1.0f / 255.f;
+			Color s = Color(stencil_color, stencil_color, stencil_color);
+			stencil_img -> set_pixel(x, y, s);
+		}
+		img->save_png(p_path);
+		stencil_img->save_png("user://stencil.png");
+
+		CharString u8 = p_path.utf8();
+		OS::get_singleton()->print("Save file to {%s} success!\n", u8.get_data());
+		OS::get_singleton()->print("Save stencil to {user://stencil.png} success!\n");
+	}
+	break;
 	default :
 	{
 		OS::get_singleton()->print("p_format.format = %d, save failed!\n", p_format.format);
