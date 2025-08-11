@@ -8324,51 +8324,72 @@ void RenderingDevice::save_texture_to_file(RID p_texture, uint32_t p_layer, cons
 	break;
 	case DATA_FORMAT_D32_SFLOAT_S8_UINT:
 	{
-		size_t pixel_count = p_size.x * p_size.y;
+		const size_t w = p_size.x, h = p_size.y;
+		const size_t n = w * h;
+		const size_t total = data_raw.size();
+
 		Ref<Image> img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
 		Ref<Image> stencil_img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
 
-		if (data_raw.size() % 8 == 0) {
-		// 8字节对齐
-			const float* depth_ptr = reinterpret_cast<const float*>(&data_raw[0]);
-			for (size_t i = 0; i < pixel_count; ++i) {
-				// 深度值输出
-				size_t depth_index = i * 2;
-				Color c = Color(depth_ptr[depth_index], depth_ptr[depth_index], depth_ptr[depth_index]);
-				int x = int(i % p_size.x);
-				int y = int(i / p_size.x);
-				img->set_pixel(x, y, c);
+		auto put_pixel = [&](size_t i, float d, uint8_t st) {
+				// 可选：把深度可视化成 0~1（必要时反转或夹紧）
+				float v = Math::is_finite(d) ? CLAMP(d, 0.0f, 1.0f) : 0.0f;
+				int x = int(i % w);
+				int y = int(i / w);
+				img->set_pixel(x, y, Color(v, v, v, 1.0f));
 
-				// 模板值输出
-				uint8_t stencil_data = data_raw[i * 8 + 4];
-				float stencil_color = stencil_data * 1.0f / 255.f;
-				Color s = Color(stencil_color, stencil_color, stencil_color);
-				stencil_img->set_pixel(x, y, s);
+				float s = st / 255.0f;
+				stencil_img->set_pixel(x, y, Color(s, s, s, 1.0f));
+		};
+
+		if (total == n * 5) {
+			// 逐像素交错：4 字节深度 + 1 字节模板
+			for (size_t i = 0; i < n; ++i) {
+				size_t base = i * 5;
+				float d;
+				std::memcpy(&d, &data_raw[base + 0], 4);
+				uint8_t st = data_raw[base + 4];
+				put_pixel(i, d, st);
 			}
-		}
-		else {
-		// 5字节
-		// 5字节是5字节，但是这个方式输出不太对。
-			size_t offset = pixel_count * 4;
-			for (size_t i = 0; i < pixel_count; ++i) {
-				size_t depth_offset = i * 4;
-				// 深度值转换
-				// 小端：[0] 最低有效字节, [3] 最高有效字节
-				float d = 0.0f;
-				std::memcpy(&d, &data_raw[depth_offset], 4);
-				Color c = Color(d, d, d);
-				int x = int(i % p_size.x);
-				int y = int(i / p_size.x);
-				img->set_pixel(x, y, c);
-
-				// 模板数据
-				uint8_t stencil_data = data_raw[offset + i];
-				float stencil_color = stencil_data * 1.0f / 255.f;
-				Color s = Color(stencil_color, stencil_color, stencil_color);
-				stencil_img->set_pixel(x, y, s);
+		} else if (total == n * 8) {
+			// 逐像素 8 字节对齐：4 字节深度 + 1 字节模板 + 3 字节填充
+			for (size_t i = 0; i < n; ++i) {
+				size_t base = i * 8;
+				float d;
+				std::memcpy(&d, &data_raw[base + 0], 4);
+				uint8_t st = data_raw[base + 4];
+				put_pixel(i, d, st);
 			}
+		} else if (total == n * 4 + n) {
+			// 平面分离：先所有深度，再所有模板（少见，但做个兜底）
+			size_t st_off = n * 4;
+			for (size_t i = 0; i < n; ++i) {
+				float d;
+				std::memcpy(&d, &data_raw[i * 4], 4);
+				uint8_t st = data_raw[st_off + i];
+				put_pixel(i, d, st);
+			}
+		} else {
+			// 非常规：可能存在逐行对齐（row pitch）。推断每行步长并按交错读取。
+			size_t row_stride = total / h; // 约分得到每行字节数
+			bool interleaved5 = row_stride >= w * 5; // 简单判定
+			bool interleaved8 = row_stride >= w * 8;
 
-			RSG::write_log_to_file("this is a test");
+			if (interleaved5 || interleaved8) {
+				size_t px = interleaved8 ? 8 : 5;
+				for (size_t y = 0; y < h; ++y) {
+					size_t row_base = y * row_stride;
+					for (size_t x = 0; x < w; ++x) {
+						size_t base = row_base + x * px;
+						float d;
+						std::memcpy(&d, &data_raw[base + 0], 4);
+						uint8_t st = data_raw[base + 4];
+						put_pixel(y * w + x, d, st);
+					}
+				}
+			} else {
+				OS::get_singleton()->print("Unexpected DS layout: bytes=%zu\n", total);
+			}
 		}
 
 		img->save_png(p_path);
