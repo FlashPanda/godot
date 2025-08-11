@@ -61,14 +61,13 @@ void RenderingServerGlobals::write_log_to_file(String in_string) {
 		da->make_dir_recursive("user://logs");
 	}
 	
-	
 	// 打开文件并写入
-	static Ref<FileAccess> f = FileAccess::open(log_path, FileAccess::READ_WRITE);
+	static Ref<FileAccess> f = FileAccess::open(log_path, FileAccess::WRITE_READ);
 	if (f.ptr()) {
 		f->seek_end();
-		String iso_local = Time::get_singleton()->get_datetime_string_from_system(false, false); // 本地 ISO
+		String iso_local = Time::get_singleton()->get_datetime_string_from_system(false, true); // 本地 ISO
 		// 打印
-		CharString u8 = iso_local.utf8();
+		CharString u8 = in_string.utf8();
 		CharString time_u8 = iso_local.utf8();
 		String log_line = vformat("[%s] %s\n", time_u8.get_data(), u8.get_data());
 		f->store_string(log_line);

@@ -36,6 +36,7 @@
 
 #include "core/config/project_settings.h"
 #include "core/io/dir_access.h"
+#include "rendering_server_globals.h"
 
 #define FORCE_SEPARATE_PRESENT_QUEUE 0
 #define PRINT_FRAMEBUFFER_FORMAT 0
@@ -8327,20 +8328,49 @@ void RenderingDevice::save_texture_to_file(RID p_texture, uint32_t p_layer, cons
 		Ref<Image> img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
 		Ref<Image> stencil_img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
 
-		const float* depth_ptr = reinterpret_cast<const float*>(&data_raw[0]);
-		for (size_t i = 0; i < pixel_count; i += 2) {
-			// 深度值输出
-			Color c = Color(depth_ptr[i], depth_ptr[i], depth_ptr[i]);
-			int x = int(i % p_size.x);
-			int y = int(i / p_size.y);
-			img->set_pixel(x, y, c);
+		if (data_raw.size() % 8 == 0) {
+		// 8字节对齐
+			const float* depth_ptr = reinterpret_cast<const float*>(&data_raw[0]);
+			for (size_t i = 0; i < pixel_count; ++i) {
+				// 深度值输出
+				size_t depth_index = i * 2;
+				Color c = Color(depth_ptr[depth_index], depth_ptr[depth_index], depth_ptr[depth_index]);
+				int x = int(i % p_size.x);
+				int y = int(i / p_size.x);
+				img->set_pixel(x, y, c);
 
-			// 模板值输出
-			uint8_t stencil_data = data_raw[i * 8 + 4];
-			float stencil_color = stencil_data * 1.0f / 255.f;
-			Color s = Color(stencil_color, stencil_color, stencil_color);
-			stencil_img -> set_pixel(x, y, s);
+				// 模板值输出
+				uint8_t stencil_data = data_raw[i * 8 + 4];
+				float stencil_color = stencil_data * 1.0f / 255.f;
+				Color s = Color(stencil_color, stencil_color, stencil_color);
+				stencil_img->set_pixel(x, y, s);
+			}
 		}
+		else {
+		// 5字节
+		// 5字节是5字节，但是这个方式输出不太对。
+			size_t offset = pixel_count * 4;
+			for (size_t i = 0; i < pixel_count; ++i) {
+				size_t depth_offset = i * 4;
+				// 深度值转换
+				// 小端：[0] 最低有效字节, [3] 最高有效字节
+				float d = 0.0f;
+				std::memcpy(&d, &data_raw[depth_offset], 4);
+				Color c = Color(d, d, d);
+				int x = int(i % p_size.x);
+				int y = int(i / p_size.x);
+				img->set_pixel(x, y, c);
+
+				// 模板数据
+				uint8_t stencil_data = data_raw[offset + i];
+				float stencil_color = stencil_data * 1.0f / 255.f;
+				Color s = Color(stencil_color, stencil_color, stencil_color);
+				stencil_img->set_pixel(x, y, s);
+			}
+
+			RSG::write_log_to_file("this is a test");
+		}
+
 		img->save_png(p_path);
 		stencil_img->save_png("user://stencil.png");
 

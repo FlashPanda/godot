@@ -232,6 +232,7 @@ public:
 		uint8_t hour;
 		uint8_t minute;
 		uint8_t second;
+		uint32_t milliseconds;
 		bool dst;
 	};
 

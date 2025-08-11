@@ -416,6 +416,11 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 				RD::TextureFormat texture_format = rd_raw->get_texture_format(RB_SCOPE_BUFFERS, RB_TEX_COLOR);
 				Size2i texture_size = rd_raw->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_COLOR, 0);
 				RD::get_singleton()->save_texture_to_file(color_texture, 0, texture_format, texture_size, "user://color_buffer.png");
+
+				RID depth_texture = rd_raw->get_texture(RB_SCOPE_BUFFERS, RB_TEX_DEPTH);
+				RD::TextureFormat depth_format = rd_raw->get_texture_format(RB_SCOPE_BUFFERS, RB_TEX_DEPTH);
+				Size2i depth_size = rd_raw->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_DEPTH, 0);
+				RD::get_singleton()->save_texture_to_file(depth_texture, 0, depth_format, depth_size, "user://depth_buffer.png");
 			}
 		}
 	}

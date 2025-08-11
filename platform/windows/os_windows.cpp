@@ -843,6 +843,7 @@ OS::DateTime OS_Windows::get_datetime(bool p_utc) const {
 	dt.hour = systemtime.wHour;
 	dt.minute = systemtime.wMinute;
 	dt.second = systemtime.wSecond;
+	dt.milliseconds = systemtime.wMilliseconds;
 	dt.dst = is_daylight;
 	return dt;
 }
