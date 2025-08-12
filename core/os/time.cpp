@@ -355,9 +355,9 @@ String Time::get_datetime_string_from_system(bool p_utc, bool p_use_space) const
 	// vformat only supports up to 6 arguments, so we need to split this up into 2 parts.
 	String timestamp = vformat("%04d-%02d-%02d", dt.year, (uint8_t)dt.month, dt.day);
 	if (p_use_space) {
-		timestamp = vformat("%s %02d:%02d:%02d", timestamp, dt.hour, dt.minute, dt.second);
+		timestamp = vformat("%s %02d:%02d:%02d.%03d", timestamp, dt.hour, dt.minute, dt.second, dt.milliseconds);
 	} else {
-		timestamp = vformat("%sT%02d:%02d:%02d", timestamp, dt.hour, dt.minute, dt.second);
+		timestamp = vformat("%sT%02d:%02d:%02d.%03d", timestamp, dt.hour, dt.minute, dt.second, dt.milliseconds);
 	}
 
 	return timestamp;

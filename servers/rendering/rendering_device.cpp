@@ -1928,6 +1928,7 @@ Vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_laye
 		return _texture_get_data(tex, p_layer);
 	} else {
 		LocalVector<RDD::TextureCopyableLayout> mip_layouts;
+		// 做“纹理 ↔ 线性缓冲区”拷贝时，缓冲区起始偏移（offset）必须满足的最小字节对齐
 		uint32_t work_mip_alignment = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT);
 		uint32_t work_buffer_size = 0;
 		mip_layouts.resize(tex->mipmaps);
@@ -8332,25 +8333,50 @@ void RenderingDevice::save_texture_to_file(RID p_texture, uint32_t p_layer, cons
 		Ref<Image> stencil_img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
 
 		auto put_pixel = [&](size_t i, float d, uint8_t st) {
-				// 可选：把深度可视化成 0~1（必要时反转或夹紧）
-				float v = Math::is_finite(d) ? CLAMP(d, 0.0f, 1.0f) : 0.0f;
-				int x = int(i % w);
-				int y = int(i / w);
-				img->set_pixel(x, y, Color(v, v, v, 1.0f));
+			// 可选：把深度可视化成 0~1（必要时反转或夹紧）
+			float v = Math::is_finite(d) ? CLAMP(d, 0.0f, 1.0f) : 0.0f;
+			int x = int(i % w);
+			int y = int(i / w);
+			img->set_pixel(x, y, Color(v, v, v, 1.0f));
 
-				float s = st / 255.0f;
-				stencil_img->set_pixel(x, y, Color(s, s, s, 1.0f));
+			float s = st / 255.0f;
+			stencil_img->set_pixel(x, y, Color(s, s, s, 1.0f));
 		};
 
+		// —— 探测内存顺序：DS(Depth 后 Stencil) 还是 SD(Stencil 在前 Depth 在后)
+		//auto score_stencil = [&](bool assume_SD)->size_t {
+		//	size_t hit = 0, sample = MIN<size_t>(n, 50000);
+		//	for (size_t i = 0; i < sample; ++i) {
+		//		size_t base = i * 5;
+		//		uint8_t st = assume_SD ? data_raw[base + 0] : data_raw[base + 4];
+		//		if (st == 0 || st == 255) ++hit;  // 常见模板值
+		//	}
+		//	return hit;
+		//};
+		//bool use_SD = score_stencil(true) > score_stencil(false); // 命中多者更像模板
+
 		if (total == n * 5) {
-			// 逐像素交错：4 字节深度 + 1 字节模板
-			for (size_t i = 0; i < n; ++i) {
-				size_t base = i * 5;
-				float d;
-				std::memcpy(&d, &data_raw[base + 0], 4);
-				uint8_t st = data_raw[base + 4];
-				put_pixel(i, d, st);
-			}
+			//if (use_SD) {
+				// 逐像素交错：1字节模板+4字节深度
+				// [S, d0, d1, d2, d3]
+				for (size_t i = 0; i < n; ++i) {
+					size_t base = i * 5;
+					uint8_t st = data_raw[base + 0];
+					float d; std::memcpy(&d, &data_raw[base + 1], 4);
+					put_pixel(i, d, st);
+				}
+			//}
+			//else {
+			//	// 逐像素交错：4 字节深度 + 1 字节模板
+			//	// [d0, d1, d2, d3, S]
+			//	for (size_t i = 0; i < n; ++i) {
+			//		size_t base = i * 5;
+			//		float d;
+			//		std::memcpy(&d, &data_raw[base + 0], 4);
+			//		uint8_t st = data_raw[base + 4];
+			//		put_pixel(i, d, st);
+			//	}
+			//}
 		} else if (total == n * 8) {
 			// 逐像素 8 字节对齐：4 字节深度 + 1 字节模板 + 3 字节填充
 			for (size_t i = 0; i < n; ++i) {

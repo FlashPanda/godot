@@ -747,7 +747,8 @@ RD::DataFormat RenderSceneBuffersRD::get_depth_format(bool p_resolve, bool p_msa
 			p_storage ? RD::DATA_FORMAT_D24_UNORM_S8_UINT : RD::DATA_FORMAT_D32_SFLOAT_S8_UINT
 		};
 
-		return RD::get_singleton()->texture_is_format_supported_for_usage(preferred_formats[0], get_depth_usage_bits(p_resolve, p_msaa, p_storage)) ? preferred_formats[0] : preferred_formats[1];
+		bool supported_for_usage = RD::get_singleton()->texture_is_format_supported_for_usage(preferred_formats[0], get_depth_usage_bits(p_resolve, p_msaa, p_storage));
+		return  supported_for_usage ? preferred_formats[0] : preferred_formats[1];
 	}
 }
 
