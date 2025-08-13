@@ -364,6 +364,7 @@ public:
 	// or slices of a texture (a mipmap, a layer, a 3D slice)
 	// for a framebuffer to render into it.
 
+	// 此处的Texture的概念，对应现代API中的Image（内存空间），View（内存如何解释）两个概念。
 	struct Texture {
 		struct SharedFallback {
 			uint32_t revision = 1;
@@ -491,6 +492,7 @@ public:
 	RID texture_create_shared_from_slice(const TextureView &p_view, RID p_with_texture, uint32_t p_layer, uint32_t p_mipmap, uint32_t p_mipmaps = 1, TextureSliceType p_slice_type = TEXTURE_SLICE_2D, uint32_t p_layers = 0);
 	Error texture_update(RID p_texture, uint32_t p_layer, const Vector<uint8_t> &p_data);
 	Vector<uint8_t> texture_get_data(RID p_texture, uint32_t p_layer); // CPU textures will return immediately, while GPU textures will most likely force a flush
+	Vector<uint8_t> depth_get_data(RID p_texture, uint32_t p_layer);		// 获取深度信息数据，它必然存在GPU上，不会存在CPU
 	Error texture_get_data_async(RID p_texture, uint32_t p_layer, const Callable &p_callback);
 
 	bool texture_is_format_supported_for_usage(DataFormat p_format, BitField<TextureUsageBits> p_usage) const;

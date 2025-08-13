@@ -2198,6 +2198,7 @@ void RenderingDeviceGraph::add_capture_timestamp(RDD::QueryPoolID p_query_pool, 
 
 void RenderingDeviceGraph::add_synchronization() {
 	// Synchronization is only acknowledged if commands have been recorded on the graph already.
+	// 只有在渲染图（graph）里已经有命令被记录过的情况下，同步操作才会真正生效。
 	if (command_count > 0) {
 		command_synchronization_pending = true;
 	}

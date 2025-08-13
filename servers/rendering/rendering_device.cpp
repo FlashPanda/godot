@@ -1979,14 +1979,15 @@ Vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_laye
 		draw_graph.add_texture_get_data(tex->driver_id, tex->draw_tracker, tmp_buffer, command_buffer_texture_copy_regions_vector);
 
 		// Flush everything so memory can be safely mapped.
+		// 强制刷新所有命令，这样内存就可以安全地映射出来了。
 		_flush_and_stall_for_all_frames();
 
-		const uint8_t *read_ptr = driver->buffer_map(tmp_buffer);
+		const uint8_t *read_ptr = driver->buffer_map(tmp_buffer);		// 映射操作
 		ERR_FAIL_NULL_V(read_ptr, Vector<uint8_t>());
 
 		uint32_t block_w = 0;
 		uint32_t block_h = 0;
-		get_compressed_image_format_block_dimensions(tex->format, block_w, block_h);
+		get_compressed_image_format_block_dimensions(tex->format, block_w, block_h);		// 获取当前格式下，blcok的宽高
 
 		Vector<uint8_t> buffer_data;
 		uint32_t tight_buffer_size = get_image_format_required_size(tex->format, tex->width, tex->height, tex->depth, tex->mipmaps);
@@ -2003,6 +2004,7 @@ Vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_laye
 			uint32_t tight_row_pitch = tight_mip_size / ((height / block_h) * depth);
 
 			// Copy row-by-row to erase padding due to alignments.
+			// 逐行复制，移除因为对齐而存在的padding
 			const uint8_t *rp = read_ptr;
 			uint8_t *wp = write_ptr;
 			for (uint32_t row = h * d / block_h; row != 0; row--) {
@@ -2018,10 +2020,58 @@ Vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_laye
 			write_ptr += tight_mip_size;
 		}
 
-		driver->buffer_unmap(tmp_buffer);
-		driver->buffer_free(tmp_buffer);
+		driver->buffer_unmap(tmp_buffer);		// 取消映射
+		driver->buffer_free(tmp_buffer);		// 释放缓存
 
 		return buffer_data;
+	}
+}
+
+Vector<uint8_t> RenderingDevice::depth_get_data(RID p_texture, uint32_t p_layer)
+{
+	ERR_RENDER_THREAD_GUARD_V(Vector<uint8_t>());
+
+	Texture* tex = texture_owner.get_or_null(p_texture);
+	ERR_FAIL_NULL_V(tex, Vector<uint8_t>());
+
+	ERR_FAIL_COND_V_MSG(tex->bound, Vector<uint8_t>(),
+		"Texture can't be retrieved while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to retrieve this texture.");
+	ERR_FAIL_COND_V_MSG(!(tex->usage_flags & TEXTURE_USAGE_CAN_COPY_FROM_BIT), Vector<uint8_t>(),
+		"Texture requires the `RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT` to be set to be retrieved.");
+
+	ERR_FAIL_COND_V(p_layer >= tex->layers, Vector<uint8_t>());
+
+	_check_transfer_worker_texture(tex);
+
+	if (tex->usage_flags & TEXTURE_USAGE_CPU_READ_BIT) {
+		// depth buffer must not in CPU
+		return Vector<uint8_t>();
+	}
+	else {
+		LocalVector<RDD::TextureCopyableLayout> mip_layouts;
+		uint32_t work_mip_alignment = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT);
+		uint32_t work_buffer_size = 0;
+		mip_layouts.resize(tex->mipmaps);
+
+		for (uint32_t i = 0; i < tex->mipmaps; i++) {
+			RDD::TextureSubresource subres;
+			subres.aspect = RDD::TEXTURE_ASPECT_DEPTH;
+			subres.layer = p_layer;
+			subres.mipmap = i;
+			driver->texture_get_copyable_layout(tex->driver_id, subres, &mip_layouts[i]);
+
+			// Assuming layers are tightly packed. If this is not true on some driver, we must modify the copy algorithm.
+			DEV_ASSERT(mip_layouts[i].layer_pitch == mip_layouts[i].size / tex->layers);
+
+			work_buffer_size = STEPIFY(work_buffer_size, work_mip_alignment) + mip_layouts[i].size;
+		}
+
+		if (_texture_make_mutable(tex, p_texture)) {
+			// The texture must be mutable to be used as a copy source due to layout transitions.
+			draw_graph.add_synchronization();
+		}
+
+		return Vector<uint8_t>();
 	}
 }
 
@@ -5797,6 +5847,8 @@ void RenderingDevice::_free_transfer_workers() {
 /**** COMMAND GRAPH ****/
 /***********************/
 
+// 确保给定的纹理 p_texture（以及必要时它的依赖/别名）在渲染图（RDG）里“可变”（mutable），
+// 即拥有一个资源使用/同步跟踪器 draw_tracker，从而能被正确地写入、设障/转场以及参与调度。
 bool RenderingDevice::_texture_make_mutable(Texture *p_texture, RID p_texture_id) {
 	if (p_texture->draw_tracker != nullptr) {
 		// Texture already has a tracker.
@@ -8277,25 +8329,26 @@ static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_ATTACHMENT_DEPTH_ST
 static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_MAX, RDG::RESOURCE_USAGE_MAX));
 
 void RenderingDevice::save_texture_to_file(RID p_texture, uint32_t p_layer, const TextureFormat &p_format, Size2i p_size, String p_path) {
-	PackedByteArray data_raw = texture_get_data(p_texture, p_layer);
-	if (data_raw.size() == 0)
-	{
-		OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
-		return;
-	}
-
 	if (p_size.x == 0 || p_size.y == 0) {
 		OS::get_singleton()->print("p_size.x == 0 || p_size.y == 0\n");
 		return;
 	}
 
 	OS::get_singleton()->print("p_size = (%d, %d)\n", p_size.x, p_size.y); // 添加换行符以更好地格式化
-	OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
-
+	
 	switch (p_format.format) {
 	case DATA_FORMAT_R16G16B16_SFLOAT:
 	case DATA_FORMAT_R16G16B16A16_SFLOAT:
 	{
+		PackedByteArray data_raw = texture_get_data(p_texture, p_layer);
+		if (data_raw.size() == 0)
+		{
+			OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
+			return;
+		}
+
+		OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
+
 		// 从GPU中获取的数据会有以后最后的对齐位置，所以data_raw是8字节对齐
 		const uint16_t *half_ptr = reinterpret_cast<const uint16_t *>(&data_raw[0]);
 
@@ -8325,6 +8378,13 @@ void RenderingDevice::save_texture_to_file(RID p_texture, uint32_t p_layer, cons
 	break;
 	case DATA_FORMAT_D32_SFLOAT_S8_UINT:
 	{
+		PackedByteArray data_raw = depth_get_data(p_texture, p_layer);
+		if (data_raw.size() == 0)
+		{
+			OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
+			return;
+		}
+
 		const size_t w = p_size.x, h = p_size.y;
 		const size_t n = w * h;
 		const size_t total = data_raw.size();
