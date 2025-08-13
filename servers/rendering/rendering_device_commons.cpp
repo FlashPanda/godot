@@ -419,7 +419,7 @@ uint32_t RenderingDeviceCommons::get_image_format_pixel_size(DataFormat p_format
 		case DATA_FORMAT_D24_UNORM_S8_UINT:
 			return 4;
 		case DATA_FORMAT_D32_SFLOAT_S8_UINT:
-			return 8;
+			return 4;	// 这个数据肯定不对，但是现在先取出深度信息值，看看是不是可行。
 			//return 5; // ?
 		case DATA_FORMAT_BC1_RGB_UNORM_BLOCK:
 		case DATA_FORMAT_BC1_RGB_SRGB_BLOCK:

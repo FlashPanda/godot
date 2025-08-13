@@ -2066,12 +2066,85 @@ Vector<uint8_t> RenderingDevice::depth_get_data(RID p_texture, uint32_t p_layer)
 			work_buffer_size = STEPIFY(work_buffer_size, work_mip_alignment) + mip_layouts[i].size;
 		}
 
+		RDD::BufferID tmp_buffer = driver->buffer_create(work_buffer_size, RDD::BUFFER_USAGE_TRANSFER_TO_BIT, RDD::MEMORY_ALLOCATION_TYPE_CPU);
+		ERR_FAIL_COND_V(!tmp_buffer, Vector<uint8_t>());
+
+		thread_local LocalVector<RDD::BufferTextureCopyRegion> command_buffer_texture_copy_regions_vector;
+		command_buffer_texture_copy_regions_vector.clear();
+
+		uint32_t w = tex->width;
+		uint32_t h = tex->height;
+		uint32_t d = tex->depth;
+		for (uint32_t i = 0; i < tex->mipmaps; i++) {
+			RDD::BufferTextureCopyRegion copy_region;
+			copy_region.buffer_offset = mip_layouts[i].offset;
+			copy_region.texture_subresources.aspect = tex->read_aspect_flags;
+			copy_region.texture_subresources.mipmap = i;
+			copy_region.texture_subresources.base_layer = p_layer;
+			copy_region.texture_subresources.layer_count = 1;
+			copy_region.texture_region_size.x = w;
+			copy_region.texture_region_size.y = h;
+			copy_region.texture_region_size.z = d;
+			command_buffer_texture_copy_regions_vector.push_back(copy_region);
+
+			w = MAX(1u, w >> 1);
+			h = MAX(1u, h >> 1);
+			d = MAX(1u, d >> 1);
+		}
+
 		if (_texture_make_mutable(tex, p_texture)) {
 			// The texture must be mutable to be used as a copy source due to layout transitions.
 			draw_graph.add_synchronization();
 		}
 
-		return Vector<uint8_t>();
+		draw_graph.add_texture_get_data(tex->driver_id, tex->draw_tracker, tmp_buffer, command_buffer_texture_copy_regions_vector);
+
+		// Flush everything so memory can be safely mapped.
+		// 强制刷新所有命令，这样内存就可以安全地映射出来了。
+		_flush_and_stall_for_all_frames();
+
+		const uint8_t *read_ptr = driver->buffer_map(tmp_buffer); // 映射操作
+		ERR_FAIL_NULL_V(read_ptr, Vector<uint8_t>());
+
+		uint32_t block_w = 0;
+		uint32_t block_h = 0;
+		get_compressed_image_format_block_dimensions(tex->format, block_w, block_h); // 获取当前格式下，blcok的宽高
+
+		Vector<uint8_t> buffer_data;
+		uint32_t tight_buffer_size = get_image_format_required_size(tex->format, tex->width, tex->height, tex->depth, tex->mipmaps);
+		buffer_data.resize(tight_buffer_size);
+
+		uint8_t *write_ptr = buffer_data.ptrw();
+
+		w = tex->width;
+		h = tex->height;
+		d = tex->depth;
+		for (uint32_t i = 0; i < tex->mipmaps; i++) {
+			uint32_t width = 0, height = 0, depth = 0;
+			uint32_t tight_mip_size = get_image_format_required_size(tex->format, w, h, d, 1, &width, &height, &depth);
+			uint32_t tight_row_pitch = tight_mip_size / ((height / block_h) * depth);
+
+			// Copy row-by-row to erase padding due to alignments.
+			// 逐行复制，移除因为对齐而存在的padding
+			const uint8_t *rp = read_ptr;
+			uint8_t *wp = write_ptr;
+			for (uint32_t row = h * d / block_h; row != 0; row--) {
+				memcpy(wp, rp, tight_row_pitch);
+				rp += mip_layouts[i].row_pitch;
+				wp += tight_row_pitch;
+			}
+
+			w = MAX(block_w, w >> 1);
+			h = MAX(block_h, h >> 1);
+			d = MAX(1u, d >> 1);
+			read_ptr += mip_layouts[i].size;
+			write_ptr += tight_mip_size;
+		}
+
+		driver->buffer_unmap(tmp_buffer); // 取消映射
+		driver->buffer_free(tmp_buffer); // 释放缓存
+
+		return buffer_data;
 	}
 }
 
@@ -8390,7 +8463,7 @@ void RenderingDevice::save_texture_to_file(RID p_texture, uint32_t p_layer, cons
 		const size_t total = data_raw.size();
 
 		Ref<Image> img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
-		Ref<Image> stencil_img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
+		//Ref<Image> stencil_img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
 
 		auto put_pixel = [&](size_t i, float d, uint8_t st) {
 			// 可选：把深度可视化成 0~1（必要时反转或夹紧）
@@ -8400,7 +8473,7 @@ void RenderingDevice::save_texture_to_file(RID p_texture, uint32_t p_layer, cons
 			img->set_pixel(x, y, Color(v, v, v, 1.0f));
 
 			float s = st / 255.0f;
-			stencil_img->set_pixel(x, y, Color(s, s, s, 1.0f));
+			//stencil_img->set_pixel(x, y, Color(s, s, s, 1.0f));
 		};
 
 		// —— 探测内存顺序：DS(Depth 后 Stencil) 还是 SD(Stencil 在前 Depth 在后)
@@ -8414,8 +8487,19 @@ void RenderingDevice::save_texture_to_file(RID p_texture, uint32_t p_layer, cons
 		//	return hit;
 		//};
 		//bool use_SD = score_stencil(true) > score_stencil(false); // 命中多者更像模板
+		if (total == n * 4) {
+			// 测试用，先输出深度值看看
+			const float* ptr = reinterpret_cast<const float *>(&data_raw[0]);
 
-		if (total == n * 5) {
+			for (size_t i = 0; i < n; ++i) {
+				float v = Math::is_finite(ptr[i]) ? CLAMP(ptr[i], 0.0f, 1.0f) : 0.0f;
+				int x = int(i % w);
+				int y = int(i / w);
+				img->set_pixel(x, y, Color(v, v, v, 1.0f));
+			}
+
+		}
+		else if (total == n * 5) {
 			//if (use_SD) {
 				// 逐像素交错：1字节模板+4字节深度
 				// [S, d0, d1, d2, d3]
@@ -8479,11 +8563,11 @@ void RenderingDevice::save_texture_to_file(RID p_texture, uint32_t p_layer, cons
 		}
 
 		img->save_png(p_path);
-		stencil_img->save_png("user://stencil.png");
+		//stencil_img->save_png("user://stencil.png");
 
 		CharString u8 = p_path.utf8();
 		OS::get_singleton()->print("Save file to {%s} success!\n", u8.get_data());
-		OS::get_singleton()->print("Save stencil to {user://stencil.png} success!\n");
+		//OS::get_singleton()->print("Save stencil to {user://stencil.png} success!\n");
 	}
 	break;
 	default :
