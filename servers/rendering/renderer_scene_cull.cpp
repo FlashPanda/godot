@@ -4648,6 +4648,13 @@ void RendererSceneCull::InterpolationData::notify_free_instance(RID p_rid, Insta
 	instance_transform_update_list_prev->erase_multiple_unordered(p_rid);
 }
 
+/* Debug */
+void RendererSceneCull::save_current_view()
+{
+	OS::get_singleton()->print("OUR TEST !");
+	RSG::write_log_to_file("RendererSceneCull::save_current_view()");
+}
+
 RendererSceneCull::RendererSceneCull() {
 	render_pass = 1;
 	singleton = this;

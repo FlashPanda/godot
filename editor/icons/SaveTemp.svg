@@ -1,0 +1,8 @@
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <g stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Arrow -->
+    <path d="M8.5 3.5v6M6.5 7.5l2 2 2-2"></path>
+    <!-- Tray -->
+    <path d="M3.5 12.5h9M3.5 9.5v3M12.5 9.5v3"></path>
+  </g>
+</svg>

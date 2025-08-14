@@ -3009,6 +3009,10 @@ private:
 	SurfaceUpgradeCallback surface_upgrade_callback = nullptr;
 	bool warn_on_surface_upgrade = true;
 #endif
+
+public:
+	/* Debug */
+	virtual void save_current_view() = 0;
 };
 
 // Make variant understand the enums.

@@ -6757,6 +6757,11 @@ void Node3DEditor::_menu_item_pressed(int p_option) {
 			update_transform_gizmo();
 
 		} break;
+		case MENU_TOOL_SAVE_TEMP:
+		{
+			RenderingServer::get_singleton()->save_current_view();
+			break;
+		}
 		case MENU_TRANSFORM_CONFIGURE_SNAP: {
 			snap_dialog->popup_centered(Size2(200, 180));
 		} break;
@@ -8140,6 +8145,7 @@ void Node3DEditor::_update_theme() {
 	tool_button[TOOL_GROUP_SELECTED]->set_button_icon(get_editor_theme_icon(SNAME("Group")));
 	tool_button[TOOL_UNGROUP_SELECTED]->set_button_icon(get_editor_theme_icon(SNAME("Ungroup")));
 	tool_button[TOOL_RULER]->set_button_icon(get_editor_theme_icon(SNAME("Ruler")));
+	tool_button[TOOL_SAVE_TEMP]->set_button_icon(get_editor_theme_icon(SNAME("SaveTemp")));
 
 	tool_option_button[TOOL_OPT_LOCAL_COORDS]->set_button_icon(get_editor_theme_icon(SNAME("Object")));
 	tool_option_button[TOOL_OPT_USE_SNAP]->set_button_icon(get_editor_theme_icon(SNAME("Snap")));
@@ -8898,6 +8904,17 @@ Node3DEditor::Node3DEditor() {
 	tool_button[TOOL_RULER]->set_tooltip_text(TTRC("LMB+Drag: Measure the distance between two points in 3D space."));
 	// Define the shortcut globally (without a context) so that it works if the Scene tree dock is currently focused.
 	tool_button[TOOL_RULER]->set_shortcut(ED_SHORTCUT("spatial_editor/measure", TTRC("Ruler Mode"), Key::M));
+
+	// Test
+	// 测试:保存图片
+	tool_button[TOOL_SAVE_TEMP] = memnew(Button);
+	main_menu_hbox->add_child(tool_button[TOOL_SAVE_TEMP]);
+	tool_button[TOOL_SAVE_TEMP]->set_toggle_mode(true);
+	tool_button[TOOL_SAVE_TEMP]->set_theme_type_variation("FlatButton");
+	tool_button[TOOL_SAVE_TEMP]->connect(SceneStringName(pressed), callable_mp(this, &Node3DEditor::_menu_item_pressed).bind(MENU_TOOL_SAVE_TEMP));
+	tool_button[TOOL_SAVE_TEMP]->set_tooltip_text(TTRC("LMB+Drag: Measure the distance between two points in 3D space."));
+	// Define the shortcut globally (without a context) so that it works if the Scene tree dock is currently focused.
+	tool_button[TOOL_SAVE_TEMP]->set_shortcut(ED_SHORTCUT("spatial_editor/measure", TTRC("Save Mode"), Key::T));
 
 	main_menu_hbox->add_child(memnew(VSeparator));
 

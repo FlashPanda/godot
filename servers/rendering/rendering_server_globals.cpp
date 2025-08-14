@@ -62,7 +62,7 @@ void RenderingServerGlobals::write_log_to_file(String in_string) {
 	}
 	
 	// 打开文件并写入
-	static Ref<FileAccess> f = FileAccess::open(log_path, FileAccess::WRITE_READ);
+	Ref<FileAccess> f = FileAccess::open(log_path, FileAccess::READ_WRITE);
 	if (f.ptr()) {
 		f->seek_end();
 		String iso_local = Time::get_singleton()->get_datetime_string_from_system(false, true); // 本地 ISO
@@ -75,5 +75,19 @@ void RenderingServerGlobals::write_log_to_file(String in_string) {
 		//memdelete(f);
 	}
 	else {
+		Ref<FileAccess> fa = FileAccess::open(log_path, FileAccess::WRITE);
+		if (fa.ptr()) {
+			fa->seek_end();
+			String iso_local = Time::get_singleton()->get_datetime_string_from_system(false, true); // 本地 ISO
+			// 打印
+			CharString u8 = in_string.utf8();
+			CharString time_u8 = iso_local.utf8();
+			String log_line = vformat("[%s] %s\n", time_u8.get_data(), u8.get_data());
+			fa->store_string(log_line);
+			fa->close();
+		}
+		else {
+
+		}
 	}
 }
