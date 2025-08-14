@@ -348,6 +348,9 @@ public:
 	// 设置垂直同步模式
 	void call_set_vsync_mode(DisplayServer::VSyncMode p_mode, DisplayServer::WindowID p_window);
 
+	// 保存当前的视图
+	void save_current_view() const;
+
 	RendererViewport();
 	virtual ~RendererViewport() {}
 };

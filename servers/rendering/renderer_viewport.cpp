@@ -311,15 +311,6 @@ void RendererViewport::_draw_3d(Viewport *p_viewport) {
 		p_viewport->shadow_atlas,
 		xr_interface,
 		&p_viewport->render_info);
-
-	// Test
-	// 没啥数据
-	//static int count = 0;
-	//++count;
-	//if (count == 120) {
-	//	String str = vformat("user://shadow_atlas.png");
-	//	RSG::rasterizer->output_shadow_atlas_to_image(p_viewport->shadow_atlas, str);
-	//}
 	
 	RENDER_TIMESTAMP("< Render 3D Scene");
 #endif // _3D_DISABLED
@@ -403,26 +394,6 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 		}
 		// 通过3D渲染器的路径。
 		_draw_3d(p_viewport);
-
-		// Test
-		// 纹理的格式要拿出来看看
-		static int count = 1;
-		++count;
-		if (count == 120) {
-			RenderSceneBuffers* buffer_raw = p_viewport->render_buffers.ptr();
-			RenderSceneBuffersRD *rd_raw = Object::cast_to<RenderSceneBuffersRD>(buffer_raw);
-			if (rd_raw) {
-				RID color_texture = rd_raw->get_texture(RB_SCOPE_BUFFERS, RB_TEX_COLOR);
-				RD::TextureFormat texture_format = rd_raw->get_texture_format(RB_SCOPE_BUFFERS, RB_TEX_COLOR);
-				Size2i texture_size = rd_raw->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_COLOR, 0);
-				RD::get_singleton()->save_texture_to_file(color_texture, 0, texture_format, texture_size, "user://color_buffer.png");
-
-				RID depth_texture = rd_raw->get_texture(RB_SCOPE_BUFFERS, RB_TEX_DEPTH);
-				RD::TextureFormat depth_format = rd_raw->get_texture_format(RB_SCOPE_BUFFERS, RB_TEX_DEPTH);
-				Size2i depth_size = rd_raw->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_DEPTH, 0);
-				RD::get_singleton()->save_texture_to_file(depth_texture, 0, depth_format, depth_size, "user://depth_buffer.png");
-			}
-		}
 	}
 
 	// 需要绘制2D
@@ -1847,4 +1818,22 @@ int RendererViewport::get_num_viewports_with_motion_vectors() const {
 
 RendererViewport::RendererViewport() {
 	occlusion_rays_per_thread = GLOBAL_GET("rendering/occlusion_culling/occlusion_rays_per_thread");
+}
+
+// 保存当前的视图
+void RendererViewport::save_current_view() const {
+	// 纹理的格式要拿出来看看
+	RenderSceneBuffers *buffer_raw = p_viewport->render_buffers.ptr();
+	RenderSceneBuffersRD *rd_raw = Object::cast_to<RenderSceneBuffersRD>(buffer_raw);
+	if (rd_raw) {
+		RID color_texture = rd_raw->get_texture(RB_SCOPE_BUFFERS, RB_TEX_COLOR);
+		RD::TextureFormat texture_format = rd_raw->get_texture_format(RB_SCOPE_BUFFERS, RB_TEX_COLOR);
+		Size2i texture_size = rd_raw->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_COLOR, 0);
+		RD::get_singleton()->save_texture_to_file(color_texture, 0, texture_format, texture_size, "user://color_buffer.png");
+
+		RID depth_texture = rd_raw->get_texture(RB_SCOPE_BUFFERS, RB_TEX_DEPTH);
+		RD::TextureFormat depth_format = rd_raw->get_texture_format(RB_SCOPE_BUFFERS, RB_TEX_DEPTH);
+		Size2i depth_size = rd_raw->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_DEPTH, 0);
+		RD::get_singleton()->save_texture_to_file(depth_texture, 0, depth_format, depth_size, "user://depth_buffer.png");
+	}
 }
