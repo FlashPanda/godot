@@ -348,11 +348,20 @@ public:
 	// 设置垂直同步模式
 	void call_set_vsync_mode(DisplayServer::VSyncMode p_mode, DisplayServer::WindowID p_window);
 
-	// 保存当前的视图
-	void save_current_view() const;
 
 	RendererViewport();
 	virtual ~RendererViewport() {}
+
+// Debug
+public:
+	// 保存当前的视图
+	void save_current_view(Viewport* p_viewport) const;
+
+	// 设置下一帧保存视图
+	void set_to_save_next_frame();
+
+private:
+	std::atomic<bool> save_flag{false};
 };
 
 #endif // RENDERER_VIEWPORT_H

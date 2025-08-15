@@ -457,9 +457,9 @@ void RenderingServerDefault::save_current_view()
 {
 	OS::get_singleton()->print("RenderingServerDefault::save_current_view() \n");
 	RSG::write_log_to_file("RenderingServerDefault::save_current_view()");
-	RSG::scene->save_current_view();
+	//RSG::scene->save_current_view();
 	if (RSG::viewport) {
-		RSG::viewport->save_current_view();
+		RSG::viewport->set_to_save_next_frame();
 	}
 }
 

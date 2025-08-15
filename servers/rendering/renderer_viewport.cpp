@@ -396,6 +396,12 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 		_draw_3d(p_viewport);
 	}
 
+	// Debug
+	if (save_flag) {
+		save_current_view(p_viewport);
+		save_flag.store(false);
+	}
+
 	// 需要绘制2D
 	if (can_draw_2d) {
 		// 画布数据
@@ -1821,7 +1827,7 @@ RendererViewport::RendererViewport() {
 }
 
 // 保存当前的视图
-void RendererViewport::save_current_view() const {
+void RendererViewport::save_current_view(Viewport* p_viewport) const {
 	// 纹理的格式要拿出来看看
 	RenderSceneBuffers *buffer_raw = p_viewport->render_buffers.ptr();
 	RenderSceneBuffersRD *rd_raw = Object::cast_to<RenderSceneBuffersRD>(buffer_raw);
@@ -1836,4 +1842,10 @@ void RendererViewport::save_current_view() const {
 		Size2i depth_size = rd_raw->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_DEPTH, 0);
 		RD::get_singleton()->save_texture_to_file(depth_texture, 0, depth_format, depth_size, "user://depth_buffer.png");
 	}
+}
+
+// 设置下一帧保存视图
+void RendererViewport::set_to_save_next_frame()
+{
+	save_flag.store(true);
 }
