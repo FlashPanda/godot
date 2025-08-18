@@ -8464,6 +8464,9 @@ void RenderingDevice::save_texture_to_file(RID p_texture, uint32_t p_layer, cons
 
 		Ref<Image> img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
 		//Ref<Image> stencil_img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
+		//Ref<Image> img1 = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
+		//Ref<Image> img2 = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
+		//Ref<Image> img3 = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
 
 		auto put_pixel = [&](size_t i, float d, uint8_t st) {
 			// 可选：把深度可视化成 0~1（必要时反转或夹紧）
@@ -8487,15 +8490,34 @@ void RenderingDevice::save_texture_to_file(RID p_texture, uint32_t p_layer, cons
 		//	return hit;
 		//};
 		//bool use_SD = score_stencil(true) > score_stencil(false); // 命中多者更像模板
-		if (total == n * 4) {
+		if (true){//total == n * 8) {
 			// 测试用，先输出深度值看看
 			const float* ptr = reinterpret_cast<const float *>(&data_raw[0]);
 
 			for (size_t i = 0; i < n; ++i) {
+				//uint8_t v0 = data_raw[i * 4 + 0];
+				//uint8_t v1 = data_raw[i * 4 + 1];
+				//uint8_t v2 = data_raw[i * 4 + 2];
+				//uint8_t v3 = data_raw[i * 4 + 3];
 				float v = Math::is_finite(ptr[i]) ? CLAMP(ptr[i], 0.0f, 1.0f) : 0.0f;
 				int x = int(i % w);
 				int y = int(i / w);
-				img->set_pixel(x, y, Color(v, v, v, 1.0f));
+				v *= 10.f;
+				if (v > 0.1f)
+					img->set_pixel(x, y, Color(1.f, 0, 0, 1.0f));
+				else
+					img->set_pixel(x, y, Color(0.f, 0.f, 0.f, 1.f));
+				//img->set_pixel(x, y, Color(v0 / 255.f, 0, 0, 1.0f));
+				//img1->set_pixel(x, y, Color(0, v1 / 255.f, 0, 1.0f));
+				//img2->set_pixel(x, y, Color(0, 0, v2 / 255.f, 1.0f));
+				//img3->set_pixel(x, y, Color(0, 0, v3 / 255.f, 1.0f));
+
+				//float s = Math::is_finite(ptr[i])? CLAMP(ptr[i + n], 0.0f, 1.0f) : 0.0f;
+				//uint8_t v4 = data_raw[i * 4 + 4];
+				//uint8_t v5 = data_raw[i * 4 + 5];
+				//uint8_t v6 = data_raw[i * 4 + 6];
+				//uint8_t v7 = data_raw[i * 4 + 7];
+				//stencil_img->set_pixel(x, y, Color(v4 / 255.f, v5 / 255.f, v6 / 255.f, 1.0f));
 			}
 
 		}
@@ -8564,6 +8586,9 @@ void RenderingDevice::save_texture_to_file(RID p_texture, uint32_t p_layer, cons
 
 		img->save_png(p_path);
 		//stencil_img->save_png("user://stencil.png");
+		//img1->save_png("user://img1.png");
+		//img2->save_png("user://img2.png");
+		//img3->save_png("user://img3.png");
 
 		CharString u8 = p_path.utf8();
 		OS::get_singleton()->print("Save file to {%s} success!\n", u8.get_data());
