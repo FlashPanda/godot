@@ -493,6 +493,7 @@ public:
 	Error texture_update(RID p_texture, uint32_t p_layer, const Vector<uint8_t> &p_data);
 	Vector<uint8_t> texture_get_data(RID p_texture, uint32_t p_layer); // CPU textures will return immediately, while GPU textures will most likely force a flush
 	Vector<uint8_t> depth_get_data(RID p_texture, uint32_t p_layer);		// 获取深度信息数据，它必然存在GPU上，不会存在CPU
+	Vector<uint8_t> stencil_get_data(RID p_texture, uint32_t p_layer);		// 获取模板信息数据，它必然存在GPU上，不会存在CPU
 	Error texture_get_data_async(RID p_texture, uint32_t p_layer, const Callable &p_callback);
 
 	bool texture_is_format_supported_for_usage(DataFormat p_format, BitField<TextureUsageBits> p_usage) const;

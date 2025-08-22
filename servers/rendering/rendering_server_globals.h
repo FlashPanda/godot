@@ -69,7 +69,7 @@ public:
 	static RendererViewport *viewport;
 	static RenderingMethod *scene;
 
-	static void write_log_to_file(String in_string);
+	static void write_log_to_file(String in_string, bool in_use_prefix = true, bool in_change_line = true);
 };
 
 #define RSG RenderingServerGlobals

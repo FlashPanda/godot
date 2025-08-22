@@ -2148,6 +2148,127 @@ Vector<uint8_t> RenderingDevice::depth_get_data(RID p_texture, uint32_t p_layer)
 	}
 }
 
+Vector<uint8_t> RenderingDevice::stencil_get_data(RID p_texture, uint32_t p_layer)
+{
+	ERR_RENDER_THREAD_GUARD_V(Vector<uint8_t>());
+
+	Texture* tex = texture_owner.get_or_null(p_texture);
+	ERR_FAIL_NULL_V(tex, Vector<uint8_t>());
+
+	ERR_FAIL_COND_V_MSG(tex->bound, Vector<uint8_t>(),
+		"Texture can't be retrieved while a draw list that uses it as part of a framebuffer is being created. Ensure the draw list is finalized (and that the color/depth texture using it is not set to `RenderingDevice.FINAL_ACTION_CONTINUE`) to retrieve this texture.");
+	ERR_FAIL_COND_V_MSG(!(tex->usage_flags & TEXTURE_USAGE_CAN_COPY_FROM_BIT), Vector<uint8_t>(),
+		"Texture requires the `RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT` to be set to be retrieved.");
+
+	ERR_FAIL_COND_V(p_layer >= tex->layers, Vector<uint8_t>());
+
+	_check_transfer_worker_texture(tex);
+
+	if (tex->usage_flags & TEXTURE_USAGE_CPU_READ_BIT) {
+		// depth buffer must not in CPU
+		return Vector<uint8_t>();
+	}
+	else {
+		LocalVector<RDD::TextureCopyableLayout> mip_layouts;
+		uint32_t work_mip_alignment = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT);
+		uint32_t work_buffer_size = 0;
+		mip_layouts.resize(tex->mipmaps);
+
+		for (uint32_t i = 0; i < tex->mipmaps; i++) {
+			RDD::TextureSubresource subres;
+			subres.aspect = RDD::TEXTURE_ASPECT_STENCIL;
+			subres.layer = p_layer;
+			subres.mipmap = i;
+			driver->texture_get_copyable_layout(tex->driver_id, subres, &mip_layouts[i]);
+
+			// Assuming layers are tightly packed. If this is not true on some driver, we must modify the copy algorithm.
+			DEV_ASSERT(mip_layouts[i].layer_pitch == mip_layouts[i].size / tex->layers);
+
+			work_buffer_size = STEPIFY(work_buffer_size, work_mip_alignment) + mip_layouts[i].size;
+		}
+
+		RDD::BufferID tmp_buffer = driver->buffer_create(work_buffer_size, RDD::BUFFER_USAGE_TRANSFER_TO_BIT, RDD::MEMORY_ALLOCATION_TYPE_CPU);
+		ERR_FAIL_COND_V(!tmp_buffer, Vector<uint8_t>());
+
+		thread_local LocalVector<RDD::BufferTextureCopyRegion> command_buffer_texture_copy_regions_vector;
+		command_buffer_texture_copy_regions_vector.clear();
+
+		uint32_t w = tex->width;
+		uint32_t h = tex->height;
+		uint32_t d = tex->depth;
+		for (uint32_t i = 0; i < tex->mipmaps; i++) {
+			RDD::BufferTextureCopyRegion copy_region;
+			copy_region.buffer_offset = mip_layouts[i].offset;
+			copy_region.texture_subresources.aspect = 4;// tex->read_aspect_flags;
+			copy_region.texture_subresources.mipmap = i;
+			copy_region.texture_subresources.base_layer = p_layer;
+			copy_region.texture_subresources.layer_count = 1;
+			copy_region.texture_region_size.x = w;
+			copy_region.texture_region_size.y = h;
+			copy_region.texture_region_size.z = d;
+			command_buffer_texture_copy_regions_vector.push_back(copy_region);
+
+			w = MAX(1u, w >> 1);
+			h = MAX(1u, h >> 1);
+			d = MAX(1u, d >> 1);
+		}
+
+		if (_texture_make_mutable(tex, p_texture)) {
+			// The texture must be mutable to be used as a copy source due to layout transitions.
+			draw_graph.add_synchronization();
+		}
+
+		draw_graph.add_texture_get_data(tex->driver_id, tex->draw_tracker, tmp_buffer, command_buffer_texture_copy_regions_vector);
+
+		// Flush everything so memory can be safely mapped.
+		// 强制刷新所有命令，这样内存就可以安全地映射出来了。
+		_flush_and_stall_for_all_frames();
+
+		const uint8_t* read_ptr = driver->buffer_map(tmp_buffer); // 映射操作
+		ERR_FAIL_NULL_V(read_ptr, Vector<uint8_t>());
+
+		uint32_t block_w = 0;
+		uint32_t block_h = 0;
+		get_compressed_image_format_block_dimensions(tex->format, block_w, block_h); // 获取当前格式下，blcok的宽高
+
+		Vector<uint8_t> buffer_data;
+		uint32_t tight_buffer_size = get_image_format_required_size(tex->format, tex->width, tex->height, tex->depth, tex->mipmaps);
+		buffer_data.resize(tight_buffer_size);
+
+		uint8_t* write_ptr = buffer_data.ptrw();
+
+		w = tex->width;
+		h = tex->height;
+		d = tex->depth;
+		for (uint32_t i = 0; i < tex->mipmaps; i++) {
+			uint32_t width = 0, height = 0, depth = 0;
+			uint32_t tight_mip_size = get_image_format_required_size(tex->format, w, h, d, 1, &width, &height, &depth);
+			uint32_t tight_row_pitch = tight_mip_size / ((height / block_h) * depth);
+
+			// Copy row-by-row to erase padding due to alignments.
+			// 逐行复制，移除因为对齐而存在的padding
+			const uint8_t* rp = read_ptr;
+			uint8_t* wp = write_ptr;
+			for (uint32_t row = h * d / block_h; row != 0; row--) {
+				memcpy(wp, rp, tight_row_pitch);
+				rp += mip_layouts[i].row_pitch;
+				wp += tight_row_pitch;
+			}
+
+			w = MAX(block_w, w >> 1);
+			h = MAX(block_h, h >> 1);
+			d = MAX(1u, d >> 1);
+			read_ptr += mip_layouts[i].size;
+			write_ptr += tight_mip_size;
+		}
+
+		driver->buffer_unmap(tmp_buffer); // 取消映射
+		driver->buffer_free(tmp_buffer); // 释放缓存
+
+		return buffer_data;
+	}
+}
+
 Error RenderingDevice::texture_get_data_async(RID p_texture, uint32_t p_layer, const Callable &p_callback) {
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
 
@@ -8451,148 +8572,282 @@ void RenderingDevice::save_texture_to_file(RID p_texture, uint32_t p_layer, cons
 	break;
 	case DATA_FORMAT_D32_SFLOAT_S8_UINT:
 	{
-		PackedByteArray data_raw = depth_get_data(p_texture, p_layer);
+		// 这里事实上只会有4字节的深度值出来，模板值不会有。
+		PackedByteArray data_raw = texture_get_data(p_texture, p_layer);
 		if (data_raw.size() == 0)
 		{
 			OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
 			return;
 		}
 
+		OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
+
 		const size_t w = p_size.x, h = p_size.y;
 		const size_t n = w * h;
 		const size_t total = data_raw.size();
 
 		Ref<Image> img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
-		//Ref<Image> stencil_img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
-		//Ref<Image> img1 = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
-		//Ref<Image> img2 = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
-		//Ref<Image> img3 = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
+		Ref<Image> stencil_img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
 
 		auto put_pixel = [&](size_t i, float d, uint8_t st) {
 			// 可选：把深度可视化成 0~1（必要时反转或夹紧）
 			float v = Math::is_finite(d) ? CLAMP(d, 0.0f, 1.0f) : 0.0f;
 			int x = int(i % w);
 			int y = int(i / w);
-			img->set_pixel(x, y, Color(v, v, v, 1.0f));
+			if (v > 0.f)
+				img->set_pixel(x, y, Color(0.f, 1.f, 0.f, 1.0f));
+			else
+				img->set_pixel(x, y, Color(0.f, 0.f, 0.f, 1.0f));
 
 			float s = st / 255.0f;
-			//stencil_img->set_pixel(x, y, Color(s, s, s, 1.0f));
+			stencil_img->set_pixel(x, y, Color(s, s, s, 1.0f));
 		};
 
-		// —— 探测内存顺序：DS(Depth 后 Stencil) 还是 SD(Stencil 在前 Depth 在后)
-		//auto score_stencil = [&](bool assume_SD)->size_t {
-		//	size_t hit = 0, sample = MIN<size_t>(n, 50000);
-		//	for (size_t i = 0; i < sample; ++i) {
-		//		size_t base = i * 5;
-		//		uint8_t st = assume_SD ? data_raw[base + 0] : data_raw[base + 4];
-		//		if (st == 0 || st == 255) ++hit;  // 常见模板值
-		//	}
-		//	return hit;
-		//};
-		//bool use_SD = score_stencil(true) > score_stencil(false); // 命中多者更像模板
-		if (true){//total == n * 8) {
-			// 测试用，先输出深度值看看
-			const float* ptr = reinterpret_cast<const float *>(&data_raw[0]);
-
+		if (total == n * 5) {
+			// 逐像素交错：4 字节深度 + 1 字节模板
+			// [d0, d1, d2, d3, S]
 			for (size_t i = 0; i < n; ++i) {
-				//uint8_t v0 = data_raw[i * 4 + 0];
-				//uint8_t v1 = data_raw[i * 4 + 1];
-				//uint8_t v2 = data_raw[i * 4 + 2];
-				//uint8_t v3 = data_raw[i * 4 + 3];
-				float v = Math::is_finite(ptr[i]) ? CLAMP(ptr[i], 0.0f, 1.0f) : 0.0f;
-				int x = int(i % w);
-				int y = int(i / w);
-				v *= 10.f;
-				if (v > 0.1f)
-					img->set_pixel(x, y, Color(1.f, 0, 0, 1.0f));
-				else
-					img->set_pixel(x, y, Color(0.f, 0.f, 0.f, 1.f));
-				//img->set_pixel(x, y, Color(v0 / 255.f, 0, 0, 1.0f));
-				//img1->set_pixel(x, y, Color(0, v1 / 255.f, 0, 1.0f));
-				//img2->set_pixel(x, y, Color(0, 0, v2 / 255.f, 1.0f));
-				//img3->set_pixel(x, y, Color(0, 0, v3 / 255.f, 1.0f));
-
-				//float s = Math::is_finite(ptr[i])? CLAMP(ptr[i + n], 0.0f, 1.0f) : 0.0f;
-				//uint8_t v4 = data_raw[i * 4 + 4];
-				//uint8_t v5 = data_raw[i * 4 + 5];
-				//uint8_t v6 = data_raw[i * 4 + 6];
-				//uint8_t v7 = data_raw[i * 4 + 7];
-				//stencil_img->set_pixel(x, y, Color(v4 / 255.f, v5 / 255.f, v6 / 255.f, 1.0f));
-			}
-
-		}
-		else if (total == n * 5) {
-			//if (use_SD) {
-				// 逐像素交错：1字节模板+4字节深度
-				// [S, d0, d1, d2, d3]
-				for (size_t i = 0; i < n; ++i) {
-					size_t base = i * 5;
-					uint8_t st = data_raw[base + 0];
-					float d; std::memcpy(&d, &data_raw[base + 1], 4);
-					put_pixel(i, d, st);
-				}
-			//}
-			//else {
-			//	// 逐像素交错：4 字节深度 + 1 字节模板
-			//	// [d0, d1, d2, d3, S]
-			//	for (size_t i = 0; i < n; ++i) {
-			//		size_t base = i * 5;
-			//		float d;
-			//		std::memcpy(&d, &data_raw[base + 0], 4);
-			//		uint8_t st = data_raw[base + 4];
-			//		put_pixel(i, d, st);
-			//	}
-			//}
-		} else if (total == n * 8) {
-			// 逐像素 8 字节对齐：4 字节深度 + 1 字节模板 + 3 字节填充
-			for (size_t i = 0; i < n; ++i) {
-				size_t base = i * 8;
+				size_t base = i * 4;
 				float d;
 				std::memcpy(&d, &data_raw[base + 0], 4);
-				uint8_t st = data_raw[base + 4];
+				uint8_t st = data_raw[n * 4 + i];
 				put_pixel(i, d, st);
-			}
-		} else if (total == n * 4 + n) {
-			// 平面分离：先所有深度，再所有模板（少见，但做个兜底）
-			size_t st_off = n * 4;
-			for (size_t i = 0; i < n; ++i) {
-				float d;
-				std::memcpy(&d, &data_raw[i * 4], 4);
-				uint8_t st = data_raw[st_off + i];
-				put_pixel(i, d, st);
-			}
-		} else {
-			// 非常规：可能存在逐行对齐（row pitch）。推断每行步长并按交错读取。
-			size_t row_stride = total / h; // 约分得到每行字节数
-			bool interleaved5 = row_stride >= w * 5; // 简单判定
-			bool interleaved8 = row_stride >= w * 8;
-
-			if (interleaved5 || interleaved8) {
-				size_t px = interleaved8 ? 8 : 5;
-				for (size_t y = 0; y < h; ++y) {
-					size_t row_base = y * row_stride;
-					for (size_t x = 0; x < w; ++x) {
-						size_t base = row_base + x * px;
-						float d;
-						std::memcpy(&d, &data_raw[base + 0], 4);
-						uint8_t st = data_raw[base + 4];
-						put_pixel(y * w + x, d, st);
-					}
-				}
-			} else {
-				OS::get_singleton()->print("Unexpected DS layout: bytes=%zu\n", total);
 			}
 		}
 
 		img->save_png(p_path);
-		//stencil_img->save_png("user://stencil.png");
-		//img1->save_png("user://img1.png");
-		//img2->save_png("user://img2.png");
-		//img3->save_png("user://img3.png");
+		stencil_img->save_png("user://stencil.png");
 
-		CharString u8 = p_path.utf8();
-		OS::get_singleton()->print("Save file to {%s} success!\n", u8.get_data());
-		//OS::get_singleton()->print("Save stencil to {user://stencil.png} success!\n");
+		//if (1) {
+		//	PackedByteArray data_raw = stencil_get_data(p_texture, p_layer);
+		//	if (data_raw.size() == 0)
+		//	{
+		//		OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
+		//		return;
+		//	}
+
+		//	const size_t w = p_size.x, h = p_size.y;
+		//	const size_t n = w * h;
+		//	const size_t total = data_raw.size();
+
+		//	Ref<Image> img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
+
+		//	if (true) {
+		//		int line = -1;
+		//		// 模板：只有1个字节的数据。
+		//		for (size_t i = 0; i < n; ++i) {
+		//			uint8_t v0 = data_raw[i];
+		//			//uint8_t v1 = data_raw[i * 4 + 1];
+		//			//uint8_t v2 = data_raw[i * 4 + 2];
+		//			//uint8_t v3 = data_raw[i * 4 + 3];
+		//			//float v = Math::is_finite(ptr[i]) ? CLAMP(ptr[i], 0.0f, 1.0f) : 0.0f;
+		//			int x = int(i % w);
+		//			int y = int(i / w);
+		//			//img->set_pixel(x, y, Color(v0 / 255.f, v1 / 255.f, v2 / 255.f, 1.0f));
+		//			img->set_pixel(x, y, Color(v0 / 255.f, 0, 0, 1.0f));
+
+		//			//if (v > 0.f) {
+		//			//	if (line == y || line == -1) {
+		//			//		String log = vformat("%f,", ptr[i]);
+		//			//		RSG::write_log_to_file(log, false, false);
+		//			//	}
+		//			//	else {
+		//			//		line = y;
+		//			//		String log = vformat("%f", ptr[i]);
+		//			//		RSG::write_log_to_file(log, false, true);
+		//			//	}
+		//			//}
+
+		//			//v *= 1000.f;
+		//			//if (v > 0.1f)
+		//			//	img->set_pixel(x, y, Color(1.f, 0, 0, 1.0f));
+		//			//else
+		//			//	img->set_pixel(x, y, Color(0.f, 0.f, 0.f, 1.f));
+		//			//img->set_pixel(x, y, Color(v0 / 255.f, 0, 0, 1.0f));
+		//			//img1->set_pixel(x, y, Color(0, v1 / 255.f, 0, 1.0f));
+		//			//img2->set_pixel(x, y, Color(0, 0, v2 / 255.f, 1.0f));
+		//			//img3->set_pixel(x, y, Color(0, 0, v3 / 255.f, 1.0f));
+
+		//			//float s = Math::is_finite(ptr[i])? CLAMP(ptr[i + n], 0.0f, 1.0f) : 0.0f;
+		//			//uint8_t v4 = data_raw[i * 4 + 4];
+		//			//uint8_t v5 = data_raw[i * 4 + 5];
+		//			//uint8_t v6 = data_raw[i * 4 + 6];
+		//			//uint8_t v7 = data_raw[i * 4 + 7];
+		//			//stencil_img->set_pixel(x, y, Color(v4 / 255.f, v5 / 255.f, v6 / 255.f, 1.0f));
+		//		}
+
+		//	}
+
+		//	img->save_png(p_path);
+		//	//stencil_img->save_png("user://stencil.png");
+		//	//img1->save_png("user://img1.png");
+		//	//img2->save_png("user://img2.png");
+		//	//img3->save_png("user://img3.png");
+
+		//	CharString u8 = p_path.utf8();
+		//	OS::get_singleton()->print("Save file to {%s} success!\n", u8.get_data());
+		//	//OS::get_singleton()->print("Save stencil to {user://stencil.png} success!\n");
+		//}
+		//else {
+		//PackedByteArray data_raw = depth_get_data(p_texture, p_layer);
+		//if (data_raw.size() == 0)
+		//{
+		//	OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
+		//	return;
+		//}
+
+		//const size_t w = p_size.x, h = p_size.y;
+		//const size_t n = w * h;
+		//const size_t total = data_raw.size();
+
+		//Ref<Image> img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
+		////Ref<Image> stencil_img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
+		////Ref<Image> img1 = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
+		////Ref<Image> img2 = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
+		////Ref<Image> img3 = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
+
+		//auto put_pixel = [&](size_t i, float d, uint8_t st) {
+		//	// 可选：把深度可视化成 0~1（必要时反转或夹紧）
+		//	float v = Math::is_finite(d) ? CLAMP(d, 0.0f, 1.0f) : 0.0f;
+		//	int x = int(i % w);
+		//	int y = int(i / w);
+		//	img->set_pixel(x, y, Color(v, v, v, 1.0f));
+
+		//	float s = st / 255.0f;
+		//	//stencil_img->set_pixel(x, y, Color(s, s, s, 1.0f));
+		//};
+
+		//// —— 探测内存顺序：DS(Depth 后 Stencil) 还是 SD(Stencil 在前 Depth 在后)
+		////auto score_stencil = [&](bool assume_SD)->size_t {
+		////	size_t hit = 0, sample = MIN<size_t>(n, 50000);
+		////	for (size_t i = 0; i < sample; ++i) {
+		////		size_t base = i * 5;
+		////		uint8_t st = assume_SD ? data_raw[base + 0] : data_raw[base + 4];
+		////		if (st == 0 || st == 255) ++hit;  // 常见模板值
+		////	}
+		////	return hit;
+		////};
+		////bool use_SD = score_stencil(true) > score_stencil(false); // 命中多者更像模板
+		//if (true){//total == n * 8) {
+		//	// 测试用，先输出深度值看看
+		//	const float* ptr = reinterpret_cast<const float *>(&data_raw[0]);
+
+		//	int line = -1;
+		//	for (size_t i = 0; i < n; ++i) {
+		//		//uint8_t v0 = data_raw[i * 4 + 0];
+		//		//uint8_t v1 = data_raw[i * 4 + 1];
+		//		//uint8_t v2 = data_raw[i * 4 + 2];
+		//		//uint8_t v3 = data_raw[i * 4 + 3];
+		//		float v = Math::is_finite(ptr[i]) ? CLAMP(ptr[i], 0.0f, 1.0f) : 0.0f;
+		//		int x = int(i % w);
+		//		int y = int(i / w);
+
+		//		if (v > 0.f) {
+		//			if (line == y || line == -1) {
+		//				String log = vformat("%f,", ptr[i]);
+		//				RSG::write_log_to_file(log, false, false);
+		//			}
+		//			else{
+		//				line = y;
+		//				String log = vformat("%f", ptr[i]);
+		//				RSG::write_log_to_file(log, false, true);
+		//			}
+		//		}
+
+		//		v *= 1000.f;
+		//		if (v > 0.1f)
+		//			img->set_pixel(x, y, Color(1.f, 0, 0, 1.0f));
+		//		else
+		//			img->set_pixel(x, y, Color(0.f, 0.f, 0.f, 1.f));
+		//		//img->set_pixel(x, y, Color(v0 / 255.f, 0, 0, 1.0f));
+		//		//img1->set_pixel(x, y, Color(0, v1 / 255.f, 0, 1.0f));
+		//		//img2->set_pixel(x, y, Color(0, 0, v2 / 255.f, 1.0f));
+		//		//img3->set_pixel(x, y, Color(0, 0, v3 / 255.f, 1.0f));
+
+		//		//float s = Math::is_finite(ptr[i])? CLAMP(ptr[i + n], 0.0f, 1.0f) : 0.0f;
+		//		//uint8_t v4 = data_raw[i * 4 + 4];
+		//		//uint8_t v5 = data_raw[i * 4 + 5];
+		//		//uint8_t v6 = data_raw[i * 4 + 6];
+		//		//uint8_t v7 = data_raw[i * 4 + 7];
+		//		//stencil_img->set_pixel(x, y, Color(v4 / 255.f, v5 / 255.f, v6 / 255.f, 1.0f));
+		//	}
+
+		//}
+		//else if (total == n * 5) {
+		//	//if (use_SD) {
+		//		// 逐像素交错：1字节模板+4字节深度
+		//		// [S, d0, d1, d2, d3]
+		//		for (size_t i = 0; i < n; ++i) {
+		//			size_t base = i * 5;
+		//			uint8_t st = data_raw[base + 0];
+		//			float d; std::memcpy(&d, &data_raw[base + 1], 4);
+		//			put_pixel(i, d, st);
+		//		}
+		//	//}
+		//	//else {
+		//	//	// 逐像素交错：4 字节深度 + 1 字节模板
+		//	//	// [d0, d1, d2, d3, S]
+		//	//	for (size_t i = 0; i < n; ++i) {
+		//	//		size_t base = i * 5;
+		//	//		float d;
+		//	//		std::memcpy(&d, &data_raw[base + 0], 4);
+		//	//		uint8_t st = data_raw[base + 4];
+		//	//		put_pixel(i, d, st);
+		//	//	}
+		//	//}
+		//} else if (total == n * 8) {
+		//	// 逐像素 8 字节对齐：4 字节深度 + 1 字节模板 + 3 字节填充
+		//	for (size_t i = 0; i < n; ++i) {
+		//		size_t base = i * 8;
+		//		float d;
+		//		std::memcpy(&d, &data_raw[base + 0], 4);
+		//		uint8_t st = data_raw[base + 4];
+		//		put_pixel(i, d, st);
+		//	}
+		//} else if (total == n * 4 + n) {
+		//	// 平面分离：先所有深度，再所有模板（少见，但做个兜底）
+		//	size_t st_off = n * 4;
+		//	for (size_t i = 0; i < n; ++i) {
+		//		float d;
+		//		std::memcpy(&d, &data_raw[i * 4], 4);
+		//		uint8_t st = data_raw[st_off + i];
+		//		put_pixel(i, d, st);
+		//	}
+		//} else {
+		//	// 非常规：可能存在逐行对齐（row pitch）。推断每行步长并按交错读取。
+		//	size_t row_stride = total / h; // 约分得到每行字节数
+		//	bool interleaved5 = row_stride >= w * 5; // 简单判定
+		//	bool interleaved8 = row_stride >= w * 8;
+
+		//	if (interleaved5 || interleaved8) {
+		//		size_t px = interleaved8 ? 8 : 5;
+		//		for (size_t y = 0; y < h; ++y) {
+		//			size_t row_base = y * row_stride;
+		//			for (size_t x = 0; x < w; ++x) {
+		//				size_t base = row_base + x * px;
+		//				float d;
+		//				std::memcpy(&d, &data_raw[base + 0], 4);
+		//				uint8_t st = data_raw[base + 4];
+		//				put_pixel(y * w + x, d, st);
+		//			}
+		//		}
+		//	} else {
+		//		OS::get_singleton()->print("Unexpected DS layout: bytes=%zu\n", total);
+		//	}
+		//}
+
+		//img->save_png(p_path);
+		////stencil_img->save_png("user://stencil.png");
+		////img1->save_png("user://img1.png");
+		////img2->save_png("user://img2.png");
+		////img3->save_png("user://img3.png");
+
+		//CharString u8 = p_path.utf8();
+		//OS::get_singleton()->print("Save file to {%s} success!\n", u8.get_data());
+		////OS::get_singleton()->print("Save stencil to {user://stencil.png} success!\n");
+		//
+		//}
+
 	}
 	break;
 	default :

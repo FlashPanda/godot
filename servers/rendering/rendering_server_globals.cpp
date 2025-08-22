@@ -51,7 +51,7 @@ RendererCanvasCull *RenderingServerGlobals::canvas = nullptr;
 RendererViewport *RenderingServerGlobals::viewport = nullptr;
 RenderingMethod *RenderingServerGlobals::scene = nullptr;
 
-void RenderingServerGlobals::write_log_to_file(String in_string) {
+void RenderingServerGlobals::write_log_to_file(String in_string, bool in_use_prefix, bool in_change_line) {
 	// 下面的方式可以写文件，这是一种跨平台的方式
 	// 文件输出，写入到user://logs/rendering_draw.log
 	String log_path = "user://logs/rendering_draw.log";
@@ -69,7 +69,19 @@ void RenderingServerGlobals::write_log_to_file(String in_string) {
 		// 打印
 		CharString u8 = in_string.utf8();
 		CharString time_u8 = iso_local.utf8();
-		String log_line = vformat("[%s] %s\n", time_u8.get_data(), u8.get_data());
+		String log_line;
+		if (in_use_prefix && in_change_line) {
+			log_line = vformat("[%s] %s\n", time_u8.get_data(), u8.get_data());
+		}
+		else if (in_use_prefix) {
+			log_line = vformat("[%s] %s", time_u8.get_data(), u8.get_data());
+		}
+		else if (in_change_line) {
+			log_line = vformat("%s\n", u8.get_data());
+		}
+		else {
+			log_line = vformat("%s", u8.get_data());
+		}
 		f->store_string(log_line);
 		f->close();
 		//memdelete(f);
@@ -82,7 +94,19 @@ void RenderingServerGlobals::write_log_to_file(String in_string) {
 			// 打印
 			CharString u8 = in_string.utf8();
 			CharString time_u8 = iso_local.utf8();
-			String log_line = vformat("[%s] %s\n", time_u8.get_data(), u8.get_data());
+			String log_line;
+			if (in_use_prefix && in_change_line) {
+				log_line = vformat("[%s] %s\n", time_u8.get_data(), u8.get_data());
+			}
+			else if (in_use_prefix) {
+				log_line = vformat("[%s] %s", time_u8.get_data(), u8.get_data());
+			}
+			else if (in_change_line) {
+				log_line = vformat("%s\n", u8.get_data());
+			}
+			else {
+				log_line = vformat("%s", u8.get_data());
+			}
 			fa->store_string(log_line);
 			fa->close();
 		}
