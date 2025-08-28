@@ -1,0 +1,10 @@
+# 收集当前目录下的所有 .cpp 源文件
+file(GLOB LOCAL_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp")
+
+# 将这些源文件追加到上层定义的可执行目标 godot
+# 确保在更上层已经有 add_executable(godot ...) 或 add_library(godot ...) 等目标定义
+if(TARGET godot)
+    target_sources(godot PRIVATE ${LOCAL_SOURCES})
+else()
+    message(FATAL_ERROR "目标 'godot' 未定义。请在上层先定义目标后，再 add_subdirectory 到本目录。")
+endif()
