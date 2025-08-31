@@ -1,0 +1,424 @@
+# 顶层 CMake 构建脚本（简化移植自 SCons 顶层逻辑）
+# 主要目标：
+# - 提供接近的构建开关与编译器/链接器配置
+# - 组织子目录的构建顺序
+# - 自动命名可执行产物，包含平台/目标/arch 等信息后缀
+
+cmake_minimum_required(VERSION 3.20)
+
+project(godot
+    VERSION 0.0.0
+    LANGUAGES C CXX
+)
+
+# 选项与变量定义
+# 注意：可通过 -Dxxx=yyy 在命令行覆盖
+
+# 目标类型：editor/template_release/template_debug
+set(GODOT_TARGET "editor" CACHE STRING "Compilation target: editor|template_release|template_debug")
+set_property(CACHE GODOT_TARGET PROPERTY STRINGS editor template_release template_debug)
+
+# 平台：auto（默认），或 linuxbsd/macos/windows/android/web 等
+set(GODOT_PLATFORM "auto" CACHE STRING "Target platform (auto|linuxbsd|macos|windows|android|web)")
+
+# 架构：auto 或具体字符串（如 x86_32/x86_64/arm64 等）
+set(GODOT_ARCH "auto" CACHE STRING "CPU architecture (auto|x86_32|x86_64|arm64|...)")
+
+# 开发构建（DEV_ENABLED）
+option(GODOT_DEV_BUILD "Developer build with dev-only debugging code (DEV_ENABLED)" OFF)
+
+# 优化等级：auto/none/custom/debug/speed/speed_trace/size
+set(GODOT_OPTIMIZE "auto" CACHE STRING "Optimization level (auto|none|custom|debug|speed|speed_trace|size)")
+set_property(CACHE GODOT_OPTIMIZE PROPERTY STRINGS auto none custom debug speed speed_trace size)
+
+# Debug 符号
+option(GODOT_DEBUG_SYMBOLS "Build with debugging symbols" OFF)
+
+# LTO：none/auto/thin/full（在 CMake 中对应 IPO）
+set(GODOT_LTO "none" CACHE STRING "Link-time optimization (none|auto|thin|full)")
+set_property(CACHE GODOT_LTO PROPERTY STRINGS none auto thin full)
+
+# 是否生产模式（用于设置默认值）
+option(GODOT_PRODUCTION "Set production defaults" OFF)
+
+# 线程
+option(GODOT_THREADS "Enable threading support" ON)
+
+# 特性与组件
+option(GODOT_DEPRECATED "Enable compatibility code for deprecated features" ON)
+set(GODOT_PRECISION "single" CACHE STRING "Floating-point precision (single|double)")
+set_property(CACHE GODOT_PRECISION PROPERTY STRINGS single double)
+
+option(GODOT_MINIZIP "Enable ZIP archive support using minizip" ON)
+option(GODOT_BROTLI "Enable Brotli support" ON)
+option(GODOT_VULKAN "Enable Vulkan driver" ON)
+option(GODOT_OPENGL3 "Enable OpenGL/GLES3 driver" ON)
+option(GODOT_D3D12 "Enable Direct3D 12 (supported platforms only)" OFF)
+option(GODOT_METAL "Enable Metal rendering driver (Apple arm64 only)" OFF)
+option(GODOT_OPENXR "Enable OpenXR driver" ON)
+option(GODOT_USE_VOLK "Use volk to load the Vulkan loader dynamically" ON)
+option(GODOT_DISABLE_EXCEPTIONS "Force disabling exception handling code" ON)
+option(GODOT_MODULES_ENABLED_BY_DEFAULT "Enable built-in modules by default" ON)
+option(GODOT_DISABLE_3D "Disable 3D nodes" OFF)
+option(GODOT_DISABLE_ADV_GUI "Disable advanced GUI nodes" OFF)
+option(GODOT_NO_EDITOR_SPLASH "Disable editor splash screen" ON)
+option(GODOT_ENGINE_UPDATE_CHECK "Enable engine update checks in Project Manager" ON)
+option(GODOT_TESTS "Build unit tests" OFF)
+option(GODOT_STRICT_CHECKS "Enforce stricter checks" OFF)
+option(GODOT_PRECISE_MATH_CHECKS "Use precise math checks" OFF)
+
+# 编译辅助与质量控制
+set(GODOT_WARNINGS "all" CACHE STRING "Warnings level (extra|all|moderate|no)")
+set_property(CACHE GODOT_WARNINGS PROPERTY STRINGS extra all moderate no)
+option(GODOT_WERROR "Treat compiler warnings as errors" OFF)
+
+# 生成 compile_commands.json（类似 compiledb）
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# 默认构建类型（若未显式指定）
+if(NOT CMAKE_BUILD_TYPE)
+    if(GODOT_DEV_BUILD OR GODOT_TARGET STREQUAL "editor" OR GODOT_TARGET STREQUAL "template_debug")
+        set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "" FORCE)
+    else()
+        set(CMAKE_BUILD_TYPE "Release" CACHE STRING "" FORCE)
+    endif()
+endif()
+
+# 平台自动检测（仅当 GODOT_PLATFORM 为 auto）
+if(GODOT_PLATFORM STREQUAL "auto")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR
+       CMAKE_SYSTEM_NAME STREQUAL "FreeBSD" OR
+       CMAKE_SYSTEM_NAME STREQUAL "OpenBSD" OR
+       CMAKE_SYSTEM_NAME STREQUAL "NetBSD" OR
+       CMAKE_SYSTEM_NAME STREQUAL "DragonFly")
+        set(GODOT_PLATFORM "linuxbsd" CACHE STRING "" FORCE)
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        set(GODOT_PLATFORM "macos" CACHE STRING "" FORCE)
+    elseif(WIN32)
+        set(GODOT_PLATFORM "windows" CACHE STRING "" FORCE)
+    else()
+        message(FATAL_ERROR "无法自动识别平台，请使用 -DGODOT_PLATFORM=... 指定（linuxbsd|macos|windows|android|web 等）")
+    endif()
+endif()
+
+message(STATUS "Godot: platform='${GODOT_PLATFORM}', arch='${GODOT_ARCH}', target='${GODOT_TARGET}'")
+if(GODOT_DEV_BUILD)
+    message(STATUS "Godot: Developer build (DEV_ENABLED), 默认开启更高的调试信息与更安全的配置")
+endif()
+
+# 创建主目标（可执行；如需生成库，可改为 add_library）
+add_executable(godot)
+
+# C/C++ 标准设置
+if(MSVC)
+    target_compile_features(godot PRIVATE cxx_std_17)
+    # VS2019 16.8+ 支持 C17；VS2017 不支持单独指定 C 标准
+    # 开启更严格的 C++ 兼容模式
+    target_compile_options(godot PRIVATE /permissive- /Zc:__cplusplus)
+else()
+    # 明确使用 gnu 方言，贴近原 SCons
+    target_compile_options(godot PRIVATE
+        $<$<COMPILE_LANGUAGE:C>:-std=gnu17>
+        $<$<COMPILE_LANGUAGE:CXX>:-std=gnu++17>
+    )
+endif()
+
+# 线程
+if(GODOT_THREADS)
+    target_compile_definitions(godot PRIVATE THREADS_ENABLED)
+    find_package(Threads REQUIRED)
+    target_link_libraries(godot PRIVATE Threads::Threads)
+endif()
+
+# 编辑器与调试宏
+if(GODOT_TARGET STREQUAL "editor")
+    target_compile_definitions(godot PRIVATE TOOLS_ENABLED)
+endif()
+
+if(GODOT_TARGET STREQUAL "editor" OR GODOT_TARGET STREQUAL "template_debug")
+    target_compile_definitions(godot PRIVATE DEBUG_ENABLED)
+endif()
+
+if(GODOT_DEV_BUILD)
+    target_compile_definitions(godot PRIVATE DEV_ENABLED)
+else()
+    # 非开发构建时，在第三方库等场景下关闭 assert（对应 NDEBUG）
+    target_compile_definitions(godot PRIVATE NDEBUG)
+endif()
+
+# 精度
+if(GODOT_PRECISION STREQUAL "double")
+    target_compile_definitions(godot PRIVATE REAL_T_IS_DOUBLE)
+endif()
+
+# 特性开关宏
+if(NOT GODOT_DEPRECATED)
+    target_compile_definitions(godot PRIVATE DISABLE_DEPRECATED)
+endif()
+if(GODOT_NO_EDITOR_SPLASH)
+    target_compile_definitions(godot PRIVATE NO_EDITOR_SPLASH)
+endif()
+if(GODOT_ENGINE_UPDATE_CHECK AND GODOT_TARGET STREQUAL "editor")
+    target_compile_definitions(godot PRIVATE ENGINE_UPDATE_CHECK_ENABLED)
+endif()
+if(GODOT_DISABLE_3D)
+    if(GODOT_TARGET STREQUAL "editor")
+        message(FATAL_ERROR "disable_3d 不能用于 editor 构建")
+    endif()
+    target_compile_definitions(godot PRIVATE _3D_DISABLED)
+endif()
+if(GODOT_DISABLE_ADV_GUI)
+    if(GODOT_TARGET STREQUAL "editor")
+        message(FATAL_ERROR "disable_advanced_gui 不能用于 editor 构建")
+    endif()
+    target_compile_definitions(godot PRIVATE ADVANCED_GUI_DISABLED)
+endif()
+if(GODOT_MINIZIP)
+    target_compile_definitions(godot PRIVATE MINIZIP_ENABLED)
+endif()
+if(GODOT_BROTLI)
+    target_compile_definitions(godot PRIVATE BROTLI_ENABLED)
+endif()
+if(GODOT_VULKAN)
+    target_compile_definitions(godot PRIVATE VULKAN_ENABLED)
+endif()
+if(GODOT_OPENGL3)
+    target_compile_definitions(godot PRIVATE GLES3_ENABLED)
+endif()
+if(GODOT_D3D12)
+    target_compile_definitions(godot PRIVATE D3D12_ENABLED)
+endif()
+if(GODOT_METAL)
+    target_compile_definitions(godot PRIVATE METAL_ENABLED)
+endif()
+if(GODOT_OPENXR)
+    target_compile_definitions(godot PRIVATE OPENXR_ENABLED)
+endif()
+if(GODOT_USE_VOLK)
+    target_compile_definitions(godot PRIVATE USE_VOLK)
+endif()
+if(GODOT_STRICT_CHECKS)
+    target_compile_definitions(godot PRIVATE STRICT_CHECKS)
+endif()
+if(GODOT_PRECISE_MATH_CHECKS)
+    target_compile_definitions(godot PRIVATE PRECISE_MATH_CHECKS)
+endif()
+
+# 异常开关
+if(GODOT_DISABLE_EXCEPTIONS)
+    if(MSVC)
+        target_compile_definitions(godot PRIVATE _HAS_EXCEPTIONS=0)
+        # 注意：MSVC 完全禁用异常需谨慎；此处遵循原项目策略
+    else()
+        target_compile_options(godot PRIVATE -fno-exceptions)
+    endif()
+else()
+    if(MSVC)
+        target_compile_options(godot PRIVATE /EHsc)
+    endif()
+endif()
+
+# 警告等级
+if(MSVC)
+    # 关闭部分噪音警告可在此添加 /wdXXXX
+    if(GODOT_WARNINGS STREQUAL "extra")
+        target_compile_options(godot PRIVATE /W4)
+    elseif(GODOT_WARNINGS STREQUAL "all")
+        target_compile_options(godot PRIVATE /W3 /w34458) # 接近 SCons 的行为
+    elseif(GODOT_WARNINGS STREQUAL "moderate")
+        target_compile_options(godot PRIVATE /W2)
+    else()
+        target_compile_options(godot PRIVATE /w /wd4267)
+    endif()
+    if(GODOT_WERROR)
+        target_compile_options(godot PRIVATE /WX)
+        target_link_options(godot PRIVATE /WX)
+    endif()
+else()
+    set(_W_ALL "-Wall")
+    if(GODOT_WARNINGS STREQUAL "extra")
+        target_compile_options(godot PRIVATE ${_W_ALL} -Wextra -Wwrite-strings -Wno-unused-parameter)
+        target_compile_options(godot PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wctor-dtor-privacy -Wnon-virtual-dtor>)
+    elseif(GODOT_WARNINGS STREQUAL "all")
+        target_compile_options(godot PRIVATE ${_W_ALL})
+    elseif(GODOT_WARNINGS STREQUAL "moderate")
+        target_compile_options(godot PRIVATE ${_W_ALL} -Wno-unused)
+    else()
+        target_compile_options(godot PRIVATE -w)
+    endif()
+    if(GODOT_WERROR)
+        target_compile_options(godot PRIVATE -Werror)
+    endif()
+endif()
+
+# Debug 符号与优化等级映射（与 SCons 行为接近）
+# - 若 GODOT_OPTIMIZE=custom 则不干预优化标志，交给用户自定义
+# - 其余按约定追加到编译与链接选项
+if(NOT GODOT_OPTIMIZE STREQUAL "custom")
+    if(MSVC)
+        if(GODOT_DEBUG_SYMBOLS)
+            target_compile_options(godot PRIVATE /Zi /FS)
+            target_link_options(godot PRIVATE /DEBUG:FULL)
+        else()
+            target_link_options(godot PRIVATE /DEBUG:NONE)
+        endif()
+
+        if(GODOT_OPTIMIZE MATCHES "^speed")
+            target_compile_options(godot PRIVATE /O2)
+            target_link_options(godot PRIVATE /OPT:REF)
+            if(GODOT_OPTIMIZE STREQUAL "speed_trace")
+                target_link_options(godot PRIVATE /OPT:NOICF)
+            endif()
+        elseif(GODOT_OPTIMIZE STREQUAL "size")
+            target_compile_options(godot PRIVATE /O1)
+            target_link_options(godot PRIVATE /OPT:REF)
+        elseif(GODOT_OPTIMIZE STREQUAL "debug" OR GODOT_OPTIMIZE STREQUAL "none")
+            target_compile_options(godot PRIVATE /Od)
+        endif()
+    else()
+        if(GODOT_DEBUG_SYMBOLS)
+            # 尽量使用可读的 dwarf 等调试信息
+            target_compile_options(godot PRIVATE -gdwarf-4)
+            if(GODOT_DEV_BUILD)
+                target_compile_options(godot PRIVATE -g3)
+            else()
+                target_compile_options(godot PRIVATE -g2)
+            endif()
+        else()
+            # Release 时剥离符号（Apple ld 不喜欢 -s，使用替代参数）
+            if(APPLE)
+                target_link_options(godot PRIVATE -Wl,-S -Wl,-x -Wl,-dead_strip)
+            else()
+                target_link_options(godot PRIVATE -s)
+            endif()
+        endif()
+
+        if(GODOT_OPTIMIZE STREQUAL "speed")
+            target_compile_options(godot PRIVATE -O3)
+            target_link_options(godot PRIVATE -O3)
+        elseif(GODOT_OPTIMIZE STREQUAL "speed_trace")
+            target_compile_options(godot PRIVATE -O2)
+            target_link_options(godot PRIVATE -O2)
+        elseif(GODOT_OPTIMIZE STREQUAL "size")
+            target_compile_options(godot PRIVATE -Os)
+            target_link_options(godot PRIVATE -Os)
+        elseif(GODOT_OPTIMIZE STREQUAL "debug")
+            target_compile_options(godot PRIVATE -Og)
+            target_link_options(godot PRIVATE -Og)
+        elseif(GODOT_OPTIMIZE STREQUAL "none")
+            target_compile_options(godot PRIVATE -O0)
+            target_link_options(godot PRIVATE -O0)
+        endif()
+    endif()
+
+    # GODOT_OPTIMIZE==auto 时，根据目标推导
+    if(GODOT_OPTIMIZE STREQUAL "auto")
+        if(GODOT_DEV_BUILD)
+            # 开发构建：偏向无优化、更多调试信息
+            if(MSVC)
+                target_compile_options(godot PRIVATE /Od)
+            else()
+                target_compile_options(godot PRIVATE -O0 -g3)
+            endif()
+        elseif(GODOT_TARGET STREQUAL "editor" OR GODOT_TARGET STREQUAL "template_debug")
+            # 调试：友好追踪
+            if(MSVC)
+                target_compile_options(godot PRIVATE /O2)
+            else()
+                target_compile_options(godot PRIVATE -O2)
+            endif()
+        else()
+            # 发布：速度优先
+            if(MSVC)
+                target_compile_options(godot PRIVATE /O2)
+            else()
+                target_compile_options(godot PRIVATE -O3)
+            endif()
+        endif()
+    endif()
+endif()
+
+# 生产模式：提供一些默认值
+if(GODOT_PRODUCTION)
+    # 例如生产默认使用 LTO=auto、关闭 debug 符号等
+    if(GODOT_LTO STREQUAL "none")
+        set(GODOT_LTO "auto" CACHE STRING "" FORCE)
+    endif()
+    if(GODOT_DEBUG_SYMBOLS)
+        set(GODOT_DEBUG_SYMBOLS OFF CACHE BOOL "" FORCE)
+    endif()
+endif()
+
+# LTO/IPO
+# - auto/full/thin 在 CMake 里统一映射为 IPO 开启（具体模式因编译器而异）
+if(NOT GODOT_LTO STREQUAL "none")
+    message(STATUS "Using LTO: ${GODOT_LTO}")
+    include(CheckIPOSupported)
+    check_ipo_supported(RESULT _ipo_ok OUTPUT _ipo_msg)
+    if(_ipo_ok)
+        set_property(TARGET godot PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+    else()
+        message(WARNING "IPO/LTO 不受当前工具链支持: ${_ipo_msg}")
+    endif()
+endif()
+
+# 产物命名后缀，与 SCons 命名风格相近：
+# .<platform>.<target>[.dev][.double].<arch>[.nothreads]
+set(_name_suffix ".${GODOT_PLATFORM}.${GODOT_TARGET}")
+if(GODOT_DEV_BUILD)
+    string(APPEND _name_suffix ".dev")
+endif()
+if(GODOT_PRECISION STREQUAL "double")
+    string(APPEND _name_suffix ".double")
+endif()
+if(NOT GODOT_ARCH STREQUAL "auto")
+    string(APPEND _name_suffix ".${GODOT_ARCH}")
+else()
+    # 从 CMAKE_SYSTEM_PROCESSOR 推断一个可读字符串（可按需扩展）
+    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" _proc)
+    if(_proc)
+        string(APPEND _name_suffix ".${_proc}")
+    else()
+        string(APPEND _name_suffix ".arch")
+    endif()
+endif()
+if(NOT GODOT_THREADS)
+    string(APPEND _name_suffix ".nothreads")
+endif()
+
+# 最终可执行名（可以在此加入版本串等）
+set_target_properties(godot PROPERTIES OUTPUT_NAME "godot${_name_suffix}")
+
+# 头文件默认包含工程根（对应 SCons 的 CPPPATH=['#']）
+target_include_directories(godot PRIVATE "${PROJECT_SOURCE_DIR}")
+
+# 子目录组织（尽量匹配 SCons 的 SConscript 顺序）
+# 注意：这些子目录需各自提供 CMakeLists.txt，将源文件追加到目标 `godot`
+# 例如：target_sources(godot PRIVATE xxx.cpp)
+add_subdirectory(core)
+add_subdirectory(servers)
+add_subdirectory(scene)
+if(GODOT_TARGET STREQUAL "editor")
+    add_subdirectory(editor)
+endif()
+add_subdirectory(drivers)
+add_subdirectory(platform)
+add_subdirectory(modules)
+if(GODOT_TESTS)
+    add_subdirectory(tests)
+endif()
+add_subdirectory(main)
+
+# 平台专用子目录（需存在对应 CMakeLists.txt）
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/platform/${GODOT_PLATFORM}/CMakeLists.txt")
+    add_subdirectory("platform/${GODOT_PLATFORM}")
+else()
+    message(WARNING "未找到平台子目录 CMakeLists.txt：platform/${GODOT_PLATFORM}/CMakeLists.txt")
+endif()
+
+# 到此为止，已完成主要配置与目录挂接。
+# 后续可逐步增强：
+# - 将 detect.py 的平台探测/配置迁移为 CMake 的 FindXXX.cmake 与工具链文件
+# - 增加 shader header 生成（GLSL builders）为自定义命令
+# - 动态模块探测与依赖检查
+# - 生成 VS/IDE 提示文件等质量提升工具
