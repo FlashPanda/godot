@@ -204,23 +204,47 @@ private:
 	struct GeometryInstanceSurfaceDataCache;
 	struct RenderElementInfo;
 
+	/*
+		RenderListParameters 其实就是渲染批次的上下文：
+		* 它告诉 GPU 要画什么（elements + element_info + count）；
+		* 在 什么通道/状态下画（pass_mode、cull、GI、阴影等）；
+		* 如何画（wireframe、LOD、shader specialization）；
+		* 输出到哪里（framebuffer_format、uniform set）。
+	*/
 	struct RenderListParameters {
+		// 指向一组几何实例的 surface 数据缓存，代表要渲染的具体 mesh surface。
 		GeometryInstanceSurfaceDataCache **elements = nullptr;
+		// 描述每个元素的附加信息（例如材质、shader 索引、排序 key 等）。
 		RenderElementInfo *element_info = nullptr;
+		// 要绘制的元素数量。
 		int element_count = 0;
+		// 是否反转面剔除（例如镜像、反射渲染时需要翻转正面/背面剔除）。
 		bool reverse_cull = false;
+		// 渲染通道模式：颜色、深度、阴影、反射探针等。决定 shader 和管线如何选择。
 		PassMode pass_mode = PASS_MODE_COLOR;
+		// 颜色 pass 的标志位，用来开启/关闭某些渲染特性（例如写入颜色、透明、MSAA 等）。
 		uint32_t color_pass_flags = 0;
+		// 是否禁用全局光照（GI），比如某些物体不参与光照烘焙/间接光。
 		bool no_gi = false;
+		// 渲染时的视图数量（VR/多摄像机渲染会用到）。
 		uint32_t view_count = 1;
+		// 渲染 pass 的 uniform set（绑定到 GPU pipeline，包含摄像机矩阵、灯光 buffer 等）。
 		RID render_pass_uniform_set;
+		// 是否强制以线框模式渲染。主要用于调试或某些可视化 pass。
 		bool force_wireframe = false;
+		// UV 偏移，通常用于动态纹理动画、贴花、图层滚动效果等。
 		Vector2 uv_offset;
+		// LOD 距离缩放系数，控制几何实例在不同距离时的 LOD 选择。
 		float lod_distance_multiplier = 0.0;
+		// 基于屏幕覆盖率的 mesh LOD 阈值，决定是否切换低模。
 		float screen_mesh_lod_threshold = 0.0;
+		// 使用的 framebuffer 格式 ID，确保渲染输出与目标缓冲格式匹配。
 		RD::FramebufferFormatID framebuffer_format = 0;
+		// 元素在整个渲染队列里的偏移量，用于分批/并行渲染。
 		uint32_t element_offset = 0;
+		// 是否启用方向光的软阴影采样。和 shader specialization 搭配。
 		bool use_directional_soft_shadow = false;
+		// Shader 专用化配置，决定 shader 是否编译/使用某些功能分支（例如阴影、环境贴图、GI）
 		SceneShaderForwardClustered::ShaderSpecialization base_specialization = {};
 
 		RenderListParameters(GeometryInstanceSurfaceDataCache **p_elements, RenderElementInfo *p_element_info, int p_element_count, bool p_reverse_cull, PassMode p_pass_mode, uint32_t p_color_pass_flags, bool p_no_gi, bool p_use_directional_soft_shadows, RID p_render_pass_uniform_set, bool p_force_wireframe = false, const Vector2 &p_uv_offset = Vector2(), float p_lod_distance_multiplier = 0.0, float p_screen_mesh_lod_threshold = 0.0, uint32_t p_view_count = 1, uint32_t p_element_offset = 0, SceneShaderForwardClustered::ShaderSpecialization p_base_specialization = {}) {
