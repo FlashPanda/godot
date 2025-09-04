@@ -2307,29 +2307,56 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// 通道模式
 			// 标志
 			// 统一变量集等
-			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, opaque_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
+			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(),
+				render_list[RENDER_LIST_OPAQUE].element_info.ptr(),
+				render_list[RENDER_LIST_OPAQUE].elements.size(),
+				reverse_cull,
+				PASS_MODE_COLOR,
+				opaque_color_pass_flags,
+				rb_data.is_null(),
+				p_render_data->directional_light_soft_shadows,
+				rp_uniform_set,
+				get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_WIREFRAME,
+				Vector2(),
+				p_render_data->scene_data->lod_distance_multiplier,
+				p_render_data->scene_data->screen_mesh_lod_threshold,
+				p_render_data->scene_data->view_count,
+				0,
+				base_specialization);
 			// 执行不透明物体渲染，同时根据条件选择清除颜色和深度缓冲区的方式
-			_render_list_with_draw_list(&render_list_params, opaque_framebuffer, RD::DrawFlags(load_color ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_COLOR_ALL) | (depth_pre_pass ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_DEPTH), c, 0.0f);
+			_render_list_with_draw_list(&render_list_params,
+				opaque_framebuffer,
+				RD::DrawFlags(load_color ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_COLOR_ALL) | (depth_pre_pass ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_DEPTH),
+				c,
+				0.0f);
 
-			// Test
-			// 输出这个数据信息
-			//static int count = 0;
-			//count++;
-			//if (count == 120) {
-			//	RenderingDevice* rd = RenderingServer::get_singleton()->get_rendering_device();
-			//	PackedByteArray raw_data = rd->texture_get_data(opaque_framebuffer, 0);
-			//	// raw_data里数据是空，说明，至少不是现在可以输出的。
-			//	Vector2i target_size = p_render_data->render_buffers->get_target_size();
-			//	int width = target_size.x;
-			//	int height = target_size.y;
-			//	// 创建 Image 并填充数据
-			//	Image img;
-			//	img.create_from_data(width, height, false, Image::FORMAT_RGBA8, raw_data);
-			//	img.flip_y(); // 因为 GPU 通常是左下原点，需要上下翻转
+			// 绘制自定义pass
+			RenderListParameters custom_pass_params(
+				render_list[RENDER_LIST_OPAQUE].elements.ptr(),
+				render_list[RENDER_LIST_OPAQUE].element_info.ptr(),
+				render_list[RENDER_LIST_OPAQUE].elements.size(),
+				reverse_cull,
+				PASS_MODE_COLOR,
+				opaque_color_pass_flags,
+				rb_data.is_null(),
+				p_render_data->directional_light_soft_shadows,
+				rp_uniform_set,
+				get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_WIREFRAME,
+				Vector2(),
+				p_render_data->scene_data->lod_distance_multiplier,
+				p_render_data->scene_data->screen_mesh_lod_threshold,
+				p_render_data->scene_data->view_count,
+				0,
+				base_specialization);
 
-			//	// 保存为 PNG 到用户数据目录
-			//	img.save_png("user://render_capture.png");
-			//}
+			// 3. 执行绘制
+			_render_list_with_draw_list(
+				&custom_pass_params,
+				color_framebuffer,
+				RD::DrawFlags(load_color ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_COLOR_ALL) | (depth_pre_pass ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_DEPTH),
+				c,
+				0.f
+			);
 		}
 
 		RD::get_singleton()->draw_command_end_label();
