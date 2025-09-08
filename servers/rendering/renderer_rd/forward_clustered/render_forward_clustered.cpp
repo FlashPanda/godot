@@ -174,6 +174,7 @@ RID RenderForwardClustered::RenderBufferDataForwardClustered::get_color_only_fb(
 	}
 }
 
+// 获取color pass对应的帧缓冲资源id
 RID RenderForwardClustered::RenderBufferDataForwardClustered::get_color_pass_fb(uint32_t p_color_pass_flags) {
 	ERR_FAIL_NULL_V(render_buffers, RID());
 	bool use_msaa = render_buffers->get_msaa_3d() != RS::VIEWPORT_MSAA_DISABLED;
@@ -301,34 +302,49 @@ void RenderForwardClustered::update() {
 
 /// RENDERING ///
 
+// 模板函数：根据渲染通道（p_pass_mode)和颜色通道标记(p_color_pass_flags)绘制一个元素区间
 template <RenderForwardClustered::PassMode p_pass_mode, uint32_t p_color_pass_flags>
-void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
+void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p_draw_list,
+	RenderingDevice::FramebufferFormatID p_framebuffer_Format,
+	RenderListParameters *p_params,
+	uint32_t p_from_element,
+	uint32_t p_to_element)
+{
+	// 取各类全局/单例式存储（网格与粒子）
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
+	// 本地缓存句柄（避免频繁拷贝/查询）
 	RD::DrawListID draw_list = p_draw_list;
 	RD::FramebufferFormatID framebuffer_format = p_framebuffer_Format;
 
 	//global scope bindings
+	// 绑定本次draw list的全局uniform集（场景、渲染通道、变换矩阵）
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, render_base_uniform_set, SCENE_UNIFORM_SET);
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, p_params->render_pass_uniform_set, RENDER_PASS_UNIFORM_SET);
 	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, scene_shader.default_vec4_xform_uniform_set, TRANSFORMS_UNIFORM_SET);
 
+	// 上一个材质的uniform集，用于减少绑定切换
 	RID prev_material_uniform_set;
 
+	// 上一次绑定的顶点/索引数组，与变换uniform集（做状态缓存）
 	RID prev_vertex_array_rd;
 	RID prev_index_array_rd;
 	RID prev_xforms_uniform_set;
 
+	// 当前与上一次使用的着色器以及管线key/hash
 	SceneShaderForwardClustered::ShaderData *shader = nullptr;
 	SceneShaderForwardClustered::ShaderData *prev_shader = nullptr;
 	SceneShaderForwardClustered::ShaderData::PipelineKey pipeline_key;
 	uint32_t pipeline_hash = 0;
 	uint32_t prev_pipeline_hash = 0;
 
+	// 是否是阴影相关pass（阴影或者双抛光阴影）
 	bool shadow_pass = (p_pass_mode == PASS_MODE_SHADOW) || (p_pass_mode == PASS_MODE_SHADOW_DP);
 
+	// 给着色器的小块常量参数
 	SceneState::PushConstant push_constant;
 
+	// 深度材质pass：把uv偏移编码为half-float塞进push_constant，否则偏移就是0
 	if constexpr (p_pass_mode == PASS_MODE_DEPTH_MATERIAL) {
 		push_constant.uv_offset = Math::make_half_float(p_params->uv_offset.y) << 16;
 		push_constant.uv_offset |= Math::make_half_float(p_params->uv_offset.x);
@@ -336,27 +352,35 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 		push_constant.uv_offset = 0;
 	}
 
+	// 如果某些 shader 使用 TIME，需要在结尾请求重绘（保证时间驱动效果更新）
 	bool should_request_redraw = false;
 
+	// 需要绘制的渲染元素遍历（from - to）
 	for (uint32_t i = p_from_element; i < p_to_element; i++) {
+		// 获取面缓存，以及该元素的辅助信息，如lod、是否使用光照贴图、重复次数等
 		const GeometryInstanceSurfaceDataCache *surf = p_params->elements[i];
 		const RenderElementInfo &element_info = p_params->element_info[i];
 
+		// 颜色 pass：若该表面设置了“仅在某些颜色 pass 下渲染”的掩码，但当前 pass 不满足，则跳过
 		if (p_pass_mode == PASS_MODE_COLOR && surf->color_pass_inclusion_mask && (p_color_pass_flags & surf->color_pass_inclusion_mask) == 0) {
 			// Some surfaces can be repeated in multiple render lists. We exclude them from being rendered on the color pass based on the
 			// features supported by the pass compared to the exclusion mask.
 			continue;
 		}
 
+		// 实例数为 0（如被剔除）则跳过
 		if (surf->owner->instance_count == 0) {
 			continue;
 		}
 
+		// 把当前元素的基索引写入push constant，常用于实例数据/间接访问
 		push_constant.base_index = i + p_params->element_offset;
 
+		// 当前材质的uniform集和网格面后端句柄
 		RID material_uniform_set;
 		void *mesh_surface;
 
+		// 阴影或纯深度 pass：走阴影版本的材质、着色器与 surface
 		if (shadow_pass || p_pass_mode == PASS_MODE_DEPTH) { //regular depth pass can use these too
 			material_uniform_set = surf->material_uniform_set_shadow;
 			shader = surf->shader_shadow;
@@ -364,6 +388,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 
 		} else {
 #ifdef DEBUG_ENABLED
+			// 调试绘制模式下，用内置的特殊材质/着色器替换
 			if (unlikely(get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_LIGHTING)) {
 				material_uniform_set = scene_shader.default_material_uniform_set;
 				shader = scene_shader.default_material_shader_ptr;
@@ -375,35 +400,43 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				shader = scene_shader.debug_shadow_splits_material_shader_ptr;
 			} else {
 #endif
+				// 正常颜色pas：使用表面自己的材质与着色器，并标记材质被使用（驱动资源生命周期/热更新）
 				material_uniform_set = surf->material_uniform_set;
 				shader = surf->shader;
 				surf->material->set_as_used();
 #ifdef DEBUG_ENABLED
 			}
 #endif
+			// 表面用普通的surface
 			mesh_surface = surf->surface;
 		}
 
+		// 没有可绘制的surface（可能资源未就绪或者被剔除）则跳过
 		if (!mesh_surface) {
 			continue;
 		}
 
 		//request a redraw if one of the shaders uses TIME
+		// 如果着色器需要用到时间，那么标记需要重绘（uv动画啥的）
 		if (shader->uses_time) {
 			should_request_redraw = true;
 		}
 
 		// Determine the cull variant.
+		// 计算剔除变体（正向、反向、双面），不同pass有特例。
 		SceneShaderForwardClustered::ShaderData::CullVariant cull_variant = SceneShaderForwardClustered::ShaderData::CULL_VARIANT_MAX;
 		if constexpr (p_pass_mode == PASS_MODE_DEPTH_MATERIAL || p_pass_mode == PASS_MODE_SDF) {
+			// 深度和SDF固定用双面
 			cull_variant = SceneShaderForwardClustered::ShaderData::CULL_VARIANT_DOUBLE_SIDED;
 		} else {
 			if constexpr (p_pass_mode == PASS_MODE_SHADOW || p_pass_mode == PASS_MODE_SHADOW_DP) {
+				// 阴影 pass：如果几何声明“阴影用双面”，则使用双面
 				if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_DOUBLE_SIDED_SHADOWS) {
 					cull_variant = SceneShaderForwardClustered::ShaderData::CULL_VARIANT_DOUBLE_SIDED;
 				}
 			}
 
+			// 否则根据镜像（例如反转法线/反射）与是否反转剔除来决定正/反面
 			if (cull_variant == SceneShaderForwardClustered::ShaderData::CULL_VARIANT_MAX) {
 				bool mirror = surf->owner->mirror;
 				if (p_params->reverse_cull) {
@@ -414,88 +447,111 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 			}
 		}
 
+		// 基本几何拓补类型（点/线/三角形）
 		pipeline_key.primitive_type = surf->primitive;
 
+		// 变换矩阵的uniform集（实例/骨骼等）
 		RID xforms_uniform_set = surf->owner->transforms_uniform_set;
 
+		// 从渲染参数拷贝基础专用化参数（是否多网格，是否2D格式，是否含颜色/自定义数据）
 		SceneShaderForwardClustered::ShaderSpecialization pipeline_specialization = p_params->base_specialization;
 		pipeline_specialization.multimesh = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH);
 		pipeline_specialization.multimesh_format_2d = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_FORMAT_2D);
 		pipeline_specialization.multimesh_has_color = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_HAS_COLOR);
 		pipeline_specialization.multimesh_has_custom_data = bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_HAS_CUSTOM_DATA);
 
+		// 颜色 pass 才有的额外专用化（软阴影/投影纹理/方向光软阴影）
 		if constexpr (p_pass_mode == PASS_MODE_COLOR) {
 			pipeline_specialization.use_light_soft_shadows = element_info.uses_softshadow;
 			pipeline_specialization.use_light_projector = element_info.uses_projector;
 			pipeline_specialization.use_directional_soft_shadows = p_params->use_directional_soft_shadow;
 		}
 
+		// 颜色pass的标记位：透明、多视图、运动向量、分离高光、光照贴图等
 		pipeline_key.color_pass_flags = 0;
 
+		// 根据渲染通道类型，选择管线版本并设置颜色标记。
 		switch (p_pass_mode) {
 			case PASS_MODE_COLOR: {
+				// 使用光照贴图或前向GI的开关
 				if (element_info.uses_lightmap) {
 					pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_LIGHTMAP;
 				} else {
 					pipeline_specialization.use_forward_gi = element_info.uses_forward_gi;
 				}
 
+				// 是否独立高光
 				if constexpr ((p_color_pass_flags & COLOR_PASS_FLAG_SEPARATE_SPECULAR) != 0) {
 					pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_SEPARATE_SPECULAR;
 				}
 
+				// 是否运动向量
 				if constexpr ((p_color_pass_flags & COLOR_PASS_FLAG_MOTION_VECTORS) != 0) {
 					pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_MOTION_VECTORS;
 				}
 
+				// 是否透明
 				if constexpr ((p_color_pass_flags & COLOR_PASS_FLAG_TRANSPARENT) != 0) {
 					pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_TRANSPARENT;
 				}
 
+				// 是否多视图
 				if constexpr ((p_color_pass_flags & COLOR_PASS_FLAG_MULTIVIEW) != 0) {
 					pipeline_key.color_pass_flags |= SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_MULTIVIEW;
 				}
 
+				// 指定颜色pass的管线版本。
 				pipeline_key.version = SceneShaderForwardClustered::PIPELINE_VERSION_COLOR_PASS;
 			} break;
 			case PASS_MODE_SHADOW:
 			case PASS_MODE_DEPTH: {
+				// 深度pass：根据视图数量决定是否多视图版本
 				pipeline_key.version = p_params->view_count > 1 ? SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_MULTIVIEW : SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS;
 			} break;
 			case PASS_MODE_SHADOW_DP: {
+				// 双抛光阴影：不支持多视图
 				ERR_FAIL_COND_MSG(p_params->view_count > 1, "Multiview not supported for shadow DP pass");
 				pipeline_key.version = SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_DP;
 			} break;
 			case PASS_MODE_DEPTH_NORMAL_ROUGHNESS: {
+				// 深度+法线+粗糙度（GBuffer-like），也有多视图版本
 				pipeline_key.version = p_params->view_count > 1 ? SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS_MULTIVIEW : SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS;
 			} break;
 			case PASS_MODE_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI: {
+				// 深度、发现、粗糙度、体素GI版本
 				pipeline_key.version = p_params->view_count > 1 ? SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS_AND_VOXEL_GI_MULTIVIEW : SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_NORMAL_AND_ROUGHNESS_AND_VOXEL_GI;
 			} break;
 			case PASS_MODE_DEPTH_MATERIAL: {
+				// 材质属性+深度 pass， 不支持多视图
 				ERR_FAIL_COND_MSG(p_params->view_count > 1, "Multiview not supported for material pass");
 				pipeline_key.version = SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_MATERIAL;
 			} break;
 			case PASS_MODE_SDF: {
 				// Note, SDF is prepared in world space, this shouldn't be a multiview buffer even when stereoscopic rendering is used.
+				// SDF 准备是世界空间的，不支持多视图
 				ERR_FAIL_COND_MSG(p_params->view_count > 1, "Multiview not supported for SDF pass");
 				pipeline_key.version = SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_SDF;
 			} break;
 		}
 
+		// 继续填充管线key：FBO格式，是否强制用线框，是否启用uber着色器（变体兜底）
 		pipeline_key.framebuffer_format_id = framebuffer_format;
 		pipeline_key.wireframe = p_params->force_wireframe;
 		pipeline_key.ubershader = 0;
 
+		// 从剔除变体求最终的GPU剔除模式。
 		const RD::PolygonCullMode cull_mode = shader->get_cull_mode_from_cull_variant(cull_variant);
+		// 顶点数组的ID、索引数组的ID、管线的ID
 		RID vertex_array_rd;
 		RID index_array_rd;
 		RID pipeline_rd;
+		// uber着色器迭代次数是2，某些pass只能是1次（不走专用化）
 		uint32_t ubershader_iterations = 2;
 		if constexpr (p_pass_mode == PASS_MODE_DEPTH_MATERIAL || p_pass_mode == PASS_MODE_SDF) {
 			ubershader_iterations = 1;
 		}
 
+		// 标记是否拿到了有效管线（可能先尝试专用化，不行再退回uber着色器）
 		bool pipeline_valid = false;
 		while (pipeline_key.ubershader < ubershader_iterations) {
 			// Skeleton and blend shape.
@@ -615,28 +671,59 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
 	//use template for faster performance (pass mode comparisons are inlined)
 
 	switch (p_params->pass_mode) {
-#define VALID_FLAG_COMBINATION(f)                                                                                             \
-	case f: {                                                                                                                 \
-		_render_list_template<PASS_MODE_COLOR, f>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element); \
-	} break;
-
 		case PASS_MODE_COLOR: {
 			switch (p_params->color_pass_flags) {
-				VALID_FLAG_COMBINATION(0);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MOTION_VECTORS);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_SEPARATE_SPECULAR);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MULTIVIEW);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MOTION_VECTORS);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_MULTIVIEW);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_MOTION_VECTORS);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS);
-				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS);
-				default: {
-					ERR_FAIL_MSG("Invalid color pass flag combination " + itos(p_params->color_pass_flags));
-				}
+			case 0: {
+				_render_list_template<PASS_MODE_COLOR, 0>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			} break;
+
+			case COLOR_PASS_FLAG_TRANSPARENT: {
+				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_TRANSPARENT>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			} break;
+
+			case COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW: {
+				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			} break;
+
+			case COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MOTION_VECTORS: {
+				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MOTION_VECTORS>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			} break;
+
+			case COLOR_PASS_FLAG_SEPARATE_SPECULAR: {
+				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_SEPARATE_SPECULAR>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			} break;
+
+			case COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MULTIVIEW: {
+				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MULTIVIEW>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			} break;
+
+			case COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MOTION_VECTORS: {
+				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MOTION_VECTORS>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			} break;
+
+			case COLOR_PASS_FLAG_MULTIVIEW: {
+				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_MULTIVIEW>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			} break;
+
+			case COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS: {
+				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			} break;
+
+			case COLOR_PASS_FLAG_MOTION_VECTORS: {
+				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_MOTION_VECTORS>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			} break;
+
+			case COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS: {
+				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			} break;
+
+			case COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS: {
+				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+			} break;
+
+			default: {
+				ERR_FAIL_MSG("Invalid color pass flag combination " + itos(p_params->color_pass_flags));
+			}
 			}
 
 		} break;
