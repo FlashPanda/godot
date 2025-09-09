@@ -303,6 +303,7 @@ void RenderForwardClustered::update() {
 /// RENDERING ///
 
 // 模板函数：根据渲染通道（p_pass_mode)和颜色通道标记(p_color_pass_flags)绘制一个元素区间
+// 本质上是一个收集参数，确定不要的模式之类的功能，真正的调用是一个函数实现的。
 template <RenderForwardClustered::PassMode p_pass_mode, uint32_t p_color_pass_flags>
 void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p_draw_list,
 	RenderingDevice::FramebufferFormatID p_framebuffer_Format,
@@ -554,56 +555,74 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 		// 标记是否拿到了有效管线（可能先尝试专用化，不行再退回uber着色器）
 		bool pipeline_valid = false;
 		while (pipeline_key.ubershader < ubershader_iterations) {
+			// 根据输入需求（骨骼、形变、运动向量等），确定顶点格式和需要的顶点属性掩码
 			// Skeleton and blend shape.
 			RD::VertexFormatID vertex_format = -1;
+			// 是否有运动向量
 			bool pipeline_motion_vectors = pipeline_key.color_pass_flags & SceneShaderForwardClustered::PIPELINE_COLOR_PASS_FLAG_MOTION_VECTORS;
 			uint64_t input_mask = shader->get_vertex_input_mask(pipeline_key.version, pipeline_key.color_pass_flags, pipeline_key.ubershader);
+			// 如果是网格实例（带骨骼/变形），从实例获取VAO；否则从表面获取
 			if (surf->owner->mesh_instance.is_valid()) {
 				mesh_storage->mesh_instance_surface_get_vertex_arrays_and_format(surf->owner->mesh_instance, surf->surface_index, input_mask, pipeline_motion_vectors, vertex_array_rd, vertex_format);
 			} else {
 				mesh_storage->mesh_surface_get_vertex_arrays_and_format(mesh_surface, input_mask, pipeline_motion_vectors, vertex_array_rd, vertex_format);
 			}
 
+			// 写入顶点格式ID到管线key
 			pipeline_key.vertex_format_id = vertex_format;
 
+			// ubershader=1（回退路径）：禁用专用化，强制双面（通用兼容）
 			if (pipeline_key.ubershader) {
 				pipeline_key.shader_specialization = {};
-				pipeline_key.cull_mode = RD::POLYGON_CULL_DISABLED;
+				pipeline_key.cull_mode = RD::POLYGON_CULL_DISABLED;		// 为什么需要强制双面，为了能看到东西吗？
 			} else {
+				// 正常路径：使用专用化参数与期望的剔除模式
 				pipeline_key.shader_specialization = pipeline_specialization;
 				pipeline_key.cull_mode = cull_mode;
 			}
 
+			// 计算管线哈希，用于查找/复用/缓存
 			pipeline_hash = pipeline_key.hash();
 
+			// 如果着色器或管线有变化,需要向管线缓存索取/编译，否则表示沿用上一个已绑定的管线。
 			if (shader != prev_shader || pipeline_hash != prev_pipeline_hash) {
+				// 最后一次，或者回退时需要同步可用
 				bool wait_for_compilation = (ubershader_iterations == 1) || pipeline_key.ubershader;
+				// 指定来源（绘制时编译/专用化预编译）
 				RS::PipelineSource pipeline_source = wait_for_compilation ? RS::PIPELINE_SOURCE_DRAW : RS::PIPELINE_SOURCE_SPECIALIZATION;
+				// 从着色器的管线哈希表获取，可能触发编译
 				pipeline_rd = shader->pipeline_hash_map.get_pipeline(pipeline_key, pipeline_hash, wait_for_compilation, pipeline_source);
 
 				if (pipeline_rd.is_valid()) {
+					// 成功获取管线
 					pipeline_valid = true;
 					prev_shader = shader;
 					prev_pipeline_hash = pipeline_hash;
 					break;
 				} else {
+					// 失败则尝试下一轮ubershader回退
 					pipeline_key.ubershader++;
 				}
 			} else {
 				// The same pipeline is bound already.
+				// 管线一致，无需重新绑定。
 				pipeline_valid = true;
 				break;
 			}
 		}
 
+		// 如果已经拿到有效管线，则进入真正的绑定与绘制
 		if (pipeline_valid) {
+			// 根据LOD选择索引缓冲
 			index_array_rd = mesh_storage->mesh_surface_get_index_array(mesh_surface, element_info.lod_index);
 
+			// 如果顶点数组和之前的顶点数组不一致，则重新绑定顶点数组（VAO，VBO）
 			if (prev_vertex_array_rd != vertex_array_rd) {
 				RD::get_singleton()->draw_list_bind_vertex_array(draw_list, vertex_array_rd);
 				prev_vertex_array_rd = vertex_array_rd;
 			}
 
+			// 如果索引数组改变，重新绑定索引数组（IBO）
 			if (prev_index_array_rd != index_array_rd) {
 				if (index_array_rd.is_valid()) {
 					RD::get_singleton()->draw_list_bind_index_array(draw_list, index_array_rd);
@@ -611,15 +630,18 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				prev_index_array_rd = index_array_rd;
 			}
 
+			// 绑定渲染管线（PSO）
 			if (!pipeline_rd.is_null()) {
 				RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, pipeline_rd);
 			}
 
+			// 如果变换uniform集改变了，就绑定。
 			if (xforms_uniform_set.is_valid() && prev_xforms_uniform_set != xforms_uniform_set) {
 				RD::get_singleton()->draw_list_bind_uniform_set(draw_list, xforms_uniform_set, TRANSFORMS_UNIFORM_SET);
 				prev_xforms_uniform_set = xforms_uniform_set;
 			}
 
+			// 如果材质uniform集改变了，就绑定。
 			if (material_uniform_set != prev_material_uniform_set) {
 				// Update uniform set.
 				if (material_uniform_set.is_valid() && RD::get_singleton()->uniform_set_is_valid(material_uniform_set)) { // Material may not have a uniform set.
@@ -629,6 +651,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				prev_material_uniform_set = material_uniform_set;
 			}
 
+			// 设置运动向量用的多实例偏移（粒子/多网格才有），否则置零
 			if (surf->owner->base_flags & INSTANCE_DATA_FLAG_PARTICLES) {
 				particles_storage->particles_get_instance_buffer_motion_vectors_offsets(surf->owner->data->base, push_constant.multimesh_motion_vectors_current_offset, push_constant.multimesh_motion_vectors_previous_offset);
 			} else if (surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH) {
@@ -638,6 +661,8 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				push_constant.multimesh_motion_vectors_previous_offset = 0;
 			}
 
+			// 计算push常量的实际尺寸
+			// 如果启用ubershader回退，需要把专用化与cull_mode一起塞进常量，否则不需要这部分。
 			size_t push_constant_size = 0;
 			if (pipeline_key.ubershader) {
 				push_constant_size = sizeof(SceneState::PushConstant);
@@ -648,20 +673,25 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				push_constant_size = sizeof(SceneState::PushConstant) - sizeof(SceneState::PushConstantUbershader);
 			}
 
+			// 将push常量写入到当前draw list（供着色器读取）
 			RD::get_singleton()->draw_list_set_push_constant(draw_list, &push_constant, push_constant_size);
 
+			// 计算本次draw的实例数。如果owner有多个实例就用它，否则就用element的repeat
 			uint32_t instance_count = surf->owner->instance_count > 1 ? surf->owner->instance_count : element_info.repeat;
 			if (surf->flags & GeometryInstanceSurfaceDataCache::FLAG_USES_PARTICLE_TRAILS) {
 				instance_count /= surf->owner->trail_steps;
 			}
 
+			// 真正发起绘制（索引/非索引，由index_array是否有效决定），支持实例化
 			RD::get_singleton()->draw_list_draw(draw_list, index_array_rd.is_valid(), instance_count);
 		}
 
+		// 如果该元素需要重复（element_info.repeat），则跳过后续同组的重复项
 		i += element_info.repeat - 1; //skip equal elements
 	}
 
 	// Make the actual redraw request
+	// 如果任一 shader 使用 TIME，发出 redraw 请求以驱动下一帧刷新
 	if (should_request_redraw) {
 		RenderingServerDefault::redraw_request();
 	}

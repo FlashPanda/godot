@@ -4478,45 +4478,77 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin_for_screen(DisplayS
 	return int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT;
 }
 
-RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, BitField<DrawFlags> p_draw_flags, const Vector<Color> &p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region, uint32_t p_breadcrumb) {
+
+// 启动一个新的Draw List（一次渲染列表/记录序列），返回一个ID
+// 参数：
+// - p_framebuffer：目标帧缓冲 RID（包含颜色/深度贴图）
+// - p_draw_flags：控制是否清屏/忽略某附件等的标志位（按附件编号位移）
+// - p_clear_color_values：对应各个颜色附件的清除颜色列表
+// - p_clear_depth_value / p_clear_stencil_value：清除深度/模板用的值
+// - p_region：在帧缓冲内使用的自定义矩形区域（视口/剪裁），可以只对这个区域进行操作
+// - p_breadcrumb：面包屑/诊断标记，用于调试跟踪
+RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer,
+	BitField<DrawFlags> p_draw_flags,
+	const Vector<Color> &p_clear_color_values,
+	float p_clear_depth_value,
+	uint32_t p_clear_stencil_value,
+	const Rect2 &p_region,
+	uint32_t p_breadcrumb)
+{
+	// 确保在渲染线程中调用
 	ERR_RENDER_THREAD_GUARD_V(INVALID_ID);
 
+	// 防止嵌套/并发：一次只能有一个活动的 draw_list。
 	ERR_FAIL_COND_V_MSG(draw_list != nullptr, INVALID_ID, "Only one draw list can be active at the same time.");
 
+	// 通过 RID 取帧缓冲对象。
 	Framebuffer *framebuffer = framebuffer_owner.get_or_null(p_framebuffer);
 	ERR_FAIL_NULL_V(framebuffer, INVALID_ID);
 
+	// 视口左上角偏移（默认 0,0）。
 	Point2i viewport_offset;
+	// 缺省使用整个帧缓冲尺寸。
 	Point2i viewport_size = framebuffer->size;
 
+	// 如果提供了自定义区域，且不等于默认或整幅尺寸
 	if (p_region != Rect2() && p_region != Rect2(Vector2(), viewport_size)) { // Check custom region.
-		Rect2i viewport(viewport_offset, viewport_size);
-		Rect2i regioni = p_region;
+		Rect2i viewport(viewport_offset, viewport_size);// 当前允许的可用矩形（整幅）。
+		Rect2i regioni = p_region;// 将浮点 Rect2 转为整型 Rect2i（像素对齐）。
 		if (!((regioni.position.x >= viewport.position.x) && (regioni.position.y >= viewport.position.y) &&
 					((regioni.position.x + regioni.size.x) <= (viewport.position.x + viewport.size.x)) &&
 					((regioni.position.y + regioni.size.y) <= (viewport.position.y + viewport.size.y)))) {
+			// 自定义区域必须完全落在帧缓冲内。
 			ERR_FAIL_V_MSG(INVALID_ID, "When supplying a custom region, it must be contained within the framebuffer rectangle");
 		}
 
-		viewport_offset = regioni.position;
-		viewport_size = regioni.size;
+		viewport_offset = regioni.position;// 使用自定义区域的起点作为视口偏移。
+		viewport_size = regioni.size;// 使用自定义区域的尺寸作为视口大小。
 	}
 
+	// 每个附件（颜色/深度）对应的操作：默认/清除/忽略（thread_local 复用内存，减少分配）。
 	thread_local LocalVector<RDG::AttachmentOperation> operations;
+	// 各附件的清除值（颜色或深度/模板）。
 	thread_local LocalVector<RDD::RenderPassClearValue> clear_values;
+	// 资源跟踪器（用于依赖/屏障/并发写读分析）。
 	thread_local LocalVector<RDG::ResourceTracker *> resource_trackers;
+	// 每个被用到的资源的用途（颜色读写/深度读写）。
 	thread_local LocalVector<RDG::ResourceUsage> resource_usages;
-	bool uses_color = false;
-	bool uses_depth = false;
-	operations.resize(framebuffer->texture_ids.size());
-	clear_values.resize(framebuffer->texture_ids.size());
-	resource_trackers.clear();
-	resource_usages.clear();
+	bool uses_color = false;	// 是否涉及颜色附件（优化/快速路径标志）
+	bool uses_depth = false;	// 是否涉及深度/模板附件
+	operations.resize(framebuffer->texture_ids.size());	// 操作数组刷新
+	clear_values.resize(framebuffer->texture_ids.size());	// 清除值数组刷新
+	resource_trackers.clear();	// 资源跟踪器清空
+	resource_usages.clear();	// 资源用途清空
 
+	// 当前处理的是第几个“颜色附件”，与清屏颜色数组一一对应
 	uint32_t color_index = 0;
+	// 遍历帧缓冲的所有纹理
 	for (int i = 0; i < framebuffer->texture_ids.size(); i++) {
+		// 获取纹理的资源ID
 		RID texture_rid = framebuffer->texture_ids[i];
+		// 获取到实际的纹理对象
 		Texture *texture = texture_owner.get_or_null(texture_rid);
+		// 如果纹理为空，那么这个纹理的操作就设置为默认，清除值为空
 		if (texture == nullptr) {
 			operations[i] = RDG::ATTACHMENT_OPERATION_DEFAULT;
 			clear_values[i] = RDD::RenderPassClearValue();
@@ -4524,70 +4556,112 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, 
 		}
 
 		// Indicate the texture will get modified for the shared texture fallback.
+		// 指明该纹理会被修改，用于“共享纹理回退”路径（例如多设备/后台共享时需要特殊处理/复制）
 		_texture_update_shared_fallback(texture_rid, texture, true);
 
+		// 默认操作和清除值
 		RDG::AttachmentOperation operation = RDG::ATTACHMENT_OPERATION_DEFAULT;
 		RDD::RenderPassClearValue clear_value;
+		// 如果是颜色附件
 		if (texture->usage_flags & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT) {
 			if (p_draw_flags.has_flag(DrawFlags(DRAW_CLEAR_COLOR_0 << color_index))) {
+			// 看标记中是否有清除该颜色附件的标志。
+
+				// 需清但未提供清除色则报错。
 				ERR_FAIL_COND_V_MSG(color_index >= p_clear_color_values.size(), INVALID_ID, vformat("Color texture (%d) was specified to be cleared but no color value was provided.", color_index));
+				// 记录操作为清除
 				operation = RDG::ATTACHMENT_OPERATION_CLEAR;
+				// 设置对应清除颜色
 				clear_value.color = p_clear_color_values[color_index];
 			} else if (p_draw_flags.has_flag(DrawFlags(DRAW_IGNORE_COLOR_0 << color_index))) {
+			// 要求忽略该颜色附件
+
+				// 不作为本次渲染的有效附件（不读不写）。
 				operation = RDG::ATTACHMENT_OPERATION_IGNORE;
 			}
 
+			// 把该纹理的绘制跟踪器登记到本次 draw list。
 			resource_trackers.push_back(texture->draw_tracker);
+			// 标记用途为颜色附件读写（用于依赖/屏障）
 			resource_usages.push_back(RDG::RESOURCE_USAGE_ATTACHMENT_COLOR_READ_WRITE);
-			uses_color = true;
-			color_index++;
-		} else if (texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+			uses_color = true;	// 有颜色附件参与。
+			color_index++;	// 推进颜色附件的索引（注意与附件 i 不一定相同，因为深度不计入 color_index）。
+		}
+		else if (texture->usage_flags & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+		// 这是深度/模板附件
+
+			// 是否需要清除深度或模板
 			if (p_draw_flags.has_flag(DRAW_CLEAR_DEPTH) || p_draw_flags.has_flag(DRAW_CLEAR_STENCIL)) {
+				// 只要有一个就清除深度/模板两个的值
 				operation = RDG::ATTACHMENT_OPERATION_CLEAR;
 				clear_value.depth = p_clear_depth_value;
 				clear_value.stencil = p_clear_stencil_value;
-			} else if (p_draw_flags.has_flag(DRAW_IGNORE_DEPTH) || p_draw_flags.has_flag(DRAW_IGNORE_STENCIL)) {
-				operation = RDG::ATTACHMENT_OPERATION_IGNORE;
+			}
+			// 要求忽略深度或模板
+			else if (p_draw_flags.has_flag(DRAW_IGNORE_DEPTH) || p_draw_flags.has_flag(DRAW_IGNORE_STENCIL)) {
+				operation = RDG::ATTACHMENT_OPERATION_IGNORE;	// 本次渲染不使用它
 			}
 
+			// 等级深度/模板附件的资源跟踪器
 			resource_trackers.push_back(texture->draw_tracker);
+			// 标记用途为深度/模板读写
 			resource_usages.push_back(RDG::RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE);
-			uses_depth = true;
+			uses_depth = true;	// 深度/模板参与
 		}
 
+		// 记录第i个附件的操作和清除值
 		operations[i] = operation;
 		clear_values[i] = clear_value;
 	}
 
+	// 通知渲染图本次draw list的开始，其中包括：
+	//		- 帧缓冲对象
+	//		- 视口位置和大小
+	//		- 每个附件的操作和清除值
+	//		- 是否使用颜色/深度附件（优化标志）
+	//		- 调试面包屑。
 	draw_graph.add_draw_list_begin(framebuffer->framebuffer_cache, Rect2i(viewport_offset, viewport_size), operations, clear_values, uses_color, uses_depth, p_breadcrumb);
+	// 把资源用途/跟踪信息也提交给渲染图（用于依赖分析和插入屏障）。
 	draw_graph.add_draw_list_usages(resource_trackers, resource_usages);
 
 	// Mark textures as bound.
-	draw_list_bound_textures.clear();
+	// 记录本次draw list绑定过的纹理（用于结束时回收/解绑/状态维护）
+	draw_list_bound_textures.clear();	// 先清空记录
 
+	// 遍历帧缓冲的所有附件
 	for (int i = 0; i < framebuffer->texture_ids.size(); i++) {
+		// 取纹理对象
 		Texture *texture = texture_owner.get_or_null(framebuffer->texture_ids[i]);
 		if (texture == nullptr) {
 			continue;
 		}
 
-		texture->bound = true;
-		draw_list_bound_textures.push_back(framebuffer->texture_ids[i]);
+		texture->bound = true;	// 标记为已绑定
+		draw_list_bound_textures.push_back(framebuffer->texture_ids[i]);	// 加入绑定列表
 	}
 
+	// 分配一个drawlist的内存空间，并且将视口信息设置给drawlist
 	_draw_list_allocate(Rect2i(viewport_offset, viewport_size), 0);
 #ifdef DEBUG_ENABLED
+	// Debug：记录下当前帧缓冲的“格式ID”，用于后续一致性校验。
 	draw_list_framebuffer_format = framebuffer->format_id;
 #endif
+	// 当前子通道从0开始
 	draw_list_current_subpass = 0;
 
+	// 通过 format_id 查找帧缓冲格式的关键结构（包含各 subpass 定义）。
 	const FramebufferFormatKey &key = framebuffer_formats[framebuffer->format_id].E->key();
+	// 记录总的 subpass 数量（后续切换管线/子通道时用）。
 	draw_list_subpass_count = key.passes.size();
 
+	// 构造最终的视口矩形
 	Rect2i viewport_rect(viewport_offset, viewport_size);
+	// 将视口信息记录到渲染图（后端真正执行时应用）
 	draw_graph.add_draw_list_set_viewport(viewport_rect);
+	// 同步设置裁剪区域=视口矩形（确保只在该区域内绘制）
 	draw_graph.add_draw_list_set_scissor(viewport_rect);
 
+	// 返回一个编码后的 DrawListID（用类型左移形成句柄）。
 	return int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT;
 }
 
@@ -4856,31 +4930,41 @@ void RenderingDevice::draw_list_set_push_constant(DrawListID p_list, const void 
 }
 
 void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint32_t p_instances, uint32_t p_procedural_vertices) {
+	// 线程保护宏：确保当前是在合法的渲染线程（上下文）中使用
 	ERR_RENDER_THREAD_GUARD();
 
+	// 通过句柄拿到内部的drawlist指针
 	DrawList *dl = _get_draw_list_ptr(p_list);
+	// 判断drawlist指针是否为空
 	ERR_FAIL_NULL(dl);
 #ifdef DEBUG_ENABLED
+	// DEBUG：已提交的 draw list 不允许再修改或绘制。
 	ERR_FAIL_COND_MSG(!dl->validation.active, "Submitted Draw Lists can no longer be modified.");
 #endif
 
 #ifdef DEBUG_ENABLED
+	// // DEBUG：绘制前必须已经绑定管线（PSO）。
 	ERR_FAIL_COND_MSG(!dl->validation.pipeline_active,
 			"No render pipeline was set before attempting to draw.");
+	// DEBUG：若管线需要顶点输入（有顶点格式）就做进一步校验。
 	if (dl->validation.pipeline_vertex_format != INVALID_ID) {
 		// Pipeline uses vertices, validate format.
+		// DEBUG：管线期望顶点数组，但当前未绑定 VAO/VBO。
 		ERR_FAIL_COND_MSG(dl->validation.vertex_format == INVALID_ID,
 				"No vertex array was bound, and render pipeline expects vertices.");
 		// Make sure format is right.
+		// DEBUG：已绑定的顶点格式与创建管线时记录的不一致。
 		ERR_FAIL_COND_MSG(dl->validation.pipeline_vertex_format != dl->validation.vertex_format,
 				"The vertex format used to create the pipeline does not match the vertex format bound.");
 		// Make sure number of instances is valid.
+		// DEBUG：实例数超过当前 VAO 支持的最大实例数。
 		ERR_FAIL_COND_MSG(p_instances > dl->validation.vertex_max_instances_allowed,
 				"Number of instances requested (" + itos(p_instances) + " is larger than the maximum number supported by the bound vertex array (" + itos(dl->validation.vertex_max_instances_allowed) + ").");
 	}
 
 	if (dl->validation.pipeline_push_constant_size > 0) {
 		// Using push constants, check that they were supplied.
+		// DEBUG：管线着色器需要 push constant，但未设置。
 		ERR_FAIL_COND_MSG(!dl->validation.pipeline_push_constant_supplied,
 				"The shader in this pipeline requires a push constant to be set before drawing, but it's not present.");
 	}
@@ -4888,137 +4972,178 @@ void RenderingDevice::draw_list_draw(DrawListID p_list, bool p_use_indices, uint
 #endif
 
 #ifdef DEBUG_ENABLED
+	// 遍历所有descriptor set槽位，检查“管线期望的layout与实际绑定的unform集格式”是否一致。
 	for (uint32_t i = 0; i < dl->state.set_count; i++) {
 		if (dl->state.sets[i].pipeline_expected_format == 0) {
 			// Nothing expected by this pipeline.
+			// 若该 set 槽位对本管线不需要任何绑定，跳过。
 			continue;
 		}
 
 		if (dl->state.sets[i].pipeline_expected_format != dl->state.sets[i].uniform_set_format) {
 			if (dl->state.sets[i].uniform_set_format == 0) {
+				// DEBUG：需要该 set，但从未绑定。
 				ERR_FAIL_MSG("Uniforms were never supplied for set (" + itos(i) + ") at the time of drawing, which are required by the pipeline.");
 			} else if (uniform_set_owner.owns(dl->state.sets[i].uniform_set)) {
+				// DEBUG：当前绑定的 set 与管线着色器声明的 set 格式不一致，打印两边的 layout 便于比对。
 				UniformSet *us = uniform_set_owner.get_or_null(dl->state.sets[i].uniform_set);
 				ERR_FAIL_MSG("Uniforms supplied for set (" + itos(i) + "):\n" + _shader_uniform_debug(us->shader_id, us->shader_set) + "\nare not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n" + _shader_uniform_debug(dl->state.pipeline_shader));
 			} else {
+				// DEBUG：绑定的 set 已被释放或无效且与期望不符。
 				ERR_FAIL_MSG("Uniforms supplied for set (" + itos(i) + ", which was just freed) are not the same format as required by the pipeline shader. Pipeline shader requires the following bindings:\n" + _shader_uniform_debug(dl->state.pipeline_shader));
 			}
 		}
 	}
 #endif
-	thread_local LocalVector<RDD::UniformSetID> valid_descriptor_ids;
-	valid_descriptor_ids.clear();
-	valid_descriptor_ids.resize(dl->state.set_count);
-	uint32_t valid_set_count = 0;
-	uint32_t first_set_index = 0;
-	uint32_t last_set_index = 0;
-	bool found_first_set = false;
 
+	// 下面开始坐descirptor set批绑定的准备（收集连续的set，一次性绑定以减少驱动调用）
+	thread_local LocalVector<RDD::UniformSetID> valid_descriptor_ids;	// 线程本地，避免重复分配
+	valid_descriptor_ids.clear(); // 清空上一帧/上一次的内容。
+	valid_descriptor_ids.resize(dl->state.set_count);	// 预分配到最大 set 数，后面按 valid_set_count 使用。
+	uint32_t valid_set_count = 0;	// 当前批次收集到的set的数量
+	uint32_t first_set_index = 0;	// 当前批次的起始槽位索引
+	uint32_t last_set_index = 0;	// 最近一次假如批次的槽位索引
+	bool found_first_set = false;	// 是否已经找到本批次的第一个待绑定的set
+
+	// 预处理：遍历所有set槽位，如果该管线在某个槽位有期望，就可能需要准备它。
 	for (uint32_t i = 0; i < dl->state.set_count; i++) {
 		if (dl->state.sets[i].pipeline_expected_format == 0) {
+			// 对该槽位无需求，跳过。
 			continue; // Nothing expected by this pipeline.
 		}
 
+		// 槽位还没绑定，并且起始槽位还为空
 		if (!dl->state.sets[i].bound && !found_first_set) {
+			// 记录第一个尚未绑定的槽位作为批次起点
 			first_set_index = i;
 			found_first_set = true;
 		}
 		// Prepare descriptor sets if the API doesn't use pipeline barriers.
+		// 如果底层API不支持自动处理管线屏障，需要提前将set设置为待用，让驱动做必要的资源状态迁移
 		if (!driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
 			draw_graph.add_draw_list_uniform_set_prepare_for_use(dl->state.pipeline_shader_driver_id, dl->state.sets[i].uniform_set_driver_id, i);
 		}
 	}
 
 	// Bind descriptor sets.
+	// 真正绑定描述符集，连续槽位合并为一次绑定调用
 	for (uint32_t i = first_set_index; i < dl->state.set_count; i++) {
 		if (dl->state.sets[i].pipeline_expected_format == 0) {
-			continue; // Nothing expected by this pipeline.
+			continue; // Nothing expected by this pipeline.		// 该槽位对本管线无需求，跳过
 		}
 
+		// 只处理尚未绑定的槽位
 		if (!dl->state.sets[i].bound) {
 			// Batch contiguous descriptor sets in a single call.
+			// 如果启用了批绑定
 			if (descriptor_set_batching) {
 				// All good, see if this requires re-binding.
-				if (i - last_set_index > 1) {
+				// 挺好，看看是否需要重新绑定
+				if (i - last_set_index > 1) {	// 与上一个收集到的槽位不连续，则把之前批次提交并重开新批次。
 					// If the descriptor sets are not contiguous, bind the previous ones and start a new batch.
 					draw_graph.add_draw_list_bind_uniform_sets(dl->state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
+					// 提交上一个批次的绑定命令。
 
-					first_set_index = i;
-					valid_set_count = 1;
-					valid_descriptor_ids[0] = dl->state.sets[i].uniform_set_driver_id;
+					first_set_index = i;	// 新批次起点为当前 i。
+					valid_set_count = 1;	// 新批次计数归 1。
+					valid_descriptor_ids[0] = dl->state.sets[i].uniform_set_driver_id;	// 记录当前 set 的底层驱动 ID。
 				} else {
 					// Otherwise, keep storing in the current batch.
+					// 槽位连续，加入当前批次。
 					valid_descriptor_ids[valid_set_count] = dl->state.sets[i].uniform_set_driver_id;
-					valid_set_count++;
+					valid_set_count++;	// 集数量+1
 				}
 
+				// 取到高层 UniformSet 对象指针。
 				UniformSet *uniform_set = uniform_set_owner.get_or_null(dl->state.sets[i].uniform_set);
+				// 确保共享资源/动态内容已经更新
 				_uniform_set_update_shared(uniform_set);
+				// 记录本次绘制对该 uniform set 的使用（用于同步/资源生命周期追踪）。
 				draw_graph.add_draw_list_usages(uniform_set->draw_trackers, uniform_set->draw_trackers_usage);
-				dl->state.sets[i].bound = true;
+				dl->state.sets[i].bound = true;		// 标记为已绑定
 
-				last_set_index = i;
+				last_set_index = i;		// 记录最近假如批次的槽位索引
 			} else {
+				// 不启用批次，逐个绑定（但是开销更大，优点是逻辑简单）
 				draw_graph.add_draw_list_bind_uniform_set(dl->state.pipeline_shader_driver_id, dl->state.sets[i].uniform_set_driver_id, i);
 			}
 		}
 	}
 
 	// Bind the remaining batch.
+	// 把最后一个未提交的批次提交
 	if (descriptor_set_batching && valid_set_count > 0) {
 		draw_graph.add_draw_list_bind_uniform_sets(dl->state.pipeline_shader_driver_id, valid_descriptor_ids, first_set_index, valid_set_count);
 	}
 
+	// 接下来根据是否使用索引来决定调用哪类draw
 	if (p_use_indices) {
 #ifdef DEBUG_ENABLED
+		// DEBUG：索引绘制与“程序化顶点计数”不能同时使用。
 		ERR_FAIL_COND_MSG(p_procedural_vertices > 0,
 				"Procedural vertices can't be used together with indices.");
 
+		// DEBUG：请求索引绘制，但未绑定索引缓冲。
 		ERR_FAIL_COND_MSG(!dl->validation.index_array_count,
 				"Draw command requested indices, but no index buffer was set.");
 
+		// DEBUG：索引重启特性（primitive restart）配置不匹配。
 		ERR_FAIL_COND_MSG(dl->validation.pipeline_uses_restart_indices != dl->validation.index_buffer_uses_restart_indices,
 				"The usage of restart indices in index buffer does not match the render primitive in the pipeline.");
 #endif
+		// 根据当前移植的索引数量作为绘制数量
 		uint32_t to_draw = dl->validation.index_array_count;
 
 #ifdef DEBUG_ENABLED
+		// DEBUG：索引数不足以构成至少一个图元。
 		ERR_FAIL_COND_MSG(to_draw < dl->validation.pipeline_primitive_minimum,
 				"Too few indices (" + itos(to_draw) + ") for the render primitive set in the render pipeline (" + itos(dl->validation.pipeline_primitive_minimum) + ").");
 
+		// DEBUG：索引数必须是图元所需索引数的整数倍（例如三角形=3，线段=2）。
 		ERR_FAIL_COND_MSG((to_draw % dl->validation.pipeline_primitive_divisor) != 0,
 				"Index amount (" + itos(to_draw) + ") must be a multiple of the amount of indices required by the render primitive (" + itos(dl->validation.pipeline_primitive_divisor) + ").");
 #endif
 
+		// 记录一次“索引绘制”指令：数量、实例数、起始偏移
 		draw_graph.add_draw_list_draw_indexed(to_draw, p_instances, 0);
 	} else {
+		// 非索引绘制，记录顶点数
 		uint32_t to_draw;
 
+		// 如果指定了“程序化顶点数”，则不依赖顶点数组
 		if (p_procedural_vertices > 0) {
 #ifdef DEBUG_ENABLED
+			// DEBUG：程序化绘制不应搭配需要顶点数组的管线。
 			ERR_FAIL_COND_MSG(dl->validation.pipeline_vertex_format != INVALID_ID,
 					"Procedural vertices requested, but pipeline expects a vertex array.");
 #endif
+			// 直接用传入的程序化顶点数
 			to_draw = p_procedural_vertices;
 		} else {
 #ifdef DEBUG_ENABLED
+			// DEBUG：非索引绘制但管线也不使用顶点（矛盾）。
 			ERR_FAIL_COND_MSG(dl->validation.pipeline_vertex_format == INVALID_ID,
 					"Draw command lacks indices, but pipeline format does not use vertices.");
 #endif
+			// 使用已绑定 VAO 的顶点数。
 			to_draw = dl->validation.vertex_array_size;
 		}
 
 #ifdef DEBUG_ENABLED
+		// DEBUG：顶点数不足以构成至少一个图元。
 		ERR_FAIL_COND_MSG(to_draw < dl->validation.pipeline_primitive_minimum,
 				"Too few vertices (" + itos(to_draw) + ") for the render primitive set in the render pipeline (" + itos(dl->validation.pipeline_primitive_minimum) + ").");
 
+		// DEBUG：顶点数必须是每个图元需求顶点数的整数倍。
 		ERR_FAIL_COND_MSG((to_draw % dl->validation.pipeline_primitive_divisor) != 0,
 				"Vertex amount (" + itos(to_draw) + ") must be a multiple of the amount of vertices required by the render primitive (" + itos(dl->validation.pipeline_primitive_divisor) + ").");
 #endif
 
+		// 记录一次“非索引绘制”指令：顶点数、实例数
 		draw_graph.add_draw_list_draw(to_draw, p_instances);
 	}
 
+	// 统计：本 draw list 的已记录绘制次数 +1。
 	dl->state.draw_count++;
 }
 

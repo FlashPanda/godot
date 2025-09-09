@@ -74,6 +74,11 @@ public:
 		SHADER_COLOR_PASS_FLAG_COUNT = 1 << 5
 	};
 
+	/**
+		PipelineVersion 就是“渲染通道对应的 shader/PSO 配置编号”。
+
+		每个 pass 都要输出不同的东西 → Shader/RT 格式/固定状态都不同 → 必须有不同的 pipeline → 用版本号区分。
+	*/
 	enum PipelineVersion {
 		PIPELINE_VERSION_DEPTH_PASS,
 		PIPELINE_VERSION_DEPTH_PASS_DP,

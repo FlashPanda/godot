@@ -918,35 +918,65 @@ void RenderingDeviceGraph::_run_draw_list_command(RDD::CommandBufferID p_command
 	}
 }
 
-void RenderingDeviceGraph::_add_draw_list_begin(FramebufferCache *p_framebuffer_cache, RDD::RenderPassID p_render_pass, RDD::FramebufferID p_framebuffer, Rect2i p_region, VectorView<AttachmentOperation> p_attachment_operations, VectorView<RDD::RenderPassClearValue> p_attachment_clear_values, bool p_uses_color, bool p_uses_depth, uint32_t p_breadcrumb, bool p_split_cmd_buffer) {
+// 一次draw list的开始
+void RenderingDeviceGraph::_add_draw_list_begin(FramebufferCache *p_framebuffer_cache,
+	RDD::RenderPassID p_render_pass,
+	RDD::FramebufferID p_framebuffer,
+	Rect2i p_region,
+	VectorView<AttachmentOperation> p_attachment_operations,
+	VectorView<RDD::RenderPassClearValue> p_attachment_clear_values,
+	bool p_uses_color,
+	bool p_uses_depth,
+	uint32_t p_breadcrumb,
+	bool p_split_cmd_buffer)
+{
+	// 确认传入的附件操作和清除值数量一致（每个 attachment 都要有对应的 clear value）。
 	DEV_ASSERT(p_attachment_operations.size() == p_attachment_clear_values.size());
 
+	// 清空当前的绘制指令列表
 	draw_instruction_list.clear();
+	// 增加一次索引，标记新一轮的draw list
 	draw_instruction_list.index++;
+	// 设置关联的帧缓存的缓存
 	draw_instruction_list.framebuffer_cache = p_framebuffer_cache;
+	// 记录本次使用的renderpass id
 	draw_instruction_list.render_pass = p_render_pass;
+	// 记录本次使用的framebuffer id
 	draw_instruction_list.framebuffer = p_framebuffer;
+	// 设置渲染区域（可能是整个framebuffer，也可能是裁剪后的区域
 	draw_instruction_list.region = p_region;
+	// 调整attachment的操作数量
 	draw_instruction_list.attachment_operations.resize(p_attachment_operations.size());
+	// 调整attachment的清除值数量
 	draw_instruction_list.attachment_clear_values.resize(p_attachment_clear_values.size());
 
+	// 将操作和清除值复制过去
 	for (uint32_t i = 0; i < p_attachment_operations.size(); i++) {
 		draw_instruction_list.attachment_operations[i] = p_attachment_operations[i];
 		draw_instruction_list.attachment_clear_values[i] = p_attachment_clear_values[i];
 	}
 
+	// 如果需要用到颜色，那么在管线阶段中加入“颜色输出”阶段
 	if (p_uses_color) {
 		draw_instruction_list.stages.set_flag(RDD::PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
 	}
 
+	// 如果渲染要用到depth attachment，则加入深度测试相关的早期和晚期阶段
 	if (p_uses_depth) {
+		// 这个早期和顽疾时进行深度测试和模板测试的时机。
+		// 早期：在片段着色之前进行测试，不通过就不进行着色了。
+		// 晚期：片段着色器可能会修改深度值，如果是这种情况，那么就必须在着色之后进行深度测试了。
+		// 用早期还是晚期取决于片段着色器是否会修改深度值，这里一起设置让GPU去判断，避免出错。
 		draw_instruction_list.stages.set_flag(RDD::PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
 		draw_instruction_list.stages.set_flag(RDD::PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT);
 	}
 
+	// 设置是否分裂命令缓冲（可能用于多线程或者多命令缓冲策略）
 	draw_instruction_list.split_cmd_buffer = p_split_cmd_buffer;
 
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	// 如果是调试或者开发阶段，记录调试面包屑
+	// 方便GPU调试工具追踪命令序列执行到哪一步时出的问题
 	draw_instruction_list.breadcrumb = p_breadcrumb;
 #endif
 }
@@ -1874,6 +1904,7 @@ void RenderingDeviceGraph::add_draw_list_clear_attachments(VectorView<RDD::Attac
 }
 
 void RenderingDeviceGraph::add_draw_list_draw(uint32_t p_vertex_count, uint32_t p_instance_count) {
+	// 在draw_instruction_list的最后分配一块区域，做为新指令的区域
 	DrawListDrawInstruction *instruction = reinterpret_cast<DrawListDrawInstruction *>(_allocate_draw_list_instruction(sizeof(DrawListDrawInstruction)));
 	instruction->type = DrawListInstruction::TYPE_DRAW;
 	instruction->vertex_count = p_vertex_count;
@@ -1986,67 +2017,118 @@ void RenderingDeviceGraph::add_draw_list_usages(VectorView<ResourceTracker *> p_
 }
 
 void RenderingDeviceGraph::add_draw_list_end() {
+	// 从当前的绘制指令列表中取出本次用到的帧缓冲缓存
 	FramebufferCache *framebuffer_cache = draw_instruction_list.framebuffer_cache;
-	int32_t command_index;
+	int32_t command_index;	// 命令在命令缓冲中的索引
+	// 计算清除值数组所需要的字节数：每个附件一个清除值
 	uint32_t clear_values_size = sizeof(RDD::RenderPassClearValue) * draw_instruction_list.attachment_clear_values.size();
+	// 追踪器数量：如果有帧缓冲缓存，则取其追踪器数量，否则为0
 	uint32_t trackers_count = framebuffer_cache != nullptr ? framebuffer_cache->trackers.size() : 0;
+	// 追踪器、加载操作、存储操作，所需要的总字节数
 	uint32_t trackers_and_ops_size = (sizeof(ResourceTracker *) + sizeof(RDD::AttachmentLoadOp) + sizeof(RDD::AttachmentStoreOp)) * trackers_count;
+	// 本次绘制指令列表的字节数量
 	uint32_t instruction_data_size = draw_instruction_list.data.size();
+	// 绘制列表的命令大小，包括：命令本身的大小、清除值的大小、追踪器和操作的大小、指令数据的大小
 	uint32_t command_size = sizeof(RecordedDrawListCommand) + clear_values_size + trackers_and_ops_size + instruction_data_size;
+	// 向内部命令缓冲申请一块连续内存，并获得该命令对象指针与其索引。
 	RecordedDrawListCommand *command = static_cast<RecordedDrawListCommand *>(_allocate_command(command_size, command_index));
+	// 命令标记为绘制列表
 	command->type = RecordedCommand::TYPE_DRAW_LIST;
+	// 保存自有的阶段掩码（来自 begin 时累积的 pipeline stages：如 color output / early/late tests）。
 	command->self_stages = draw_instruction_list.stages;
+	// 绑定与本次绘制相关的缓存和对象句柄（render pass，framebuffer等）
 	command->framebuffer_cache = framebuffer_cache;
 	command->render_pass = draw_instruction_list.render_pass;
 	command->framebuffer = draw_instruction_list.framebuffer;
+	// 记录序列化后的指令数据大小，便于后续复制与回放
 	command->instruction_data_size = instruction_data_size;
+	// 指定该命令应提交到哪类命令缓冲（这里固定是PRIMARY）
 	command->command_buffer_type = RDD::COMMAND_BUFFER_TYPE_PRIMARY;
+	// 渲染区域（剪裁矩形），与 begin 时保持一致。
 	command->region = draw_instruction_list.region;
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+	// 调试/开发模式下，记录“面包屑（breadcrumb）”编号，方便 GPU 调试时定位到渲染序列的具体步骤。
 	command->breadcrumb = draw_instruction_list.breadcrumb;
 #endif
+	// 是否拆分命令缓冲（用于并行或分割提交的策略）
 	command->split_cmd_buffer = draw_instruction_list.split_cmd_buffer;
+	// 附件clear值数量（等于附件数量），以及附件对应的资源追踪器数量
 	command->clear_values_count = draw_instruction_list.attachment_clear_values.size();
 	command->trackers_count = trackers_count;
 
 	// Initialize the load and store operations to their default behaviors. The store behavior will be modified if a command depends on the result of this render pass.
+	// —— 初始化每个附件位置的 Load/Store 行为默认值 ——
+	// 注：后续如果图形依赖分析发现“有命令需要使用本次结果”，会把 Store 行为从 DONT_CARE 改为 STORE。
+
+	// 附件操作数量（等于附件数量）
 	uint32_t attachment_op_count = draw_instruction_list.attachment_operations.size();
+	// 取出紧随command结构体后的“变长区域”的三个数组视图
+	// 1) trackers():逐附件的ResourceTracker*数组
+	// 2) load_ops():逐附件的加载操作（AttachmentLoadOp）数组
+	// 3) store_ops():逐附件的存储操作（AttachmentStoreOp）数组
 	ResourceTracker **trackers = command->trackers();
 	RDD::AttachmentLoadOp *load_ops = command->load_ops();
 	RDD::AttachmentStoreOp *store_ops = command->store_ops();
+	// 遍历每个附件槽位，为其选择合适的Load/Store策略，并写入对应的追踪器指针
 	for (uint32_t i = 0; i < command->trackers_count; i++) {
+		// 取出第i个附件对应的资源追踪器（纹理/缓冲的声明周期与读写状态）
 		ResourceTracker *resource_tracker = framebuffer_cache->trackers[i];
 		if (resource_tracker != nullptr) {
+			// 若该附件有追踪器，先确定 LoadOp（渲染开始时如何处理已有内容）。
 			if (i < command->clear_values_count && i < attachment_op_count && draw_instruction_list.attachment_operations[i] == ATTACHMENT_OPERATION_CLEAR) {
+				// 如果在 begin 阶段声明该附件要 CLEAR（且索引有效），则加载策略为 CLEAR。
 				load_ops[i] = RDD::ATTACHMENT_LOAD_OP_CLEAR;
-			} else if (i < attachment_op_count && draw_instruction_list.attachment_operations[i] == ATTACHMENT_OPERATION_IGNORE) {
+			}
+			else if (i < attachment_op_count && draw_instruction_list.attachment_operations[i] == ATTACHMENT_OPERATION_IGNORE) {
+				// 如果显式声明 IGNORE（不关心原始内容），则加载策略为 DONT_CARE。
 				load_ops[i] = RDD::ATTACHMENT_LOAD_OP_DONT_CARE;
-			} else if (resource_tracker->is_discardable) {
+			}
+			else if (resource_tracker->is_discardable) {
+				// 如果该资源可丢弃（例如暂存/可回收的附件），那么可根据“本帧是否刚被写过”来决定是否需要 LOAD。
 				bool resource_has_parent = resource_tracker->parent != nullptr;
+				// 某些资源可能是视图或别名，若有父资源，则用父资源的追踪器判断是否被写过。
 				ResourceTracker *search_tracker = resource_has_parent ? resource_tracker->parent : resource_tracker;
+				// 如果追踪器与当前追踪帧脱节，则重置其过期状态（内部会用tracking frame做时序对齐）
 				search_tracker->reset_if_outdated(tracking_frame);
+				// 检查该资源（或其父资源）在本帧是否有写入
 				bool resource_was_modified_this_frame = search_tracker->write_command_or_list_index >= 0;
+				// 如果本帧有写入，则需要 LOAD 以保留刚写入的内容，否则可直接 DONT_CARE。
 				load_ops[i] = resource_was_modified_this_frame ? RDD::ATTACHMENT_LOAD_OP_LOAD : RDD::ATTACHMENT_LOAD_OP_DONT_CARE;
-			} else {
+			}
+			else {
+				// 非可丢弃资源默认需要保留之前内容（LOAD），以保证正确性。
 				load_ops[i] = RDD::ATTACHMENT_LOAD_OP_LOAD;
 			}
 
+			// StoreOp（渲染结束时如何处理结果）
+			// 可丢弃资源必须要保留结果（DONT CARE），否则要STORE保留到下游使用。
 			store_ops[i] = resource_tracker->is_discardable ? RDD::ATTACHMENT_STORE_OP_DONT_CARE : RDD::ATTACHMENT_STORE_OP_STORE;
-		} else {
+		}
+		else {
+			// 没有追踪器（通常意味着该资源未被使用或为占位），加载与存储都不关心
 			load_ops[i] = RDD::ATTACHMENT_LOAD_OP_DONT_CARE;
 			store_ops[i] = RDD::ATTACHMENT_STORE_OP_DONT_CARE;
 		}
 
+		// 记录该附件位置对应的追踪器指针（可以为nullptr）
 		trackers[i] = resource_tracker;
 	}
 
+	// 紧接着的变长区域存放clear值数组，把begin时的clear值逐一拷贝过去
 	RDD::RenderPassClearValue *clear_values = command->clear_values();
 	for (uint32_t i = 0; i < command->clear_values_count; i++) {
 		clear_values[i] = draw_instruction_list.attachment_clear_values[i];
 	}
 
+	// 最后把序列化的“指令数据”块复制到命令尾部
 	memcpy(command->instruction_data(), draw_instruction_list.data.ptr(), instruction_data_size);
-	_add_command_to_graph(draw_instruction_list.command_trackers.ptr(), draw_instruction_list.command_tracker_usages.ptr(), draw_instruction_list.command_trackers.size(), command_index, command);
+	// 将构造好的命令挂在到渲染图中
+	// 传入本次drawlist用到的资源追踪器及其用法、建立依赖，决定barrier与store的最终调整。
+	_add_command_to_graph(draw_instruction_list.command_trackers.ptr(),
+		draw_instruction_list.command_tracker_usages.ptr(),
+		draw_instruction_list.command_trackers.size(),
+		command_index,
+		command);
 }
 
 void RenderingDeviceGraph::add_texture_clear(RDD::TextureID p_dst, ResourceTracker *p_dst_tracker, const Color &p_color, const RDD::TextureSubresourceRange &p_range) {

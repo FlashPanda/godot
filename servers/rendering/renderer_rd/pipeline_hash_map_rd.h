@@ -153,6 +153,7 @@ public:
 	}
 
 	// Retrieve a pipeline. It'll return an empty pipeline if it's not available yet, but it'll be guaranteed to succeed if 'wait for compilation' is true and stall as necessary. Source is just an optional number to aid debugging.
+	// 检索一个管线。如果还不可用，它将返回一个空管线，但如果“等待编译”为真并且必要时停顿，它将保证成功。源只是一个可选的数字来帮助调试。
 	RID get_pipeline(const Key &p_key, uint32_t p_key_hash, bool p_wait_for_compilation, RS::PipelineSource p_source) {
 		RBMap<uint32_t, RID>::Element *e = hash_map.find(p_key_hash);
 

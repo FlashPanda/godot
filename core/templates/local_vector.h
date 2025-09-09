@@ -41,6 +41,10 @@
 
 // If tight, it grows strictly as much as needed.
 // Otherwise, it grows exponentially (the default and what you want in most cases).
+/*
+•	tight = true 时，容器每次扩容只增加到刚好满足需求的容量（比如只多分配一个元素的空间），不会多分配。
+•	tight = false 时（默认），容器扩容采用指数增长策略（通常是容量翻倍），这样可以减少分配次数，提高性能。这也是大多数场景下推荐的做法。
+*/
 template <typename T, typename U = uint32_t, bool force_trivial = false, bool tight = false>
 class LocalVector {
 private:
