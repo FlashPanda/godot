@@ -326,92 +326,128 @@ void RenderingDeviceGraph::_check_discardable_attachment_dependency(ResourceTrac
 	}
 }
 
-void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_trackers, ResourceUsage *p_resource_usages, uint32_t p_resource_count, int32_t p_command_index, RecordedCommand *r_command) {
+void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_trackers,
+	ResourceUsage *p_resource_usages,
+	uint32_t p_resource_count,
+	int32_t p_command_index,
+	RecordedCommand *r_command)
+{
 	// Assign the next stages derived from the stages the command requires first.
+	// 先把本命令的自身阶段拷贝到后续阶段，（后续可能并入依赖阶段）
 	r_command->next_stages = r_command->self_stages;
 
 	if (command_label_index >= 0) {
 		// If a label is active, tag the command with the label.
+		// 如果有激活的标签，就把标签索引赋值给命令
 		r_command->label_index = command_label_index;
 	}
 
 	if (r_command->type == RecordedCommand::TYPE_CAPTURE_TIMESTAMP) {
 		// All previous commands starting from the previous timestamp should be adjacent to this command.
+		// 如果是一个记录时间戳的命令，那么从上一个时间戳开始到当前命令之间的所有命令，都需要给当前命令建立相邻（依赖）关系
 		int32_t start_command_index = uint32_t(MAX(command_timestamp_index, 0));
 		for (int32_t i = start_command_index; i < p_command_index; i++) {
 			_add_adjacent_command(i, p_command_index, r_command);
 		}
 
 		// Make this command the new active timestamp command.
+		// 将当前的命令标记为：最新的时间戳命令。
 		command_timestamp_index = p_command_index;
 	} else if (command_timestamp_index >= 0) {
 		// Timestamp command should be adjacent to this command.
+		// 如果当前命令不是时间戳命令，但是之前有时间戳命令，那么把当前命令和上一个时间戳命令建立相邻（依赖）关系
 		_add_adjacent_command(command_timestamp_index, p_command_index, r_command);
 	}
 
+	// 如果挂起了全局同步请求
 	if (command_synchronization_pending) {
 		// All previous commands should be adjacent to this command.
+		// 所有之前的命令都需要和当前命令建立相邻（依赖）关系
 		int32_t start_command_index = uint32_t(MAX(command_synchronization_index, 0));
 		for (int32_t i = start_command_index; i < p_command_index; i++) {
 			_add_adjacent_command(i, p_command_index, r_command);
 		}
 
+		// 更新同步点并清除“挂起”标记
 		command_synchronization_index = p_command_index;
 		command_synchronization_pending = false;
-	} else if (command_synchronization_index >= 0) {
+	}
+	// 如果没有挂起，但是已经存在同步点
+	else if (command_synchronization_index >= 0) {
 		// Synchronization command should be adjacent to this command.
+		// 确保同步点命令与当前命令相邻
 		_add_adjacent_command(command_synchronization_index, p_command_index, r_command);
 	}
 
+	/// 遍历本命令使用到的所有资源，建立状态转换（barrier）与前后依赖（adjacency）
 	for (uint32_t i = 0; i < p_resource_count; i++) {
 		ResourceTracker *resource_tracker = p_resource_trackers[i];
-		DEV_ASSERT(resource_tracker != nullptr);
+		DEV_ASSERT(resource_tracker != nullptr);	// 每个资源都必须有追踪器
 
+		// 如果追踪状态落后于当前帧，先做一次同步（重置）
 		resource_tracker->reset_if_outdated(tracking_frame);
 
+		// 取纹理子资源的范围：以 (base_mipmap, base_layer, mipmap_count, layer_count) 打包成一个 Rect2i，便于做“切片区域”上的几何运算。
 		const RDD::TextureSubresourceRange &subresources = resource_tracker->texture_subresources;
 		const Rect2i resource_tracker_rect(subresources.base_mipmap, subresources.base_layer, subresources.mipmap_count, subresources.layer_count);
 		Rect2i search_tracker_rect = resource_tracker_rect;
 
+		// 解析本次命令对该资源的新用法（读/写，pipeline阶段等）
 		ResourceUsage new_resource_usage = p_resource_usages[i];
+		// 是否是写用途（颜色输出、深度写、拷贝目的地等）。
 		bool write_usage = _is_write_usage(new_resource_usage);
+		// 将用法映射到barrier访问掩码
 		BitField<RDD::BarrierAccessBits> new_usage_access = _usage_to_access_bits(new_resource_usage);
+		// 该追踪器是否代表父追踪器的一个切片
 		bool is_resource_a_slice = resource_tracker->parent != nullptr;
+		/// 如果是一个切片
 		if (is_resource_a_slice) {
 			// This resource depends on a parent resource.
+			// 切片资源的真实情况依赖父资源统筹。
 			resource_tracker->parent->reset_if_outdated(tracking_frame);
 
 			if (resource_tracker->texture_slice_command_index != p_command_index) {
 				// Indicate this slice has been used by this command.
+				// 标记：该切片已被本命令使用（便于之后检查同一命令内的切片冲突）
 				resource_tracker->texture_slice_command_index = p_command_index;
 			}
 
+			/// 如果父资源此前还没有使用过（未知状态）
 			if (resource_tracker->parent->usage == RESOURCE_USAGE_NONE) {
 				if (resource_tracker->parent->texture_driver_id.id != 0) {
 					// If the resource is a texture, we transition it entirely to the layout determined by the first slice that uses it.
+					// 如果是纹理：第一次被使用的时候，将整个纹理过度到“该切片所需”的布局（统一到一个初始布局，便于后续一致管理）
 					_add_texture_barrier_to_command(resource_tracker->parent->texture_driver_id, RDD::BarrierAccessBits(0), new_usage_access, RDG::RESOURCE_USAGE_NONE, new_resource_usage, resource_tracker->parent->texture_subresources, command_normalization_barriers, r_command->normalization_barrier_index, r_command->normalization_barrier_count);
 				}
 
 				// If the parent hasn't been used yet, we assign the usage of the slice to the entire resource.
+				// 将父资源的用途设置为本切片的用途（作为初始统一状态）
 				resource_tracker->parent->usage = new_resource_usage;
 
 				// Also assign the usage to the slice and consider it a write operation. Consider the parent's current usage access as its own.
+				// 将切片的用途也记录下来，并且作为一次写用途。
 				resource_tracker->usage = new_resource_usage;
+				// 访问位和父追踪器的访问位一致。
 				resource_tracker->usage_access = resource_tracker->parent->usage_access;
-				write_usage = true;
+				write_usage = true;		// 作为一次写用途
 
 				// Indicate the area that should be tracked is the entire resource.
+				// 搜索矩形扩大为“整个父资源的子资源范围”（因为父资源初设为该用途）。
 				const RDD::TextureSubresourceRange &parent_subresources = resource_tracker->parent->texture_subresources;
 				search_tracker_rect = Rect2i(parent_subresources.base_mipmap, parent_subresources.base_layer, parent_subresources.mipmap_count, parent_subresources.layer_count);
-			} else if (resource_tracker->in_parent_dirty_list) {
+			}
+			/// 切片在父资源的“脏列表”中（说明它的用途与父用途不同，需要跟踪）
+			else if (resource_tracker->in_parent_dirty_list) {
+				/// 如果新的用途和父用途相同，则可以把切片从脏列表中移除（不再单独跟踪）
 				if (resource_tracker->parent->usage == new_resource_usage) {
 					// The slice will be transitioned to the resource of the parent and can be deleted from the dirty list.
 					ResourceTracker *previous_tracker = nullptr;
 					ResourceTracker *current_tracker = resource_tracker->parent->dirty_shared_list;
-					bool initialized_dirty_rect = false;
+					bool initialized_dirty_rect = false;	// 父资源的脏矩形是否已初始化
 					while (current_tracker != nullptr) {
 						current_tracker->reset_if_outdated(tracking_frame);
 
+						/// 找到本切片：移除它做的“在脏列表中”的标记，并将其从脏列表中移除
 						if (current_tracker == resource_tracker) {
 							current_tracker->in_parent_dirty_list = false;
 
@@ -422,10 +458,13 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 							}
 
 							current_tracker = current_tracker->next_shared;
-						} else {
+						}
+						/// 重算父资源的“脏区域并集”（用以涵盖仍然用途不同的切片范围）
+						else {
 							if (initialized_dirty_rect) {
 								resource_tracker->parent->texture_slice_or_dirty_rect = resource_tracker->parent->texture_slice_or_dirty_rect.merge(current_tracker->texture_slice_or_dirty_rect);
-							} else {
+							}
+							else {
 								resource_tracker->parent->texture_slice_or_dirty_rect = current_tracker->texture_slice_or_dirty_rect;
 								initialized_dirty_rect = true;
 							}
@@ -435,29 +474,40 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 						}
 					}
 				}
-			} else {
+			}
+			/// 切片不在父脏列表中
+			else {
+				/// 如果父已有脏列表且“父脏区域”与本切片有交集，需要检查是否和同命令中的其他切片冲突
 				if (resource_tracker->parent->dirty_shared_list != nullptr && resource_tracker->parent->texture_slice_or_dirty_rect.intersects(resource_tracker->texture_slice_or_dirty_rect)) {
 					// There's an intersection with the current dirty area of the parent and the slice. We must verify if the intersection is against a slice
 					// that was used in this command or not. Any slice we can find that wasn't used by this command must be reverted to the layout of the parent.
+					// 有交叉，遍历父脏切片，找出与当前切片相交的那些。
 					ResourceTracker *previous_tracker = nullptr;
 					ResourceTracker *current_tracker = resource_tracker->parent->dirty_shared_list;
 					bool initialized_dirty_rect = false;
 					while (current_tracker != nullptr) {
 						current_tracker->reset_if_outdated(tracking_frame);
 
+						
 						if (current_tracker->texture_slice_or_dirty_rect.intersects(resource_tracker->texture_slice_or_dirty_rect)) {
+							/// 与当前切片相交
 							if (current_tracker->command_frame == tracking_frame && current_tracker->texture_slice_command_index == p_command_index) {
+								// 同一命令内，两个有交叉的切片不能同时使用（会造成布局/写入冲突）。
 								ERR_FAIL_MSG("Texture slices that overlap can't be used in the same command.");
-							} else {
+							}
+							else {
 								// Delete the slice from the dirty list and revert it to the usage of the parent.
+								// 将该脏切片从列表中删除，并把它“恢复”到父用途（发出barrier）
 								if (current_tracker->texture_driver_id.id != 0) {
 									_add_texture_barrier_to_command(current_tracker->texture_driver_id, current_tracker->usage_access, new_usage_access, current_tracker->usage, resource_tracker->parent->usage, current_tracker->texture_subresources, command_normalization_barriers, r_command->normalization_barrier_index, r_command->normalization_barrier_count);
 
 									// Merge the area of the slice with the current tracking area of the command and indicate it's a write usage as well.
+									// 将该切片区域并入当前命令追踪范围，并把当前用途视为“写”（因为做了恢复/过度）
 									search_tracker_rect = search_tracker_rect.merge(current_tracker->texture_slice_or_dirty_rect);
 									write_usage = true;
 								}
 
+								// 把该切片从父“脏列表”中移除
 								current_tracker->in_parent_dirty_list = false;
 
 								if (previous_tracker != nullptr) {
@@ -468,7 +518,9 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 
 								current_tracker = current_tracker->next_shared;
 							}
-						} else {
+						}
+						/// 与当前切片无交集（重算父的脏范围）
+						else {
 							// Recalculate the dirty rect of the parent so the deleted slices are excluded.
 							if (initialized_dirty_rect) {
 								resource_tracker->parent->texture_slice_or_dirty_rect = resource_tracker->parent->texture_slice_or_dirty_rect.merge(current_tracker->texture_slice_or_dirty_rect);
@@ -484,11 +536,14 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 				}
 
 				// If it wasn't in the list, assume the usage is the same as the parent. Consider the parent's current usage access as its own.
+				// 如果此前不在脏列表中，则默认“切片用途=父用途”，并继承父的访问掩码。
 				resource_tracker->usage = resource_tracker->parent->usage;
 				resource_tracker->usage_access = resource_tracker->parent->usage_access;
 
+				/// 如果本次请求用途与父用途不同
 				if (resource_tracker->usage != new_resource_usage) {
 					// Insert to the dirty list if the requested usage is different.
+					// 将本切片插入父的“脏列表”，并维护父的“脏区域并集”
 					resource_tracker->next_shared = resource_tracker->parent->dirty_shared_list;
 					resource_tracker->parent->dirty_shared_list = resource_tracker;
 					resource_tracker->in_parent_dirty_list = true;
@@ -499,10 +554,13 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 					}
 				}
 			}
-		} else {
+		}
+		/// 不是切片（即父资源本体）
+		else {
 			ResourceTracker *current_tracker = resource_tracker->dirty_shared_list;
 			if (current_tracker != nullptr) {
 				// Consider the usage as write if we must transition any of the slices.
+				// 如果有脏切片需要回退到父用途。把这次用途是为“写”
 				write_usage = true;
 			}
 
@@ -511,23 +569,29 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 
 				if (current_tracker->texture_driver_id.id != 0) {
 					// Transition all slices to the layout of the parent resource.
+					// 将所有脏切片都过度到父用途（发出barrier）
 					_add_texture_barrier_to_command(current_tracker->texture_driver_id, current_tracker->usage_access, new_usage_access, current_tracker->usage, resource_tracker->usage, current_tracker->texture_subresources, command_normalization_barriers, r_command->normalization_barrier_index, r_command->normalization_barrier_count);
 				}
 
-				current_tracker->in_parent_dirty_list = false;
+				current_tracker->in_parent_dirty_list = false;	// 从脏列表中移除该切片
 				current_tracker = current_tracker->next_shared;
 			}
 
-			resource_tracker->dirty_shared_list = nullptr;
+			resource_tracker->dirty_shared_list = nullptr;	// 清空父脏列表
 		}
 
 		// Use the resource's parent tracker directly for all search operations.
+		// 对于后续的依赖和写/读列表管理，都直接在“父追踪器”上记录（切片也归并到父上）。
 		bool resource_has_parent = resource_tracker->parent != nullptr;
 		ResourceTracker *search_tracker = resource_has_parent ? resource_tracker->parent : resource_tracker;
+		// 是否发生过用途变更
 		bool different_usage = resource_tracker->usage != new_resource_usage;
+		// 写后又写：需要顺序依赖
 		bool write_usage_after_write = (write_usage && search_tracker->write_command_or_list_index >= 0);
+		/// 用途变更 或 本帧先前已有写 
 		if (different_usage || write_usage_after_write) {
 			// A barrier must be pushed if the usage is different of it's a write usage and there was already a command that wrote to this resource previously.
+			// 需要推 barrier（布局/可见性转换）
 			if (resource_tracker->texture_driver_id.id != 0) {
 				if (resource_tracker->usage_access.is_empty()) {
 					// FIXME: If the tracker does not know the previous type of usage, assume the generic memory write one.
