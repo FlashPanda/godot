@@ -591,66 +591,93 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 		/// 用途变更 或 本帧先前已有写 
 		if (different_usage || write_usage_after_write) {
 			// A barrier must be pushed if the usage is different of it's a write usage and there was already a command that wrote to this resource previously.
-			// 需要推 barrier（布局/可见性转换）
+			/// 需要推 barrier（布局/可见性转换）
 			if (resource_tracker->texture_driver_id.id != 0) {
 				if (resource_tracker->usage_access.is_empty()) {
 					// FIXME: If the tracker does not know the previous type of usage, assume the generic memory write one.
 					// Tracking access bits across texture slices can be tricky, so this failsafe can be removed once that's improved.
+					// 如果此前追踪器没有记录到“旧的访问掩码”，那么兜底用MEMORY_WRITE
 					resource_tracker->usage_access = RDD::BARRIER_ACCESS_MEMORY_WRITE_BIT;
 				}
 
+				// 发纹理barrier，从旧访问/旧用途 -> 新访问/新用途：范围为当前追踪器的子资源范围
 				_add_texture_barrier_to_command(resource_tracker->texture_driver_id, resource_tracker->usage_access, new_usage_access, resource_tracker->usage, new_resource_usage, resource_tracker->texture_subresources, command_transition_barriers, r_command->transition_barrier_index, r_command->transition_barrier_count);
-			} else if (resource_tracker->buffer_driver_id.id != 0) {
+			}
+			else if (resource_tracker->buffer_driver_id.id != 0) {
 #if USE_BUFFER_BARRIERS
+				// 发缓冲barrier
 				_add_buffer_barrier_to_command(resource_tracker->buffer_driver_id, resource_tracker->usage_access, new_usage_access, r_command->buffer_barrier_index, r_command->buffer_barrier_count);
 #endif
 				// Memory barriers are pushed regardless of buffer barriers being used or not.
+				// 不论是否启用专用buffer barrier，统一累计memory barrier的访问掩码
 				r_command->memory_barrier.src_access = r_command->memory_barrier.src_access | resource_tracker->usage_access;
 				r_command->memory_barrier.dst_access = r_command->memory_barrier.dst_access | new_usage_access;
-			} else {
+			}
+			else {
+				// 既不是纹理也不是缓冲的资源追踪器，逻辑有误
 				DEV_ASSERT(false && "Resource tracker does not contain a valid buffer or texture ID.");
 			}
 		}
 
 		// Always update the access of the tracker according to the latest usage.
+		// 更新追踪器的当前访问掩码为本次新的访问需求
 		resource_tracker->usage_access = new_usage_access;
 
 		// Always accumulate the stages of the tracker with the commands that use it.
+		// 将本命令自身的阶段并入“当前帧阶段”到（父）追踪器里，供跨命令/跨帧的阶段合并与依赖推导。
 		search_tracker->current_frame_stages = search_tracker->current_frame_stages | r_command->self_stages;
 
+		/// 如果上一帧阶段不是空的（还有上一帧的阶段信息）
 		if (!search_tracker->previous_frame_stages.is_empty()) {
 			// Add to the command the stages the tracker was used on in the previous frame.
+			// 合并到本命令的“前置阶段”中，清掉上一帧。
 			r_command->previous_stages = r_command->previous_stages | search_tracker->previous_frame_stages;
 			search_tracker->previous_frame_stages.clear();
 		}
 
+		/// 加入有用途变更的话
 		if (different_usage) {
 			// Even if the usage of the resource isn't a write usage explicitly, a different usage implies a transition and it should therefore be considered a write.
 			// In the case of buffers however, this is not exactly necessary if the driver does not consider different buffer usages as different states.
+			// 即便不是显示写，也视作一次“写”
+			// 纹理需要布局过度；缓冲是否需要取决于后端
 			write_usage = write_usage || bool(resource_tracker->texture_driver_id) || driver_buffers_require_transitions;
-			resource_tracker->usage = new_resource_usage;
+			resource_tracker->usage = new_resource_usage;	// 追踪器记录下新用途
 		}
 
+		// 检查写用途是否只覆盖了资源的部分区域（仅当没有用途变更时才需要额外检查部分覆盖）
 		bool write_usage_has_partial_coverage = !different_usage && _check_command_partial_coverage(resource_tracker, p_command_index);
+		/// 处理“先前写命令”的依赖
 		if (search_tracker->write_command_or_list_index >= 0) {
 			if (search_tracker->write_command_list_enabled) {
 				// Make this command adjacent to any commands that wrote to this resource and intersect with the slice if it applies.
 				// For buffers or textures that never use slices, this list will only be one element long at most.
+				// 采用“写列表”模式（用于切片或部分覆盖）；遍历此前所有写入记录点。
 				int32_t previous_write_list_index = -1;
 				int32_t write_list_index = search_tracker->write_command_or_list_index;
 				while (write_list_index >= 0) {
 					const RecordedSliceListNode &write_list_node = write_slice_list_nodes[write_list_index];
+					/// 非切片或与此前写入的切片区域有交集，才需要考虑依赖
 					if (!resource_has_parent || search_tracker_rect.intersects(write_list_node.subresources)) {
 						if (write_list_node.command_index == p_command_index) {
+							// 不允许命令依赖自身（对非切片而言这是逻辑错误）。
 							ERR_FAIL_COND_MSG(!resource_has_parent, "Command can't have itself as a dependency.");
-						} else if (!write_list_node.partial_coverage || _check_command_intersection(resource_tracker, write_list_node.command_index, p_command_index)) {
+						}
+						/// 若对方写是“全覆盖”，或二者切片区域相交：
+						else if (!write_list_node.partial_coverage || _check_command_intersection(resource_tracker, write_list_node.command_index, p_command_index)) {
+							/// 建立依赖
+
+							// 对可丢弃附件做额外依赖检查
 							_check_discardable_attachment_dependency(search_tracker, write_list_node.command_index, p_command_index);
 
 							// Command is dependent on this command. Add this command to the adjacency list of the write command.
+							// 先写 -> 后本命令
 							_add_adjacent_command(write_list_node.command_index, p_command_index, r_command);
 
+							/// 该写已被当前写全覆盖且当前不属“部分覆盖” 
 							if (resource_has_parent && write_usage && search_tracker_rect.encloses(write_list_node.subresources) && !write_usage_has_partial_coverage) {
 								// Eliminate redundant writes from the list.
+								// 可以把旧写从列表中剔除（冗余写消除）。
 								if (previous_write_list_index >= 0) {
 									RecordedSliceListNode &previous_list_node = write_slice_list_nodes[previous_write_list_index];
 									previous_list_node.next_list_index = write_list_node.next_list_index;
@@ -667,7 +694,9 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 					previous_write_list_index = write_list_index;
 					write_list_index = write_list_node.next_list_index;
 				}
-			} else {
+			}
+			/// 非列表模式：仅记录“最近一次写命令”的索引。
+			else {
 				// The index is just the latest command index that wrote to the resource.
 				if (search_tracker->write_command_or_list_index == p_command_index) {
 					ERR_FAIL_MSG("Command can't have itself as a dependency.");
@@ -678,24 +707,31 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 			}
 		}
 
+		/// 把当前命令记录为写入者或读取者
 		if (write_usage) {
+			// 写用途：根据是否切片/部分覆盖，选择“用写列表记录”或者“只记一个索引”
 			bool use_write_list = resource_has_parent || write_usage_has_partial_coverage;
 			if (use_write_list) {
 				if (!search_tracker->write_command_list_enabled && search_tracker->write_command_or_list_index >= 0) {
 					// Write command list was not being used but there was a write command recorded. Add a new node with the entire parent resource's subresources and the recorded command index to the list.
+					// 之前不是列表模式，但已经有一条写记录：把它转成列表节点（覆盖整个父资源的子资源范围）
 					const RDD::TextureSubresourceRange &tracker_subresources = search_tracker->texture_subresources;
 					Rect2i tracker_rect(tracker_subresources.base_mipmap, tracker_subresources.base_layer, tracker_subresources.mipmap_count, tracker_subresources.layer_count);
 					search_tracker->write_command_or_list_index = _add_to_write_list(search_tracker->write_command_or_list_index, tracker_rect, -1, false);
 				}
 
+				// 将当前写加入写列表，记录本命令索引+本次涉及的子资源矩形+是否部分覆盖
 				search_tracker->write_command_or_list_index = _add_to_write_list(p_command_index, search_tracker_rect, search_tracker->write_command_or_list_index, write_usage_has_partial_coverage);
 				search_tracker->write_command_list_enabled = true;
-			} else {
+			}
+			else {
+				// 非切片且全覆盖：只记录最新写命令索引
 				search_tracker->write_command_or_list_index = p_command_index;
 				search_tracker->write_command_list_enabled = false;
 			}
 
 			// We add this command to the adjacency list of all commands that were reading from the entire resource.
+			// 对“读整资源”的所有命令：本次写入应依赖它们。（在写后->需等待之前的读完成）
 			int32_t read_full_command_list_index = search_tracker->read_full_command_list_index;
 			while (read_full_command_list_index >= 0) {
 				int32_t read_full_command_index = command_list_nodes[read_full_command_list_index].command_index;
@@ -703,9 +739,11 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 				if (read_full_command_index == p_command_index) {
 					if (!resource_has_parent) {
 						// Only slices are allowed to be in different usages in the same command as they are guaranteed to have no overlap in the same command.
+						// 同一命令补应自依赖
 						ERR_FAIL_MSG("Command can't have itself as a dependency.");
 					}
 				} else {
+					// 建立读->写的依赖边
 					// Add this command to the adjacency list of each command that was reading this resource.
 					_add_adjacent_command(read_full_command_index, p_command_index, r_command);
 				}
@@ -715,25 +753,31 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 
 			if (!use_write_list) {
 				// Clear the full list if this resource is not a slice.
+				// 如果不是切片/部分覆盖，清空“读资源列表”（因为一次全资源的写会覆盖之前的读依赖范围）
 				search_tracker->read_full_command_list_index = -1;
 			}
 
 			// We add this command to the adjacency list of all commands that were reading from resource slices.
+			// 对“读切片”的所有命令：若当前写覆盖其范围，则建立依赖并视情况剔除已被完全覆盖的读条目
 			int32_t previous_slice_command_list_index = -1;
 			int32_t read_slice_command_list_index = search_tracker->read_slice_command_list_index;
 			while (read_slice_command_list_index >= 0) {
 				const RecordedSliceListNode &read_list_node = read_slice_list_nodes[read_slice_command_list_index];
 				if (!use_write_list || search_tracker_rect.encloses(read_list_node.subresources)) {
+					/// 如果当前写不是列表模式（意味着全覆盖），或写的区域包含了该读切片，则可删除该读条目（已被新写覆盖）
 					if (previous_slice_command_list_index >= 0) {
 						// Erase this element and connect the previous one to the next element.
+						// 删除中间节点
 						read_slice_list_nodes[previous_slice_command_list_index].next_list_index = read_list_node.next_list_index;
 					} else {
 						// Erase this element from the head of the list.
+						// 删除头节点
 						DEV_ASSERT(search_tracker->read_slice_command_list_index == read_slice_command_list_index);
 						search_tracker->read_slice_command_list_index = read_list_node.next_list_index;
 					}
 
 					// Advance to the next element.
+					// 前移到下一个节点。
 					read_slice_command_list_index = read_list_node.next_list_index;
 				} else {
 					previous_slice_command_list_index = read_slice_command_list_index;

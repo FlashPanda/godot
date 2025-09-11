@@ -86,38 +86,42 @@ public:
 
 	struct RecordedCommand {
 		enum Type {
-			TYPE_NONE,
-			TYPE_BUFFER_CLEAR,
-			TYPE_BUFFER_COPY,
-			TYPE_BUFFER_GET_DATA,
-			TYPE_BUFFER_UPDATE,
-			TYPE_COMPUTE_LIST,
-			TYPE_DRAW_LIST,
-			TYPE_TEXTURE_CLEAR,
-			TYPE_TEXTURE_COPY,
-			TYPE_TEXTURE_GET_DATA,
-			TYPE_TEXTURE_RESOLVE,
-			TYPE_TEXTURE_UPDATE,
-			TYPE_CAPTURE_TIMESTAMP,
-			TYPE_DRIVER_CALLBACK,
+			TYPE_NONE,				// 无效命令
+			TYPE_BUFFER_CLEAR,		// 清空缓冲区
+			TYPE_BUFFER_COPY,		// 缓冲区复制
+			TYPE_BUFFER_GET_DATA,	// 从GPU的缓冲区中取回到CPU
+			TYPE_BUFFER_UPDATE,		// 将CPU上的数据更新到GPU的缓冲区
+			TYPE_COMPUTE_LIST,		// 执行一个计算着色器列表
+			TYPE_DRAW_LIST,			// 执行一个绘制列表
+			TYPE_TEXTURE_CLEAR,		// 清空一个纹理
+			TYPE_TEXTURE_COPY,		// 纹理复制
+			TYPE_TEXTURE_GET_DATA,	// 从GPU的纹理中取回数据到CPU
+			TYPE_TEXTURE_RESOLVE,	// 解析多重采样纹理
+			TYPE_TEXTURE_UPDATE,	// 从CPU上更新数据到GPU的纹理
+			TYPE_CAPTURE_TIMESTAMP,	// 在GPU执行到此命令时记录一个时间戳，用于性能分析
+			TYPE_DRIVER_CALLBACK,	// 执行一个底层的驱动回调
 			TYPE_MAX
 		};
 
-		Type type = TYPE_NONE;
-		int32_t adjacent_command_list_index = -1;
-		RDD::MemoryBarrier memory_barrier;
-		int32_t normalization_barrier_index = -1;
+		Type type = TYPE_NONE;								// 当前的命令类型
+		int32_t adjacent_command_list_index = -1;			// 指向相邻命令列表的索引
+		RDD::MemoryBarrier memory_barrier;					// 内存屏障。GPU会乱序执行以提高效率
+		// 用于“强制资源回归到统一布局”的 barrier
+		int32_t normalization_barrier_index = -1;			
 		int normalization_barrier_count = 0;
-		int32_t transition_barrier_index = -1;
-		int32_t transition_barrier_count = 0;
-#if USE_BUFFER_BARRIERS
+		// 资源用途/布局转换时的 barrier
+		int32_t transition_barrier_index = -1;				
+		int32_t transition_barrier_count = 0;				
+#if USE_BUFFER_BARRIERS	// 使用缓冲区屏障
+		// 用于更精细的同步优化。
 		int32_t buffer_barrier_index = -1;
 		int32_t buffer_barrier_count = 0;
 #endif
-		int32_t label_index = -1;
-		BitField<RDD::PipelineStageBits> previous_stages;
-		BitField<RDD::PipelineStageBits> next_stages;
-		BitField<RDD::PipelineStageBits> self_stages;
+		int32_t label_index = -1;							// 调试标记分组
+		/// Pipeline stage 掩码：表示命令在 GPU 渲染管线的哪个阶段执行，便于 barrier 和依赖计算。
+		BitField<RDD::PipelineStageBits> previous_stages;	// 追踪资源在上一帧或之前命令使用过的阶段，可能影响本命令的依赖。
+		BitField<RDD::PipelineStageBits> next_stages;		// 本命令之后可能传播出去的阶段，作为后续命令依赖的输入
+		BitField<RDD::PipelineStageBits> self_stages;		// 本命令自身需要的阶段（比如 COLOR_ATTACHMENT_OUTPUT，FRAGMENT_SHADER 等）
 	};
 
 	struct RecordedBufferCopy {
