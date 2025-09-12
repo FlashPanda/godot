@@ -115,6 +115,14 @@ static uint32_t _get_device_type_score(const RenderingContextDriver::Device &p_d
 // This behavior can be disabled if it's suspected that the graph is not detecting dependencies correctly and more control over the order of
 // the commands is desired (e.g. debugging).
 
+// 是否自动优化命令顺序
+/*
+当为 true 时，命令图会尝试根据检测到的依赖关系，自动对用户提交的渲染命令进行重新排序。
+在大多数情况下，这会提高渲染性能，但代价是增加一些额外的 CPU 开销。
+
+如果怀疑命令图没有正确检测依赖关系，并且需要对命令顺序有更多的人工控制（例如用于调试），
+则可以禁用此行为。
+*/
 #define RENDER_GRAPH_REORDER 1
 
 // Synchronization barriers are issued between the graph's levels only with the necessary amount of detail to achieve the correct result. If
@@ -122,12 +130,27 @@ static uint32_t _get_device_type_score(const RenderingContextDriver::Device &p_d
 // between the synchronization levels. This setting will have a very negative impact on performance when enabled, so it's only intended for
 // debugging purposes.
 
+/*
+同步屏障只会在命令图的层级之间按需发出，以尽量少的细节来保证结果正确。
+如果怀疑命令图没有正确处理同步，可以启用“完整屏障”，这样会在同步层级之间阻塞所有类型的操作。
+
+但启用完整屏障会对性能产生非常严重的负面影响，因此仅用于调试目的。
+*/
 #define RENDER_GRAPH_FULL_BARRIERS 0
 
 // The command graph can automatically issue secondary command buffers and record them on background threads when they reach an arbitrary
 // size threshold. This can be very beneficial towards reducing the time the main thread takes to record all the rendering commands. However,
 // this setting is not enabled by default as it's been shown to cause some strange issues with certain IHVs that have yet to be understood.
 
+// 是否启用次级命令缓冲区
+/*
+当命令图达到某个任意大小阈值时，它可以自动生成次级命令缓冲区,并在后台线程中进行录制。
+
+这样做有助于减少主线程在录制所有渲染命令时所花费的时间。
+但是，这个设置默认是关闭的，因为在某些 IHV（独立硬件厂商）的驱动上，启用它会出现一些尚未弄清楚的奇怪问题。
+
+PS：也就是说驱动厂商也不知道会有什么奇怪地问题。
+*/
 #define SECONDARY_COMMAND_BUFFERS_PER_FRAME 0
 
 RenderingDevice *RenderingDevice::singleton = nullptr;
@@ -6749,7 +6772,9 @@ void RenderingDevice::_end_frame() {
 
 	// The command buffer must be copied into a stack variable as the driver workarounds can change the command buffer in use.
 	RDD::CommandBufferID command_buffer = frames[frame].command_buffer;
+	// 资源上传/下载类任务
 	_submit_transfer_workers(command_buffer);
+	// 同步/布局转换类任务
 	_submit_transfer_barriers(command_buffer);
 
 	draw_graph.end(RENDER_GRAPH_REORDER, RENDER_GRAPH_FULL_BARRIERS, command_buffer, frames[frame].command_buffer_pool);

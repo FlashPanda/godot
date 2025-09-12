@@ -326,6 +326,7 @@ void RenderingDeviceGraph::_check_discardable_attachment_dependency(ResourceTrac
 	}
 }
 
+// 子追踪器记录“细节”哪个切片被怎么用），父追踪器负责“全局调度”（依赖、屏障、冲突检查）
 void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_trackers,
 	ResourceUsage *p_resource_usages,
 	uint32_t p_resource_count,
@@ -780,6 +781,7 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 					// 前移到下一个节点。
 					read_slice_command_list_index = read_list_node.next_list_index;
 				} else {
+					// 保留该条目，继续遍历
 					previous_slice_command_list_index = read_slice_command_list_index;
 					read_slice_command_list_index = read_list_node.next_list_index;
 				}
@@ -787,14 +789,21 @@ void RenderingDeviceGraph::_add_command_to_graph(ResourceTracker **p_resource_tr
 				if (!resource_has_parent || search_tracker_rect.intersects(read_list_node.subresources)) {
 					// Add this command to the adjacency list of each command that was reading this resource.
 					// We only add the dependency if there's an intersection between slices or this resource isn't a slice.
+					// 若非切片，或（切片）写读有交集，则建立“读->写”依赖边
 					_add_adjacent_command(read_list_node.command_index, p_command_index, r_command);
 				}
 			}
-		} else if (resource_has_parent) {
+		}
+		/// 如果不是写用途，并且是切片
+		else if (resource_has_parent) {
 			// We add a read dependency to the tracker to indicate this command reads from the resource slice.
+			// 把”读该切片“的记录加入到父的“读切片列表”中
 			search_tracker->read_slice_command_list_index = _add_to_slice_read_list(p_command_index, resource_tracker_rect, search_tracker->read_slice_command_list_index);
-		} else {
+		}
+		/// 不是写用途，也不是切片（即读整资源）
+		else {
 			// We add a read dependency to the tracker to indicate this command reads from the entire resource.
+			// 把“读整资源”的记录加入到父的“读整资源列表”中
 			search_tracker->read_full_command_list_index = _add_to_command_list(p_command_index, search_tracker->read_full_command_list_index);
 		}
 	}
