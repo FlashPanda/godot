@@ -4353,20 +4353,27 @@ Error RenderingDevice::screen_create(DisplayServer::WindowID p_screen) {
 	return OK;
 }
 
+/// 为整个屏幕的绘制准备好可用的framebuffer，并处理与交换链有关的一系列细节，包括
+/// - presentation、acquire、resize和失败恢复
+/// 它的职责是在渲染前保证屏幕绘制环境正确可用
 Error RenderingDevice::screen_prepare_for_drawing(DisplayServer::WindowID p_screen) {
 	_THREAD_SAFE_METHOD_
 
 	// After submitting work, acquire the swapchain image(s).
+	// 在提交工作后，获取交换链图像。校验交换链的存在性
 	HashMap<DisplayServer::WindowID, RDD::SwapChainID>::ConstIterator it = screen_swap_chains.find(p_screen);
 	ERR_FAIL_COND_V_MSG(it == screen_swap_chains.end(), ERR_CANT_CREATE, "A swap chain was not created for the screen.");
 
 	// Erase the framebuffer corresponding to this screen from the map in case any of the operations fail.
+	// 把这个屏幕上上次缓存的framebuffer移除，避免使用到无效资源。
 	screen_framebuffers.erase(p_screen);
 
 	// If this frame has already queued this swap chain for presentation, we present it and remove it from the pending list.
+	/// 如果本帧已经请求过呈现了，我们就呈现它，并且从等待队列中删除它。
 	uint32_t to_present_index = 0;
 	while (to_present_index < frames[frame].swap_chains_to_present.size()) {
 		if (frames[frame].swap_chains_to_present[to_present_index] == it->value) {
+			// 直接执行队列并呈现。
 			driver->command_queue_execute_and_present(present_queue, {}, {}, {}, {}, it->value);
 			frames[frame].swap_chains_to_present.remove_at(to_present_index);
 		} else {
@@ -4375,29 +4382,42 @@ Error RenderingDevice::screen_prepare_for_drawing(DisplayServer::WindowID p_scre
 	}
 
 	bool resize_required = false;
+	// 从交换链获取一个framebuffer
 	RDD::FramebufferID framebuffer = driver->swap_chain_acquire_framebuffer(main_queue, it->value, resize_required);
 	if (resize_required) {
 		// Flush everything so nothing can be using the swap chain before resizing it.
+		// 调用flush确保没有任何命令在使用交换链，然后再进行resize（直接提交刷新，并且阻塞等待）
 		_flush_and_stall_for_all_frames();
 
+		// 改变交换链的大小
 		Error err = driver->swap_chain_resize(main_queue, it->value, _get_swap_chain_desired_count());
 		if (err != OK) {
 			// Resize is allowed to fail silently because the window can be minimized.
 			return err;
 		}
 
+		// 然后重新获取framebuffer
 		framebuffer = driver->swap_chain_acquire_framebuffer(main_queue, it->value, resize_required);
 	}
 
+	// framebuffer可能无效
 	if (framebuffer.id == 0) {
 		// Some drivers like NVIDIA are fast enough to invalidate the swap chain between resizing and acquisition (GH-94104).
 		// This typically occurs during continuous window resizing operations, especially if done quickly.
 		// Allow this to fail silently since it has no visual consequences.
+		// 有些显卡驱动（特别是 NVIDIA 的）在窗口 调整大小 (resize) 时非常激进，
+		// 可能会在 交换链 resize 和获取 framebuffer (acquire) 这两个操作之间，
+		// 就让交换链失效（invalidate）。
+		// 这种情况常见于 用户不停地快速拖动窗口边框调整大小。这种失败 不会造成画面异常：
+		// - 窗口在被快速 resize 时，本来也没有稳定的画面能显示；
+		// - 即使获取 framebuffer 失败，本帧也就不画，画面会在 resize 稳定后自动恢复。
 		return ERR_CANT_CREATE;
 	}
 
 	// Store the framebuffer that will be used next to draw to this screen.
+	// 将framebuffer保存到screen_framebuffers中，作为后续渲染目标
 	screen_framebuffers[p_screen] = framebuffer;
+	// 把交换链加回到待呈现列表中，表示本帧结束时要呈现它
 	frames[frame].swap_chains_to_present.push_back(it->value);
 
 	return OK;
@@ -6047,17 +6067,28 @@ void RenderingDevice::_end_transfer_worker(TransferWorker *p_transfer_worker) {
 	p_transfer_worker->recording = false;
 }
 
+/// 将transfer worker的命令缓冲区提交到驱动执行，并设置同步对象，保证主渲染命令在
+/// 正确的时机等待这些传输操作完成。
 void RenderingDevice::_submit_transfer_worker(TransferWorker *p_transfer_worker, VectorView<RDD::SemaphoreID> p_signal_semaphores) {
-	driver->command_queue_execute_and_present(transfer_queue, {}, p_transfer_worker->command_buffer, p_signal_semaphores, p_transfer_worker->command_fence, {});
+	driver->command_queue_execute_and_present(
+		transfer_queue,						// 用于传输操作的专门队列
+		{},									// 没有等待的信号量
+		p_transfer_worker->command_buffer,	// 要提交的命令缓冲（拷贝/上传操作）
+		p_signal_semaphores,				// 提交后要发出的信号量
+		p_transfer_worker->command_fence,	// 用于同步的fence
+		{}									// 不需要present
+	);
 
+	/// 将信号量加入到当前帧的等待列表中
 	for (uint32_t i = 0; i < p_signal_semaphores.size(); i++) {
 		// Indicate the frame should wait on these semaphores before executing the main command buffer.
 		frames[frame].semaphores_to_wait_on.push_back(p_signal_semaphores[i]);
 	}
 
+	// 标记已经提交
 	p_transfer_worker->submitted = true;
 
-	{
+	{/// 记录已经提交的操作数量
 		MutexLock lock(p_transfer_worker->operations_mutex);
 		p_transfer_worker->operations_submitted = p_transfer_worker->operations_counter;
 	}
@@ -6782,11 +6813,15 @@ void RenderingDevice::_end_frame() {
 	driver->end_segment();
 }
 
+/// 说明：执行一串命令缓冲（Command Buffer），用信号量将它们串联起来，保证前后依赖。
+/// 一般只有一个命令缓冲，但某些驱动（如移动端 Adreno）需要拆分成多个。
 void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingDeviceDriver::FenceID p_draw_fence,
 		RenderingDeviceDriver::SemaphoreID p_dst_draw_semaphore_to_signal) {
 	// Execute command buffers and use semaphores to wait on the execution of the previous one.
 	// Normally there's only one command buffer, but driver workarounds can force situations where
 	// there'll be more.
+
+	/// 默认只有一个命令缓冲，如果缓冲池中有记录多个要提交的，那么也记下来，然后把数据清空。
 	uint32_t command_buffer_count = 1;
 	RDG::CommandBufferPool &buffer_pool = frames[frame].command_buffer_pool;
 	if (buffer_pool.buffers_used > 0) {
@@ -6794,12 +6829,14 @@ void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingD
 		buffer_pool.buffers_used = 0;
 	}
 
+	// 清空交换链
 	thread_local LocalVector<RDD::SwapChainID> swap_chains;
 	swap_chains.clear();
 
 	// Instead of having just one command; we have potentially many (which had to be split due to an
 	// Adreno workaround on mobile, only if the workaround is active). Thus we must execute all of them
 	// and chain them together via semaphores as dependent executions.
+	// 注：可能有多个拆分的命令缓冲，需要用信号量把它们按依赖顺序串起来。
 	thread_local LocalVector<RDD::SemaphoreID> wait_semaphores;
 	wait_semaphores = frames[frame].semaphores_to_wait_on;
 
@@ -6815,6 +6852,7 @@ void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingD
 
 		if (i == (command_buffer_count - 1)) {
 			// This is the last command buffer, it should signal the semaphore & fence.
+			// 这是最后一个命令缓冲给你了，需要发出信号和fence
 			signal_semaphore = p_dst_draw_semaphore_to_signal;
 			signal_fence = p_draw_fence;
 
@@ -6825,17 +6863,24 @@ void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingD
 		} else {
 			signal_semaphore = buffer_pool.semaphores[i];
 			// Semaphores always need to be signaled if it's not the last command buffer.
+			// 信号量总是需要被发出，如果不是最后一个命令缓冲的话。
 		}
 
-		driver->command_queue_execute_and_present(main_queue, wait_semaphores, command_buffer,
-				signal_semaphore ? signal_semaphore : VectorView<RDD::SemaphoreID>(), signal_fence,
-				swap_chains);
+		driver->command_queue_execute_and_present(main_queue,		// 提交到主命令队列（图形队列）。
+			wait_semaphores,	// 本次提交之前需要等待的信号量列表。
+			command_buffer,		// 要执行的命令缓冲。
+			// 这里使用一个小技巧：如果有 signal_semaphore，就把“单个信号量”作为参数；否则传空视图表示不 signal。
+			signal_semaphore ? signal_semaphore : VectorView<RDD::SemaphoreID>(),
+			signal_fence,		 // 若为最后一个提交则带上栅栏，否则是无效/空 ID。
+			swap_chains);		 // 若需要 present，最后一个提交带上交换链；否则为空列表。
 
 		// Make the next command buffer wait on the semaphore signaled by this one.
+		/// 下一段只需等待“当前段 signal 的那个”信号量。
 		wait_semaphores.resize(1);
 		wait_semaphores[0] = signal_semaphore;
 	}
 
+	// 清空“本帧开始前需要等待的外部依赖”，已消费完毕。
 	frames[frame].semaphores_to_wait_on.clear();
 }
 

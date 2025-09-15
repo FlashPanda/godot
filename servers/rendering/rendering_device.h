@@ -1499,6 +1499,9 @@ private:
 	/**** QUEUE MANAGEMENT ****/
 	/**************************/
 
+	/*
+	一共是3个队列，主队列，传输队列，呈现队列
+	*/
 	RDD::CommandQueueFamilyID main_queue_family;
 	RDD::CommandQueueFamilyID transfer_queue_family;
 	RDD::CommandQueueFamilyID present_queue_family;
