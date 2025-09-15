@@ -1114,26 +1114,35 @@ void RenderingDeviceGraph::_wait_for_secondary_command_buffer_tasks() {
 	}
 }
 
+// 记录渲染命令（已经排好序的命令）
 void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedCommandSort *p_sorted_commands, uint32_t p_sorted_commands_count, RDD::CommandBufferID &r_command_buffer, CommandBufferPool &r_command_buffer_pool, int32_t &r_current_label_index, int32_t &r_current_label_level) {
+	/// 遍历已经排好序的命令。
 	for (uint32_t i = 0; i < p_sorted_commands_count; i++) {
+		/// 从命令列表中取出命令（这一步涉及到三次转换）
 		const uint32_t command_index = p_sorted_commands[i].index;
 		const uint32_t command_data_offset = command_data_offsets[command_index];
 		const RecordedCommand *command = reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offset]);
+
+		// 根据即将执行的命令上的label_index，与当前标签栈状态，调整调试标签
+		// 同时允许传入剩余命令数量用于批量优化
 		_run_label_command_change(r_command_buffer, command->label_index, p_level, false, true, &p_sorted_commands[i], p_sorted_commands_count - i, r_current_label_index, r_current_label_level);
 
+		/// 根据记录命令的具体类型分派到对应的驱动调用
 		switch (command->type) {
-			case RecordedCommand::TYPE_BUFFER_CLEAR: {
+			case RecordedCommand::TYPE_BUFFER_CLEAR: {	// 清空缓冲区一段内存
 				const RecordedBufferClearCommand *buffer_clear_command = reinterpret_cast<const RecordedBufferClearCommand *>(command);
+				// 调用驱动记录命令
 				driver->command_clear_buffer(r_command_buffer, buffer_clear_command->buffer, buffer_clear_command->offset, buffer_clear_command->size);
 			} break;
-			case RecordedCommand::TYPE_BUFFER_COPY: {
+			case RecordedCommand::TYPE_BUFFER_COPY: {	// 缓冲区到缓冲区拷贝
 				const RecordedBufferCopyCommand *buffer_copy_command = reinterpret_cast<const RecordedBufferCopyCommand *>(command);
 				driver->command_copy_buffer(r_command_buffer, buffer_copy_command->source, buffer_copy_command->destination, buffer_copy_command->region);
 			} break;
-			case RecordedCommand::TYPE_BUFFER_GET_DATA: {
+			case RecordedCommand::TYPE_BUFFER_GET_DATA: {	// 将 GPU/设备缓冲数据拷出到可读缓冲
 				const RecordedBufferGetDataCommand *buffer_get_data_command = reinterpret_cast<const RecordedBufferGetDataCommand *>(command);
 				driver->command_copy_buffer(r_command_buffer, buffer_get_data_command->source, buffer_get_data_command->destination, buffer_get_data_command->region);
 			} break;
+			// 由多个子区段组成的缓冲区更新（通常从上传缓冲/staging 拷到目标）
 			case RecordedCommand::TYPE_BUFFER_UPDATE: {
 				const RecordedBufferUpdateCommand *buffer_update_command = reinterpret_cast<const RecordedBufferUpdateCommand *>(command);
 				const RecordedBufferCopy *command_buffer_copies = buffer_update_command->buffer_copies();
@@ -1141,18 +1150,24 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 					driver->command_copy_buffer(r_command_buffer, command_buffer_copies[j].source, buffer_update_command->destination, command_buffer_copies[j].region);
 				}
 			} break;
-			case RecordedCommand::TYPE_DRIVER_CALLBACK: {
+			case RecordedCommand::TYPE_DRIVER_CALLBACK: {	// 执行回调（自定义驱动级命令注入点）
 				const RecordedDriverCallbackCommand *driver_callback_command = reinterpret_cast<const RecordedDriverCallbackCommand *>(command);
 				driver_callback_command->callback(driver, r_command_buffer, driver_callback_command->userdata);
 			} break;
+			/// 执行一条计算列表（含内部的调度/绑定/dispatch 指令流）
 			case RecordedCommand::TYPE_COMPUTE_LIST: {
+				// 某些驱动/平台上需要避免 draw 之后紧接 compute
+				// 参考 Vulkan 驱动中启用该选项的注释了解更多信息。
 				if (device.workarounds.avoid_compute_after_draw && workarounds_state.draw_list_found) {
 					// Avoid compute after draw workaround. Refer to the comment that enables this in the Vulkan driver for more information.
+					// 避免compute紧跟在draw之后
 					workarounds_state.draw_list_found = false;
 
 					// Create or reuse a command buffer and finish recording the current one.
+					// 结束当前命令缓冲录制，准备切换/轮转到下一个命令缓冲
 					driver->command_buffer_end(r_command_buffer);
 
+					/// 如果缓冲池不够用，则创建新的命令缓冲和信号量
 					while (r_command_buffer_pool.buffers_used >= r_command_buffer_pool.buffers.size()) {
 						RDD::CommandBufferID command_buffer = driver->command_buffer_create(r_command_buffer_pool.pool);
 						RDD::SemaphoreID command_semaphore = driver->semaphore_create();
@@ -1161,26 +1176,33 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 					}
 
 					// Start recording on the next usable command buffer from the pool.
+					// 切换到下一个命令缓冲并开始录制
 					uint32_t command_buffer_index = r_command_buffer_pool.buffers_used++;
 					r_command_buffer = r_command_buffer_pool.buffers[command_buffer_index];
 					driver->command_buffer_begin(r_command_buffer);
 				}
 
 				const RecordedComputeListCommand *compute_list_command = reinterpret_cast<const RecordedComputeListCommand *>(command);
+				// 录制计算列表
 				_run_compute_list_command(r_command_buffer, compute_list_command->instruction_data(), compute_list_command->instruction_data_size);
 			} break;
+			/// 执行一条绘制列表（包含 begin/end render pass 与内部 draw 调用等）
 			case RecordedCommand::TYPE_DRAW_LIST: {
 				if (device.workarounds.avoid_compute_after_draw) {
 					// Indicate that a draw list was encountered for the workaround.
+					// 记录我们遇到的draw list，好让后续的compute命令能触发规避措施
 					workarounds_state.draw_list_found = true;
 				}
 
 				const RecordedDrawListCommand *draw_list_command = reinterpret_cast<const RecordedDrawListCommand *>(command);
 
+				// 该绘制需要拆分到独立命令缓冲中（典型用于避免过大/跨依赖或满足驱动限制）
 				if (draw_list_command->split_cmd_buffer) {
 					// Create or reuse a command buffer and finish recording the current one.
+					// 结束当前命令缓冲的录制
 					driver->command_buffer_end(r_command_buffer);
 
+					/// 如果缓冲池不够用，则创建新的命令缓冲和信号量
 					while (r_command_buffer_pool.buffers_used >= r_command_buffer_pool.buffers.size()) {
 						RDD::CommandBufferID command_buffer = driver->command_buffer_create(r_command_buffer_pool.pool);
 						RDD::SemaphoreID command_semaphore = driver->semaphore_create();
@@ -1189,48 +1211,65 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 					}
 
 					// Start recording on the next usable command buffer from the pool.
+					// 切换到下一个命令缓冲并开始录制
 					uint32_t command_buffer_index = r_command_buffer_pool.buffers_used++;
 					r_command_buffer = r_command_buffer_pool.buffers[command_buffer_index];
 					driver->command_buffer_begin(r_command_buffer);
 				}
 
+				// 清屏/附件清除值视图
 				const VectorView clear_values(draw_list_command->clear_values(), draw_list_command->clear_values_count);
 #if defined(DEBUG_ENABLED) || defined(DEV_ENABLED)
+				// 在调试/开发构建下插入面包屑（GPU 调试标记）
 				driver->command_insert_breadcrumb(r_command_buffer, draw_list_command->breadcrumb);
 #endif
+				// 要使用的渲染通道对象ID
 				RDD::RenderPassID render_pass;
+				// 要使用的帧缓冲对象ID
 				RDD::FramebufferID framebuffer;
+				// 若提供帧缓冲缓存（说明需要从缓存中解析/获取 RP/FB）
 				if (draw_list_command->framebuffer_cache != nullptr) {
+					// 根据缓存计算/取出 render pass 与 framebuffer
 					_get_draw_list_render_pass_and_framebuffer(draw_list_command, render_pass, framebuffer);
 				} else {
+					// 直接使用命令中记录的 RP/FB
 					render_pass = draw_list_command->render_pass;
 					framebuffer = draw_list_command->framebuffer;
 				}
 
+				 // 只有在 RP/FB 都有效时才发起一次渲染通道
 				if (framebuffer && render_pass) {
+					// 开始 RP，设置区域与清除值
 					driver->command_begin_render_pass(r_command_buffer, render_pass, framebuffer, draw_list_command->command_buffer_type, draw_list_command->region, clear_values);
+					// 在 RP 内执行绘制列表的具体指令（绑定管线/资源，发起 drawcall）
 					_run_draw_list_command(r_command_buffer, draw_list_command->instruction_data(), draw_list_command->instruction_data_size);
+					// 结束 RP
 					driver->command_end_render_pass(r_command_buffer);
 				}
 			} break;
+			// 纹理颜色清除（通常到 COPY_DST 最优布局）
 			case RecordedCommand::TYPE_TEXTURE_CLEAR: {
 				const RecordedTextureClearCommand *texture_clear_command = reinterpret_cast<const RecordedTextureClearCommand *>(command);
 				driver->command_clear_color_texture(r_command_buffer, texture_clear_command->texture, RDD::TEXTURE_LAYOUT_COPY_DST_OPTIMAL, texture_clear_command->color, texture_clear_command->range);
 			} break;
+			// 纹理到纹理拷贝
 			case RecordedCommand::TYPE_TEXTURE_COPY: {
 				const RecordedTextureCopyCommand *texture_copy_command = reinterpret_cast<const RecordedTextureCopyCommand *>(command);
 				const VectorView<RDD::TextureCopyRegion> command_texture_copy_regions_view(texture_copy_command->texture_copy_regions(), texture_copy_command->texture_copy_regions_count);
 				driver->command_copy_texture(r_command_buffer, texture_copy_command->from_texture, RDD::TEXTURE_LAYOUT_COPY_SRC_OPTIMAL, texture_copy_command->to_texture, RDD::TEXTURE_LAYOUT_COPY_DST_OPTIMAL, command_texture_copy_regions_view);
 			} break;
+			// 纹理拷贝到缓冲（读回/下载）
 			case RecordedCommand::TYPE_TEXTURE_GET_DATA: {
 				const RecordedTextureGetDataCommand *texture_get_data_command = reinterpret_cast<const RecordedTextureGetDataCommand *>(command);
 				const VectorView<RDD::BufferTextureCopyRegion> command_buffer_texture_copy_regions_view(texture_get_data_command->buffer_texture_copy_regions(), texture_get_data_command->buffer_texture_copy_regions_count);
 				driver->command_copy_texture_to_buffer(r_command_buffer, texture_get_data_command->from_texture, RDD::TEXTURE_LAYOUT_COPY_SRC_OPTIMAL, texture_get_data_command->to_buffer, command_buffer_texture_copy_regions_view);
 			} break;
+			// 纹理解析（例如 MSAA 解析，从多采样到单采样）
 			case RecordedCommand::TYPE_TEXTURE_RESOLVE: {
 				const RecordedTextureResolveCommand *texture_resolve_command = reinterpret_cast<const RecordedTextureResolveCommand *>(command);
 				driver->command_resolve_texture(r_command_buffer, texture_resolve_command->from_texture, RDD::TEXTURE_LAYOUT_RESOLVE_SRC_OPTIMAL, texture_resolve_command->src_layer, texture_resolve_command->src_mipmap, texture_resolve_command->to_texture, RDD::TEXTURE_LAYOUT_RESOLVE_DST_OPTIMAL, texture_resolve_command->dst_layer, texture_resolve_command->dst_mipmap);
 			} break;
+			// 从缓冲拷贝到纹理（上传）
 			case RecordedCommand::TYPE_TEXTURE_UPDATE: {
 				const RecordedTextureUpdateCommand *texture_update_command = reinterpret_cast<const RecordedTextureUpdateCommand *>(command);
 				const RecordedBufferToTextureCopy *command_buffer_to_texture_copies = texture_update_command->buffer_to_texture_copies();
@@ -1238,6 +1277,7 @@ void RenderingDeviceGraph::_run_render_commands(int32_t p_level, const RecordedC
 					driver->command_copy_buffer_to_texture(r_command_buffer, command_buffer_to_texture_copies[j].from_buffer, texture_update_command->to_texture, RDD::TEXTURE_LAYOUT_COPY_DST_OPTIMAL, command_buffer_to_texture_copies[j].region);
 				}
 			} break;
+			// 写入 GPU 时间戳（用于性能分析/测量）
 			case RecordedCommand::TYPE_CAPTURE_TIMESTAMP: {
 				const RecordedCaptureTimestampCommand *texture_capture_timestamp_command = reinterpret_cast<const RecordedCaptureTimestampCommand *>(command);
 				driver->command_timestamp_write(r_command_buffer, texture_capture_timestamp_command->pool, texture_capture_timestamp_command->index);
@@ -2420,23 +2460,42 @@ void RenderingDeviceGraph::end_label() {
 	command_label_index = -1;
 }
 
-void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RDD::CommandBufferID &r_command_buffer, CommandBufferPool &r_command_buffer_pool) {
+// 结束一次draw grpah的录制与提交：可选择对命令做依赖排序与分层。
+// 在每一层内按优先级分组、合并barrier，最终把命令录到目标command buffer中
+void RenderingDeviceGraph::end(bool p_reorder_commands,
+	bool p_full_barriers,
+	RDD::CommandBufferID &r_command_buffer,
+	CommandBufferPool &r_command_buffer_pool)
+{
+	/// 如果没有任何命令被记录，直接返回
 	if (command_count == 0) {
 		// No commands have been logged, do nothing.
 		return;
 	}
 
+	// 线程本地，用于记录每条命令的排序视图
+	// 已经被排好序的命令？
 	thread_local LocalVector<RecordedCommandSort> commands_sorted;
+	/// 如果需要重排命令
 	if (p_reorder_commands) {
+		// Topological sort using Kahn's algorithm.
+		// Based on: https://en.wikipedia.org/wiki/Topological_sorting#K
+		// 入度为0的节点
 		thread_local LocalVector<int64_t> command_stack;
+		// 排好序的命令索引
 		thread_local LocalVector<int32_t> sorted_command_indices;
-		thread_local LocalVector<uint32_t> command_degrees;
+		// 命令的度
+		thread_local LocalVector<uint32_t> command_degrees;	
 		int32_t adjacency_list_index = 0;
 		int32_t command_index;
 
 		// Count all the incoming connections to every node by traversing their adjacency list.
+		///  检查所有节点的入度
+		// 入度数组
 		command_degrees.resize(command_count);
+		// 入度清零
 		memset(command_degrees.ptr(), 0, sizeof(uint32_t) * command_degrees.size());
+		// 邻接表表示的图，所以直接遍历邻接表就可以获取每个节点的入度
 		for (uint32_t i = 0; i < command_count; i++) {
 			const RecordedCommand &recorded_command = *reinterpret_cast<const RecordedCommand *>(&command_data[command_data_offsets[i]]);
 			adjacency_list_index = recorded_command.adjacent_command_list_index;
@@ -2449,13 +2508,16 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 		}
 
 		// Push to the stack all nodes that have no incoming connections.
+		// 入度为0的节点清空
 		command_stack.clear();
+		// 将当前入度为0的节点入栈
 		for (uint32_t i = 0; i < command_count; i++) {
 			if (command_degrees[i] == 0) {
 				command_stack.push_back(i);
 			}
 		}
 
+		// 已经有序的节点
 		sorted_command_indices.clear();
 		while (!command_stack.is_empty()) {
 			// Pop command from the stack.
@@ -2522,58 +2584,87 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 			commands_sorted[sorted_command_index].index = sorted_command_index;
 			commands_sorted[sorted_command_index].priority = PriorityTable[recorded_command.type];
 		}
-	} else {
+	}
+	/// 不需要重排命令的话
+	else {
+		// 将排好的序清空
 		commands_sorted.clear();
 		commands_sorted.resize(command_count);
 
+		// 顺序就是录入顺序
 		for (uint32_t i = 0; i < command_count; i++) {
 			commands_sorted[i].index = i;
 		}
 	}
 
+	// 等待所有“次级命令缓冲任务”完成（多线程录制的收尾同步）
 	_wait_for_secondary_command_buffer_tasks();
 
+	/// 如果有命令才会执行
 	if (command_count > 0) {
+		// GPU调试标签的当前索引（内部管理）
 		int32_t current_label_index = -1;
+		// GPU调试标签的当前层级（用于push/pop group）
 		int32_t current_label_level = -1;
+		// 在真正录制命令前，同步一次（标签状态），通常时清空/对齐label栈
 		_run_label_command_change(r_command_buffer, -1, -1, true, true, nullptr, 0, current_label_index, current_label_level);
 
+		/// 如果设备存在“避免在draw之后紧跟compute”的规避需求
 		if (device.workarounds.avoid_compute_after_draw) {
 			// Reset the state of the workaround.
+			// 重置内部状态（后续遇到draw/compute时会用到）
 			workarounds_state.draw_list_found = false;
 		}
 
+		/// 如果是要重排的
 		if (p_reorder_commands) {
 #if PRINT_RENDER_GRAPH
 			print_line("BEFORE SORT");
+			// 调试：打印排序前的视图
 			_print_render_commands(commands_sorted.ptr(), command_count);
 #endif
 
+			// 根据 <level, priority, 其它tie-breaker> 做稳定排序（具体比较器见结构体）
 			commands_sorted.sort();
 
 #if PRINT_RENDER_GRAPH
 			print_line("AFTER SORT");
+			// 调试：打印排序后的视图
 			_print_render_commands(commands_sorted.ptr(), command_count);
 #endif
 
 #if PRINT_COMMAND_RECORDING
+			// 调试：打印录制条数
 			print_line(vformat("Recording %d commands", command_count));
 #endif
 
+			// 用于在每一层内动态“抬升”某些类型的优先级
 			uint32_t boosted_priority = 0;
+			// 当前处理层级（拓扑层，保证依赖顺序）
 			uint32_t current_level = commands_sorted[0].level;
+			// 当前层级在数组中的起始下标
 			uint32_t current_level_start = 0;
+			/// 扫描排序后的所有命令
 			for (uint32_t i = 0; i < command_count; i++) {
 				if (current_level != commands_sorted[i].level) {
+					// 当前层的起始元素
 					RecordedCommandSort *level_command_ptr = &commands_sorted[current_level_start];
+					// 当前命令到起始命令的数量
 					uint32_t level_command_count = i - current_level_start;
+					// 这一层内部的优先级调整
 					_boost_priority_for_render_commands(level_command_ptr, level_command_count, boosted_priority);
+					// 合并层内的barrier
 					_group_barriers_for_render_commands(r_command_buffer, level_command_ptr, level_command_count, p_full_barriers);
+					// 录制这一层的命令
 					_run_render_commands(current_level, level_command_ptr, level_command_count, r_command_buffer, r_command_buffer_pool, current_label_index, current_label_level);
+					// 进入下一层
 					current_level = commands_sorted[i].level;
+					// 下一层的起始下标
 					current_level_start = i;
 				}
 			}
+
+			/// 剩下的就是最后一层了
 
 			RecordedCommandSort *level_command_ptr = &commands_sorted[current_level_start];
 			uint32_t level_command_count = command_count - current_level_start;
@@ -2584,21 +2675,29 @@ void RenderingDeviceGraph::end(bool p_reorder_commands, bool p_full_barriers, RD
 #if PRINT_RENDER_GRAPH
 			print_line("COMMANDS", command_count, "LEVELS", current_level + 1);
 #endif
-		} else {
+		}
+		/// 如果不要重排的话
+		else {
+			/// 逐条命令
 			for (uint32_t i = 0; i < command_count; i++) {
+				// 插入/合并所需barrier
 				_group_barriers_for_render_commands(r_command_buffer, &commands_sorted[i], 1, p_full_barriers);
+				// 录制该命令
 				_run_render_commands(i, &commands_sorted[i], 1, r_command_buffer, r_command_buffer_pool, current_label_index, current_label_level);
 			}
 		}
 
+		// 提交结尾的标签同步（把未匹配的label清空/正确pop）
 		_run_label_command_change(r_command_buffer, -1, -1, false, false, nullptr, 0, current_label_index, current_label_level);
 
 #if PRINT_COMMAND_RECORDING
+		// 调试：最终确认录制了多少条
 		print_line(vformat("Recorded %d commands", command_count));
 #endif
 	}
 
 	// Advance the frame counter. It's not necessary to do this if no commands are recorded because that means no secondary command buffers were used.
+	// 帧索引递增并环绕：仅当本帧确实有命令时推进（与次级CB使用有关）
 	frame = (frame + 1) % frames.size();
 }
 

@@ -4875,8 +4875,17 @@ void RenderingDeviceDriverVulkan::render_pass_free(RenderPassID p_render_pass) {
 
 static_assert(ARRAYS_COMPATIBLE_FIELDWISE(RDD::RenderPassClearValue, VkClearValue));
 
+/// 录制开始渲染通道的命令。
 void RenderingDeviceDriverVulkan::command_begin_render_pass(CommandBufferID p_cmd_buffer, RenderPassID p_render_pass, FramebufferID p_framebuffer, CommandBufferType p_cmd_buffer_type, const Rect2i &p_rect, VectorView<RenderPassClearValue> p_clear_values) {
+	// 还原framebuffer结构
 	Framebuffer *framebuffer = (Framebuffer *)(p_framebuffer.id);
+	/// 如果帧缓冲对应的是交换链图像，并且已经完成acquire
+	/// 那么需要在开始使用前做一次同步与布局转换
+	/*
+		必须在 当前命令缓冲里插入一次 Pipeline Barrier（图像内存屏障），明确告诉 Vulkan：
+		这个图像从「之前的状态」（通常是 PRESENT_SRC_KHR 或 UNDEFINED） → 变为「我要写颜色附件」的状态。
+		之后的 color attachment output 阶段 就能安全地写入它。
+	*/
 	if (framebuffer->swap_chain_acquired) {
 		// Insert a barrier to wait for the acquisition of the framebuffer before the render pass begins.
 		// 如果需要交换链，需要设置一个图像barrier
@@ -4893,7 +4902,7 @@ void RenderingDeviceDriverVulkan::command_begin_render_pass(CommandBufferID p_cm
 	}
 
 	VkRenderPassBeginInfo render_pass_begin = {};
-	render_pass_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	render_pass_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;	// 指明是渲染通道开始信息
 	render_pass_begin.renderPass = (VkRenderPass)p_render_pass.id;
 	render_pass_begin.framebuffer = framebuffer->vk_framebuffer;
 
@@ -4902,9 +4911,12 @@ void RenderingDeviceDriverVulkan::command_begin_render_pass(CommandBufferID p_cm
 	render_pass_begin.renderArea.extent.width = p_rect.size.x;
 	render_pass_begin.renderArea.extent.height = p_rect.size.y;
 
-	render_pass_begin.clearValueCount = p_clear_values.size();	// 不理解，清理值为啥还需要数组？
+	render_pass_begin.clearValueCount = p_clear_values.size();	// 有多个需要清空的东西，就有多个清空值
 	render_pass_begin.pClearValues = (const VkClearValue *)p_clear_values.ptr();
 
+	// 子通道命令递交方式：
+	// * inline: 在主命令缓冲内联记录draw/绑定等命令
+	// * secondary command buffers: 后续通过二级命令缓冲执行（便于并行录制与复用）
 	VkSubpassContents vk_subpass_contents = p_cmd_buffer_type == COMMAND_BUFFER_TYPE_PRIMARY ? VK_SUBPASS_CONTENTS_INLINE : VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS;
 	vkCmdBeginRenderPass((VkCommandBuffer)p_cmd_buffer.id, &render_pass_begin, vk_subpass_contents);
 
