@@ -401,7 +401,7 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 				shader = scene_shader.debug_shadow_splits_material_shader_ptr;
 			} else {
 #endif
-				// 正常颜色pas：使用表面自己的材质与着色器，并标记材质被使用（驱动资源生命周期/热更新）
+				// 正常颜色pass：使用表面自己的材质与着色器，并标记材质被使用（驱动资源生命周期/热更新）
 				material_uniform_set = surf->material_uniform_set;
 				shader = surf->shader;
 				surf->material->set_as_used();
@@ -777,6 +777,9 @@ void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_lis
 		} break;
 		case PASS_MODE_SDF: {
 			_render_list_template<PASS_MODE_SDF>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
+		} break;
+		case PASS_MODE_GBUFFER: {
+			_render_list_template<PASS_MODE_GBUFFER>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
 		} break;
 		default: {
 			// Unknown pass mode.
@@ -2453,7 +2456,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				render_list[RENDER_LIST_OPAQUE].element_info.ptr(),
 				render_list[RENDER_LIST_OPAQUE].elements.size(),
 				reverse_cull,
-				PASS_MODE_COLOR,
+				PASS_MODE_GBUFFER,
 				opaque_color_pass_flags,
 				rb_data.is_null(),
 				p_render_data->directional_light_soft_shadows,

@@ -6884,29 +6884,44 @@ void RenderingDevice::execute_chained_cmds(bool p_present_swap_chain, RenderingD
 	frames[frame].semaphores_to_wait_on.clear();
 }
 
+/// <summary>
+///  执行帧，并根据参数决定是否 present 交换链。
+/// </summary>
+/// <param name="p_present"></param>
 void RenderingDevice::_execute_frame(bool p_present) {
 	// Check whether this frame should present the swap chains and in which queue.
+	// 判断是否需要呈现
 	const bool frame_can_present = p_present && !frames[frame].swap_chains_to_present.is_empty();
+	// 判断是否是单独的呈现队列（main queue与present queue不同）
 	const bool separate_present_queue = main_queue != present_queue;
 
 	// The semaphore is required if the frame can be presented and a separate present queue is used;
+	// 如果要呈现并且使用了单独的呈现队列，则需要信号量；
 	// since the separate queue will wait for that semaphore before presenting.
+	// 因为单独的队列会在呈现前等待该信号量。
 	const RDD::SemaphoreID semaphore = (frame_can_present && separate_present_queue)
 			? frames[frame].semaphore
 			: RDD::SemaphoreID(nullptr);
+	// 直接呈现交换链
 	const bool present_swap_chain = frame_can_present && !separate_present_queue;
 
+	// 先执行命令缓冲（这里面也会调用command_queue_execute_and_present方法，只不过是对
+	// main queue调用）
 	execute_chained_cmds(present_swap_chain, frames[frame].fence, semaphore);
 	// Indicate the fence has been signaled so the next time the frame's contents need to be
 	// used, the CPU needs to wait on the work to be completed.
+	// 表明fence已经被触发，这样下次需要使用该帧内容时，CPU需要等待工作完成。
 	frames[frame].fence_signaled = true;
 
 	if (frame_can_present) {
 		if (separate_present_queue) {
 			// Issue the presentation separately if the presentation queue is different from the main queue.
+			// 如果呈现队列与主队列不同，则单独发出呈现请求。
 			driver->command_queue_execute_and_present(present_queue, frames[frame].semaphore, {}, {}, {}, frames[frame].swap_chains_to_present);
 		}
 
+		// 如果呈现队列和主队列一样，那么就意味着在执行的时候就已经呈现了。
+		// 问题：会不会是在下一帧的时候呈现的？因为有一个准备屏幕的函数会先呈现一次。
 		frames[frame].swap_chains_to_present.clear();
 	}
 }
