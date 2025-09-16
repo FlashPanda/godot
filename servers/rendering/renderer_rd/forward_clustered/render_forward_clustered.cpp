@@ -2451,32 +2451,32 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				0.0f);
 
 			// 绘制自定义pass
-			RenderListParameters custom_pass_params(
-				render_list[RENDER_LIST_OPAQUE].elements.ptr(),
-				render_list[RENDER_LIST_OPAQUE].element_info.ptr(),
-				render_list[RENDER_LIST_OPAQUE].elements.size(),
-				reverse_cull,
-				PASS_MODE_GBUFFER,
-				opaque_color_pass_flags,
-				rb_data.is_null(),
-				p_render_data->directional_light_soft_shadows,
-				rp_uniform_set,
-				get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_WIREFRAME,
-				Vector2(),
-				p_render_data->scene_data->lod_distance_multiplier,
-				p_render_data->scene_data->screen_mesh_lod_threshold,
-				p_render_data->scene_data->view_count,
-				0,
-				base_specialization);
+			//RenderListParameters custom_pass_params(
+			//	render_list[RENDER_LIST_OPAQUE].elements.ptr(),
+			//	render_list[RENDER_LIST_OPAQUE].element_info.ptr(),
+			//	render_list[RENDER_LIST_OPAQUE].elements.size(),
+			//	reverse_cull,
+			//	PASS_MODE_GBUFFER,
+			//	opaque_color_pass_flags,
+			//	rb_data.is_null(),
+			//	p_render_data->directional_light_soft_shadows,
+			//	rp_uniform_set,
+			//	get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_WIREFRAME,
+			//	Vector2(),
+			//	p_render_data->scene_data->lod_distance_multiplier,
+			//	p_render_data->scene_data->screen_mesh_lod_threshold,
+			//	p_render_data->scene_data->view_count,
+			//	0,
+			//	base_specialization);
 
 			// 3. 执行绘制
-			_render_list_with_draw_list(
-				&custom_pass_params,
-				color_framebuffer,
-				RD::DrawFlags(load_color ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_COLOR_ALL) | (depth_pre_pass ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_DEPTH),
-				c,
-				0.f
-			);
+			//_render_list_with_draw_list(
+			//	&custom_pass_params,
+			//	color_framebuffer,
+			//	RD::DrawFlags(load_color ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_COLOR_ALL) | (depth_pre_pass ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_DEPTH),
+			//	c,
+			//	0.f
+			//);
 		}
 
 		RD::get_singleton()->draw_command_end_label();

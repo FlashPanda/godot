@@ -2810,4 +2810,5 @@ void main() {
 #endif
 
 	fragment_shader(scene_data_block.data);
+	frag_color = vec4(1.0, 0.0, 0.0, 1.0);
 }
