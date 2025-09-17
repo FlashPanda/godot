@@ -4356,7 +4356,14 @@ void RenderForwardClustered::_update_global_pipeline_data_requirements_from_ligh
 }
 
 // 实例是往渲染器里添加的。
-void RenderForwardClustered::_geometry_instance_add_surface_with_material(GeometryInstanceForwardClustered *ginstance, uint32_t p_surface, SceneShaderForwardClustered::MaterialData *p_material, uint32_t p_material_id, uint32_t p_shader_id, RID p_mesh) {
+void RenderForwardClustered::_geometry_instance_add_surface_with_material(
+	GeometryInstanceForwardClustered *ginstance,
+	uint32_t p_surface,
+	SceneShaderForwardClustered::MaterialData *p_material,
+	uint32_t p_material_id,
+	uint32_t p_shader_id,
+	RID p_mesh)
+{
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	uint32_t flags = 0;
 

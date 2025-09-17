@@ -89,7 +89,9 @@ public:
 	};
 
 	struct MaterialData {
+		// 这个材质可能会用到的渲染目标资源缓存
 		Vector<RendererRD::TextureStorage::RenderTarget *> render_target_cache;
+
 		void update_uniform_buffer(const HashMap<StringName, ShaderLanguage::ShaderNode::Uniform> &p_uniforms, const uint32_t *p_uniform_offsets, const HashMap<StringName, Variant> &p_parameters, uint8_t *p_buffer, uint32_t p_buffer_size, bool p_use_linear_color);
 		void update_textures(const HashMap<StringName, Variant> &p_parameters, const HashMap<StringName, HashMap<int, RID>> &p_default_textures, const Vector<ShaderCompiler::GeneratedCode::Texture> &p_texture_uniforms, RID *p_textures, bool p_use_linear_color, bool p_3d_material);
 		void set_as_used();
@@ -104,17 +106,25 @@ public:
 		void free_parameters_uniform_set(RID p_uniform_set);
 
 	private:
+		// 对材质存储开放成员
 		friend class MaterialStorage;
 
+		// 自己的资源ID
 		RID self;
+		/// 指向全局UBO缓存链表中的节点
 		List<RID>::Element *global_buffer_E = nullptr;
+		/// 指向全局纹理集缓存链表中的节点
 		List<RID>::Element *global_texture_E = nullptr;
+		/// 帧内或跨帧的“访问代/Pass计数”，配合 used_global_textures 做去重与过期判断。
 		uint64_t global_textures_pass = 0;
+		/// 记录每个全局纹理在最近一次使用时的pass编号，避免重复绑定/便于清理。
 		HashMap<StringName, uint64_t> used_global_textures;
 
 		//internally by update_parameters_uniform_set
+		// 内部数据，用于存储线性和sRGB两种颜色空间的统一缓冲区数据和资源ID
 		Vector<uint8_t> ubo_data[2]; // 0: linear buffer; 1: sRGB buffer.
 		RID uniform_buffer[2]; // 0: linear buffer; 1: sRGB buffer.
+		// 缓存已解析好的纹理RID列表（与着色器槽位一一对应）
 		Vector<RID> texture_cache;
 	};
 
