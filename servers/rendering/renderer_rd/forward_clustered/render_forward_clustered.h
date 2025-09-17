@@ -435,6 +435,7 @@ private:
 	};
 
 	// Cached data for drawing surfaces
+	// 前向集群渲染器的几何实例的表面数据缓存
 	struct GeometryInstanceSurfaceDataCache {
 		enum {
 			FLAG_PASS_DEPTH = 1,
@@ -496,6 +497,7 @@ private:
 				compilation_dirty_element(this), compilation_all_element(this) {}
 	};
 
+	// 前向集群渲染器的几何实例集
 	class GeometryInstanceForwardClustered : public RenderGeometryInstanceBase {
 	public:
 		// lightmap
