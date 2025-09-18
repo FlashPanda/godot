@@ -168,7 +168,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	uses_normal |= uses_normal_map;
 	uses_tangent |= uses_normal_map;
 
-#if 0
+#if 1
 	print_line("**compiling shader:");
 	print_line("**defines:\n");
 	for (int i = 0; i < gen_code.defines.size(); i++) {

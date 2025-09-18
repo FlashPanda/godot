@@ -46,28 +46,56 @@ namespace RendererRD {
 
 class MaterialStorage : public RendererMaterialStorage {
 public:
+	/// <summary>
+	/// 着色器类型
+	/// </summary>
 	enum ShaderType {
-		SHADER_TYPE_2D,
-		SHADER_TYPE_3D,
-		SHADER_TYPE_PARTICLES,
-		SHADER_TYPE_SKY,
-		SHADER_TYPE_FOG,
+		SHADER_TYPE_2D,				// 2D着色器
+		SHADER_TYPE_3D,				// 3D着色器
+		SHADER_TYPE_PARTICLES,		// 粒子着色器
+		SHADER_TYPE_SKY,			// 天空着色器
+		SHADER_TYPE_FOG,			// 体积雾着色器
 		SHADER_TYPE_MAX
 	};
 
+	/// <summary>
+	/// 着色数据（运行时着色器描述）
+	/// </summary>
 	struct ShaderData {
+		/// <summary>
+		///  混合模式
+		/// 用于控制一个物体或像素在渲染时如何与背景（已经存在的帧缓冲颜色）进行叠加。
+		/// </summary>
 		enum BlendMode {
-			BLEND_MODE_MIX,
-			BLEND_MODE_ADD,
-			BLEND_MODE_SUB,
-			BLEND_MODE_MUL,
-			BLEND_MODE_ALPHA_TO_COVERAGE,
-			BLEND_MODE_PREMULTIPLIED_ALPHA,
-			BLEND_MODE_DISABLED
+			BLEND_MODE_MIX,		// FinalColor = SrcColor * SrcAlpha + DstColor * (1 - SrcAlpha)
+			BLEND_MODE_ADD,		// FinalColor = SrcColor + DstColor
+			BLEND_MODE_SUB,		// FinalColor = DstColor - SrcColor; 从背景颜色中减去源颜色，产生变暗或“挖空”的效果。
+			BLEND_MODE_MUL,		// FinalColor = SrcColor * DstColor; 让背景颜色与源颜色相乘，整体变暗。
+			BLEND_MODE_ALPHA_TO_COVERAGE,	// 用 alpha 值控制 MSAA 采样掩码，而不是传统混合。能让半透明边缘在多重采样中更平滑。
+			BLEND_MODE_PREMULTIPLIED_ALPHA,	// FinalColor = SrcColor + DstColor * (1 - SrcAlpha) （前提是 SrcColor 已经乘过 alpha）
+											// 带有渐变透明的火焰或烟雾，预乘 alpha 后不会出现黑色边框。
+			BLEND_MODE_DISABLED		// 不进行任何混合，直接覆盖背景。
 		};
 
 		String path;
+
+		/// <summary>
+		/// 这是一个表，记录了 shader 里所有声明的 uniform 参数：名字、类型、默认值、布局。
+		/// 它来自 Godot 的 ShaderLanguage 编译阶段，shader 源码会被分析/编译 → 得到 AST → 把 uniform 信息抽取出来，填进这个表。
+		/// 这是源码编译后的“参数反射表”。
+		/// 比如：
+		/// uniform sampler2D albedo_tex : hint_albedo;
+		/// 记录成：
+		/// "albedo_tex" → {0: RID(default_white_texture)}
+		/// 这个表的作用是保证在没有手动指定时，shader 参数仍有一个默认纹理（避免 shader 采样空指针）
+		/// </summary>
 		HashMap<StringName, ShaderLanguage::ShaderNode::Uniform> uniforms;
+
+		/// <summary>
+		/// 记录了 shader 中每个纹理参数的默认资源绑定。
+		/// Key = 参数名，Value = 一个 (index → RID) 映射。
+		/// 
+		/// </summary>
 		HashMap<StringName, HashMap<int, RID>> default_texture_params;
 
 		virtual void set_path_hint(const String &p_hint);

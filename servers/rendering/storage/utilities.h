@@ -35,6 +35,10 @@
 
 class DependencyTracker;
 
+/// <summary>
+///  Godot 渲染/场景系统里的“依赖发布者”，它负责在资源状态变化或销毁时，
+///  通知所有依赖它的对象做对应更新
+/// </summary>
 class Dependency {
 public:
 	enum DependencyChangedNotification {
