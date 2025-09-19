@@ -713,7 +713,10 @@ enum TextureDetectRoughnessChannel {
 	virtual int mesh_get_blend_shape_count(RID p_mesh) const = 0;
 
 	/*
-		BlendShapeMode（归一化或相对模式）的设置作用于整个 Mesh 资源，而非单个 Surface。原因在于 Blend Shape 本质上是对网格整体顶点形状的插值或偏移，其权重计算需要跨越所有 Surface 进行统一处理。Surface 仅用于将几何数据按材质分组，但并不改变形状混合的统计方式，因此 BlendShapeMode 只能在 Mesh 级别定义。
+		BlendShapeMode（归一化或相对模式）的设置作用于整个 Mesh 资源，而非单个 Surface。
+		原因在于 Blend Shape 本质上是对网格整体顶点形状的插值或偏移，其权重计算需要跨越
+		所有 Surface 进行统一处理。Surface 仅用于将几何数据按材质分组，但并不改变形状混
+		合的统计方式，因此 BlendShapeMode 只能在 Mesh 级别定义。
 	*/
 
 	enum BlendShapeMode {
