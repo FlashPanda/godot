@@ -41,6 +41,7 @@
 
 namespace RendererRD {
 
+// MeshStorage 管的是 “Mesh 资源”在 GPU 侧的生命周期与数据。
 class MeshStorage : public RendererMeshStorage {
 public:
 	enum DefaultRDBuffer {
@@ -72,15 +73,17 @@ private:
 
 	struct Mesh {
 		struct Surface {
+			// 图元类型，用于对应glDrawElements/vkCmdDrawIndexed的primitive类型
 			RS::PrimitiveType primitive = RS::PRIMITIVE_POINTS;
+			// 顶点的格式掩码，用于描述启用了哪些顶点属性
 			uint64_t format = 0;
 
-			RID vertex_buffer;
-			RID attribute_buffer;
-			RID skin_buffer;
-			uint32_t vertex_count = 0;
-			uint32_t vertex_buffer_size = 0;
-			uint32_t skin_buffer_size = 0;
+			RID vertex_buffer;		// 顶点缓冲资源
+			RID attribute_buffer;	// 属性缓冲资源
+			RID skin_buffer;		// 蒙皮权重和骨骼索引缓冲
+			uint32_t vertex_count = 0;	// 顶点数量
+			uint32_t vertex_buffer_size = 0;	// 顶点缓冲字节大小
+			uint32_t skin_buffer_size = 0; // 蒙皮缓冲字节大小
 
 			// A different pipeline needs to be allocated
 			// depending on the inputs available in the
@@ -89,112 +92,143 @@ private:
 			// combinations, so a simple array is the most
 			// cache-efficient structure.
 
+			// 不同输入组合下的渲染版本，避免重复创建管线。
+			// 虽然可能的组合有很多种，但是通常只会用到几种，管理起来
+			// 解决的问题是：一个几何体在不同材质输入/Shader 组合下，需要不同的渲染配置 (PSO)。
 			struct Version {
-				uint64_t input_mask = 0;
-				uint32_t current_buffer = 0;
+				uint64_t input_mask = 0;		// 当前版本的输入掩码
+				uint32_t current_buffer = 0;	// 
 				uint32_t previous_buffer = 0;
-				bool input_motion_vectors = false;
-				RD::VertexFormatID vertex_format = 0;
-				RID vertex_array;
+				bool input_motion_vectors = false;	// 是否有运动向量输入
+				RD::VertexFormatID vertex_format = 0;	// 顶点格式布局
+				RID vertex_array;	// 顶点数组对象（VAO这种）
 			};
 
+			// 多线程访问锁
 			SpinLock version_lock; //needed to access versions
+			// 版本数组
 			Version *versions = nullptr; //allocated on demand
+			// 版本数量
 			uint32_t version_count = 0;
 
-			RID index_buffer;
-			RID index_array;
-			uint32_t index_count = 0;
+			RID index_buffer;	// 索引缓冲
+			RID index_array;	// 索引数组
+			uint32_t index_count = 0;	// 索引数量
 
+			// LOD结构
+			// LOD只做减面，不新增顶点，也就是说不能指定LOD的模型。
 			struct LOD {
+				// 屏幕空间边长阈值
 				float edge_length = 0.0;
+				// LOD的索引数量
 				uint32_t index_count = 0;
+				// 索引缓冲
 				RID index_buffer;
+				// 索引数组
 				RID index_array;
 			};
 
+			// LOD数组
 			LOD *lods = nullptr;
+			// LOD数量
 			uint32_t lod_count = 0;
 
+			// 表面包围盒，用于裁剪和加速结构
 			AABB aabb;
 
+			// 每个骨骼的局部包围盒，用于骨骼动画下的裁剪
 			Vector<AABB> bone_aabbs;
 
 			// Transform used in runtime bone AABBs compute.
 			// As bone AABBs are saved in Mesh space, but bones animation is in Skeleton space.
+			// 网格坐标系 -> 骨骼坐标系的变换矩阵，用于实时计算骨骼AABB
 			Transform3D mesh_to_skeleton_xform;
 
+			// uv偏移缩放
 			Vector4 uv_scale;
 
+			// 变形目标缓冲
 			RID blend_shape_buffer;
 
+			// 表面绑定的材质ID
 			RID material;
 
+			// 普通渲染的排序参数
 			uint32_t render_index = 0;
 			uint64_t render_pass = 0;
 
+			// 大量实例渲染的排序参数
 			uint32_t multimesh_render_index = 0;
 			uint64_t multimesh_render_pass = 0;
 
+			// 粒子渲染的排序参数
 			uint32_t particles_render_index = 0;
 			uint64_t particles_render_pass = 0;
 
+			// 着色器使用的uniform集，存放常量缓冲、纹理等资源绑定。
 			RID uniform_set;
 		};
 
+		// 变形目标数量
 		uint32_t blend_shape_count = 0;
+		// 变形混合模式
 		RS::BlendShapeMode blend_shape_mode = RS::BLEND_SHAPE_MODE_NORMALIZED;
 
+		// 表面数组
 		Surface **surfaces = nullptr;
-		uint32_t surface_count = 0;
+		uint32_t surface_count = 0;	// 表面数量
 
+		// 骨骼权重
 		bool has_bone_weights = false;
 
-		AABB aabb;
-		AABB custom_aabb;
-		uint64_t skeleton_aabb_version = 0;
-		RID skeleton_aabb_rid;
+		AABB aabb;	// 网格包围盒
+		AABB custom_aabb;	// 自定义包围盒
+		uint64_t skeleton_aabb_version = 0;	// 骨骼动画时 AABB 的版本号。
+		RID skeleton_aabb_rid;	// 存放骨骼 AABB 的 GPU 资源句柄。
 
-		Vector<RID> material_cache;
+		Vector<RID> material_cache;	// 缓存本 Mesh 使用过的材质 RID
 
-		List<MeshInstance *> instances;
+		List<MeshInstance *> instances;	// 所有引用了此 Mesh 的实例（MeshInstance）列表。
 
-		RID shadow_mesh;
-		HashSet<Mesh *> shadow_owners;
+		RID shadow_mesh;	// 阴影用的替代 Mesh。
+		HashSet<Mesh *> shadow_owners;	// 反向记录：有哪些 Mesh 把我当作 shadow_mesh 使用。
 
-		String path;
+		String path;	// Mesh 的资源路径（可能是 .glb/.mesh/.import 之类）
 
-		Dependency dependency;
+		Dependency dependency; // 依赖追踪器：所有依赖本mesh的外部东西，当本mesh变更时会收到通知
 	};
 
 	mutable RID_Owner<Mesh, true> mesh_owner;
 
 	/* Mesh Instance API */
 
+	// instance的作用是：保存一个具体的mesh在渲染时的运行时状态
 	struct MeshInstance {
-		Mesh *mesh = nullptr;
-		RID skeleton;
+		Mesh *mesh = nullptr;	// 静态的网格资源
+		RID skeleton;	// 引用的骨骼RID
+
+		// 运行时的表面数据
 		struct Surface {
-			RID vertex_buffer[2];
-			RID uniform_set[2];
-			uint32_t current_buffer = 0;
-			uint32_t previous_buffer = 0;
-			uint64_t last_change = 0;
+			RID vertex_buffer[2];	// 双重顶点缓冲（用于动态更新，避免写/读错误）
+			RID uniform_set[2];		// 双缓冲对应的uniform集
+			uint32_t current_buffer = 0;	// 当前用的缓冲槽位
+			uint32_t previous_buffer = 0;	// 之前用的缓冲槽位
+			uint64_t last_change = 0;	// 最后修改的时间戳，判断是否要刷新
 
-			Mesh::Surface::Version *versions = nullptr; //allocated on demand
-			uint32_t version_count = 0;
+			Mesh::Surface::Version *versions = nullptr; //allocated on demand 指向版本数据，用来跟踪不同材质或者shader 变体的GPU对象
+			uint32_t version_count = 0;	// 有多少个版本。
 		};
-		LocalVector<Surface> surfaces;
-		LocalVector<float> blend_weights;
+		LocalVector<Surface> surfaces;		// 网格的多个表面
+		LocalVector<float> blend_weights;	// 形变的权重数组
 
-		RID blend_weights_buffer;
-		List<MeshInstance *>::Element *I = nullptr; //used to erase itself
-		uint64_t skeleton_version = 0;
-		bool dirty = false;
-		bool weights_dirty = false;
-		SelfList<MeshInstance> weight_update_list;
-		SelfList<MeshInstance> array_update_list;
-		Transform2D canvas_item_transform_2d;
+		RID blend_weights_buffer; // GPU缓冲区，将上面的权重上传到GPU
+		List<MeshInstance *>::Element *I = nullptr; //used to erase itself 用于在链表中删除自身
+		uint64_t skeleton_version = 0;	// 最后一次使用的骨骼版本号。
+		bool dirty = false;		// 标记此实例数据是否需要上传更新
+		bool weights_dirty = false;	// 标记形变权重是否需要更新
+		SelfList<MeshInstance> weight_update_list;	// 自指列表，将需要更新的权重实例串起来
+		SelfList<MeshInstance> array_update_list; // 自指列表，将需要更新顶点属性的实例串起来
+		Transform2D canvas_item_transform_2d;	// 2D变换，如果mesh被用在2D的画布中。
 		MeshInstance() :
 				weight_update_list(this), array_update_list(this) {}
 	};

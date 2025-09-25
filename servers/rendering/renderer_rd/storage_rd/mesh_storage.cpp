@@ -215,25 +215,35 @@ bool MeshStorage::free(RID p_rid) {
 }
 
 /* MESH API */
-
+/// 创建就是分配一个RID
 RID MeshStorage::mesh_allocate() {
 	return mesh_owner.allocate_rid();
 }
 
+// 初始化是创建一个空的Mesh
 void MeshStorage::mesh_initialize(RID p_rid) {
 	mesh_owner.initialize_rid(p_rid, Mesh());
 }
 
+/// <summary>
+/// 将一个mesh释放，这就要考虑比较多的问题了。
+/// 先清理网格的数据
+/// 然后将依赖也清理
+/// 最后回收RID
+/// </summary>
+/// <param name="p_rid"></param>
 void MeshStorage::mesh_free(RID p_rid) {
-	mesh_clear(p_rid);
-	mesh_set_shadow_mesh(p_rid, RID());
+	mesh_clear(p_rid);	// 清理网格的数据
+	mesh_set_shadow_mesh(p_rid, RID());		// 将阴影网格也置空
 	Mesh *mesh = mesh_owner.get_or_null(p_rid);
-	ERR_FAIL_NULL(mesh);
+	ERR_FAIL_NULL(mesh);	
 
-	mesh->dependency.deleted_notify(p_rid);
+	mesh->dependency.deleted_notify(p_rid);		// 删除对这个网格的依赖
+	/// 如果网格还是在渲染的实例，就报错
 	if (mesh->instances.size()) {
 		ERR_PRINT("deleting mesh with active instances");
 	}
+	/// 如果网格被用作其他网格的阴影网格，就把那些网格的shadow_mesh也置空
 	if (mesh->shadow_owners.size()) {
 		for (Mesh *E : mesh->shadow_owners) {
 			Mesh *shadow_owner = E;
@@ -241,7 +251,7 @@ void MeshStorage::mesh_free(RID p_rid) {
 			shadow_owner->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
 		}
 	}
-	mesh_owner.free(p_rid);
+	mesh_owner.free(p_rid);		// 回收网格的RID
 }
 
 void MeshStorage::mesh_set_blend_shape_count(RID p_mesh, int p_blend_shape_count) {
@@ -256,7 +266,12 @@ void MeshStorage::mesh_set_blend_shape_count(RID p_mesh, int p_blend_shape_count
 }
 
 /// Returns stride
+/// 把 CPU 侧传进来的 RS::SurfaceData（顶点/属性/蒙皮/索引/LOD/AABB/材质 等）转换成底层 RD（渲染设备）
+/// 资源（VBO/IBO/SSBO、UniformSet），把它挂到 Mesh 的 surfaces 列表里，更新 AABB/依赖/实例，并处理版
+/// 本兼容与若干数据一致性校验与带权“补齐”优化。
 void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface) {
+
+	/// 校验：网格存在，并且表面数量没有超限
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
 
@@ -264,35 +279,42 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 
 #ifdef DEBUG_ENABLED
 	//do a validation, to catch errors first
+	// 做一个验证，以首先捕获错误
 	{
-		uint32_t stride = 0;
-		uint32_t attrib_stride = 0;
-		uint32_t skin_stride = 0;
+		uint32_t stride = 0;			// 顶点的步长
+		uint32_t attrib_stride = 0;		// 属性的步长
+		uint32_t skin_stride = 0;		// 蒙皮的步长
 
-		for (int i = 0; i < RS::ARRAY_WEIGHTS; i++) {
-			if ((p_surface.format & (1ULL << i))) {
+		for (int i = 0; i < RS::ARRAY_WEIGHTS; i++) {	// 遍历各类数组通道标志（到 WEIGHTS 之前）
+			if ((p_surface.format & (1ULL << i))) {		// 如果表面格式里有这个数组
 				switch (i) {
 					case RS::ARRAY_VERTEX: {
 						if ((p_surface.format & RS::ARRAY_FLAG_USE_2D_VERTICES) || (p_surface.format & RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES)) {
+							// 2D顶点数组是float2
 							stride += sizeof(float) * 2;
 						} else {
+							// 3D顶点数组是float3
 							stride += sizeof(float) * 3;
 						}
 
 					} break;
 					case RS::ARRAY_NORMAL: {
+						// 法线数组再加uint16_t * 2
 						stride += sizeof(uint16_t) * 2;
 
 					} break;
 					case RS::ARRAY_TANGENT: {
 						if (!(p_surface.format & RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES)) {
+							// 不压缩的切线也是uint16_t * 2;
 							stride += sizeof(uint16_t) * 2;
 						}
 					} break;
 					case RS::ARRAY_COLOR: {
+						// 颜色属性大概就是4字节，RGBA
 						attrib_stride += sizeof(uint32_t);
 					} break;
 					case RS::ARRAY_TEX_UV: {
+						// 纹理分压缩与不压缩，压缩是uint16_t * 2，不压缩是float * 2
 						if (p_surface.format & RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES) {
 							attrib_stride += sizeof(uint16_t) * 2;
 						} else {
@@ -301,6 +323,7 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 
 					} break;
 					case RS::ARRAY_TEX_UV2: {
+						// 第二套纹理也是一样
 						if (p_surface.format & RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES) {
 							attrib_stride += sizeof(uint16_t) * 2;
 						} else {
@@ -315,12 +338,13 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 						int idx = i - RS::ARRAY_CUSTOM0;
 						const uint32_t fmt_shift[RS::ARRAY_CUSTOM_COUNT] = { RS::ARRAY_FORMAT_CUSTOM0_SHIFT, RS::ARRAY_FORMAT_CUSTOM1_SHIFT, RS::ARRAY_FORMAT_CUSTOM2_SHIFT, RS::ARRAY_FORMAT_CUSTOM3_SHIFT };
 						uint32_t fmt = (p_surface.format >> fmt_shift[idx]) & RS::ARRAY_FORMAT_CUSTOM_MASK;
-						const uint32_t fmtsize[RS::ARRAY_CUSTOM_MAX] = { 4, 4, 4, 8, 4, 8, 12, 16 };
-						attrib_stride += fmtsize[fmt];
+						const uint32_t fmtsize[RS::ARRAY_CUSTOM_MAX] = { 4, 4, 4, 8, 4, 8, 12, 16 };	 // 各格式对应字节大小
+						attrib_stride += fmtsize[fmt]; // 加上相应的字节大小
 
 					} break;
 					case RS::ARRAY_WEIGHTS:
 					case RS::ARRAY_BONES: {
+						// 权重和骨骼看是否是用8个骨骼
 						//uses a separate array
 						bool use_8 = p_surface.format & RS::ARRAY_FLAG_USE_8_BONE_WEIGHTS;
 						skin_stride += sizeof(int16_t) * (use_8 ? 16 : 8);
@@ -329,16 +353,17 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 			}
 		}
 
-		int expected_size = stride * p_surface.vertex_count;
+		int expected_size = stride * p_surface.vertex_count;	// 期望的顶点数据字节大小
 		ERR_FAIL_COND_MSG(expected_size != p_surface.vertex_data.size(), "Size of vertex data provided (" + itos(p_surface.vertex_data.size()) + ") does not match expected (" + itos(expected_size) + ")");
 
-		int bs_expected_size = expected_size * mesh->blend_shape_count;
+		int bs_expected_size = expected_size * mesh->blend_shape_count; // 期望的变形目标数据字节大小
 
 		ERR_FAIL_COND_MSG(bs_expected_size != p_surface.blend_shape_data.size(), "Size of blend shape data provided (" + itos(p_surface.blend_shape_data.size()) + ") does not match expected (" + itos(bs_expected_size) + ")");
 
-		int expected_attrib_size = attrib_stride * p_surface.vertex_count;
+		int expected_attrib_size = attrib_stride * p_surface.vertex_count; // 期望的属性数据字节大小
 		ERR_FAIL_COND_MSG(expected_attrib_size != p_surface.attribute_data.size(), "Size of attribute data provided (" + itos(p_surface.attribute_data.size()) + ") does not match expected (" + itos(expected_attrib_size) + ")");
 
+		// 如果有骨骼变形，蒙皮的大小也是要确保的。
 		if ((p_surface.format & RS::ARRAY_FORMAT_WEIGHTS) && (p_surface.format & RS::ARRAY_FORMAT_BONES)) {
 			expected_size = skin_stride * p_surface.vertex_count;
 			ERR_FAIL_COND_MSG(expected_size != p_surface.skin_data.size(), "Size of skin data provided (" + itos(p_surface.skin_data.size()) + ") does not match expected (" + itos(expected_size) + ")");
@@ -347,6 +372,7 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 
 #endif
 
+	// 版本号
 	uint64_t surface_version = p_surface.format & (uint64_t(RS::ARRAY_FLAG_FORMAT_VERSION_MASK) << RS::ARRAY_FLAG_FORMAT_VERSION_SHIFT);
 	RS::SurfaceData new_surface = p_surface;
 #ifdef DISABLE_DEPRECATED
@@ -354,7 +380,7 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 	ERR_FAIL_COND_MSG(surface_version != RS::ARRAY_FLAG_FORMAT_CURRENT_VERSION, "Surface version provided (" + itos(int(surface_version >> RS::ARRAY_FLAG_FORMAT_VERSION_SHIFT)) + ") does not match current version (" + itos(RS::ARRAY_FLAG_FORMAT_CURRENT_VERSION >> RS::ARRAY_FLAG_FORMAT_VERSION_SHIFT) + ")");
 
 #else
-
+	// 版本格式修正
 	if (surface_version != uint64_t(RS::ARRAY_FLAG_FORMAT_CURRENT_VERSION)) {
 		RS::get_singleton()->fix_surface_compatibility(new_surface);
 		surface_version = new_surface.format & (RS::ARRAY_FLAG_FORMAT_VERSION_MASK << RS::ARRAY_FLAG_FORMAT_VERSION_SHIFT);
@@ -365,11 +391,12 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 	}
 #endif
 
-	Mesh::Surface *s = memnew(Mesh::Surface);
+	Mesh::Surface *s = memnew(Mesh::Surface);	// 新建一个网格表面（用于渲染的）
 
-	s->format = new_surface.format;
-	s->primitive = new_surface.primitive;
+	s->format = new_surface.format;			// 格式位域
+	s->primitive = new_surface.primitive;	// 图元类型
 
+	// 若有蒙皮或 blendshape，后续需要把 VBO 作为 SSBO 使用
 	bool use_as_storage = (new_surface.skin_data.size() || mesh->blend_shape_count > 0);
 
 	if (new_surface.vertex_data.size()) {
@@ -379,6 +406,9 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 		// This allows us to avoid adding a shader permutation, and avoid passing dummy tangents. Since the stride is kept small
 		// this should still be a net win for bandwidth.
 		// If we do this, then the last normal will read past the end of the array. So we need to pad the array with dummy data.
+		// 如果是不压缩、含法线但不含切线，则用一个“小技巧”：
+		// 让 shader 以 vec4 方式读取法线（占 4 分量），但缓冲里仅放 2 分量/法线，借此让 shader 区分“未压缩但无切线”的布局，
+		// 带来的后果是最后一个法线会越界读取，因此需要额外 pad 2*uint16_t。
 		if (!(new_surface.format & RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES) && (new_surface.format & RS::ARRAY_FORMAT_NORMAL) && !(new_surface.format & RS::ARRAY_FORMAT_TANGENT)) {
 			// Unfortunately, we need to copy the buffer, which is fine as doing a resize triggers a CoW anyway.
 			Vector<uint8_t> new_vertex_data;
@@ -387,31 +417,40 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 			s->vertex_buffer = RD::get_singleton()->vertex_buffer_create(new_vertex_data.size(), new_vertex_data, use_as_storage);
 			s->vertex_buffer_size = new_vertex_data.size();
 		} else {
+			// 正常创建VBO
 			s->vertex_buffer = RD::get_singleton()->vertex_buffer_create(new_surface.vertex_data.size(), new_surface.vertex_data, use_as_storage);
 			s->vertex_buffer_size = new_surface.vertex_data.size();
 		}
 	}
 
+	// 属性数据
 	if (new_surface.attribute_data.size()) {
 		s->attribute_buffer = RD::get_singleton()->vertex_buffer_create(new_surface.attribute_data.size(), new_surface.attribute_data);
 	}
+	// 蒙皮数据
 	if (new_surface.skin_data.size()) {
 		s->skin_buffer = RD::get_singleton()->vertex_buffer_create(new_surface.skin_data.size(), new_surface.skin_data, use_as_storage);
 		s->skin_buffer_size = new_surface.skin_data.size();
 	}
 
-	s->vertex_count = new_surface.vertex_count;
+	s->vertex_count = new_surface.vertex_count;		// 顶点数量
 
+	// 是否有骨骼权重
 	if (new_surface.format & RS::ARRAY_FORMAT_BONES) {
 		mesh->has_bone_weights = true;
 	}
 
+	// 有索引
 	if (new_surface.index_count) {
+		// 是否是16位索引
 		bool is_index_16 = new_surface.vertex_count <= 65536 && new_surface.vertex_count > 0;
 
+		// 创建IBO
 		s->index_buffer = RD::get_singleton()->index_buffer_create(new_surface.index_count, is_index_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32, new_surface.index_data, false);
 		s->index_count = new_surface.index_count;
+		// 创建用于绘制的 index array 视图
 		s->index_array = RD::get_singleton()->index_array_create(s->index_buffer, 0, s->index_count);
+		// 创建LOD
 		if (new_surface.lods.size()) {
 			s->lods = memnew_arr(Mesh::Surface::LOD, new_surface.lods.size());
 			s->lod_count = new_surface.lods.size();
@@ -420,7 +459,7 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 				uint32_t indices = new_surface.lods[i].index_data.size() / (is_index_16 ? 2 : 4);
 				s->lods[i].index_buffer = RD::get_singleton()->index_buffer_create(indices, is_index_16 ? RD::INDEX_BUFFER_FORMAT_UINT16 : RD::INDEX_BUFFER_FORMAT_UINT32, new_surface.lods[i].index_data);
 				s->lods[i].index_array = RD::get_singleton()->index_array_create(s->lods[i].index_buffer, 0, indices);
-				s->lods[i].edge_length = new_surface.lods[i].edge_length;
+				s->lods[i].edge_length = new_surface.lods[i].edge_length;	// 记录 LOD 切换的边长阈值
 				s->lods[i].index_count = indices;
 			}
 		}
@@ -430,11 +469,12 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 
 	s->aabb = new_surface.aabb;
 	s->bone_aabbs = new_surface.bone_aabbs; //only really useful for returning them.
-	s->mesh_to_skeleton_xform = p_surface.mesh_to_skeleton_xform;
+	s->mesh_to_skeleton_xform = p_surface.mesh_to_skeleton_xform;	// Mesh -> 骨架 空间变换（用于蒙皮等）
 
-	s->uv_scale = new_surface.uv_scale;
+	s->uv_scale = new_surface.uv_scale;	// 记录UV缩放
 
 	if (mesh->blend_shape_count > 0) {
+		// 为 blendshape 建 SSBO
 		s->blend_shape_buffer = RD::get_singleton()->storage_buffer_create(new_surface.blend_shape_data.size(), new_surface.blend_shape_data);
 	}
 
@@ -442,18 +482,18 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 		Vector<RD::Uniform> uniforms;
 		{
 			RD::Uniform u;
-			u.binding = 0;
+			u.binding = 0;	
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 			if (s->vertex_buffer.is_valid()) {
-				u.append_id(s->vertex_buffer);
+				u.append_id(s->vertex_buffer);	// binding=0：主顶点数据（VBO/SSBO）
 			} else {
-				u.append_id(default_rd_storage_buffer);
+				u.append_id(default_rd_storage_buffer);	// 若无则用默认占位 SSBO（避免空绑定）
 			}
 			uniforms.push_back(u);
 		}
 		{
 			RD::Uniform u;
-			u.binding = 1;
+			u.binding = 1;	// binding=1：蒙皮数据（weights/bones）
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 			if (s->skin_buffer.is_valid()) {
 				u.append_id(s->skin_buffer);
@@ -464,7 +504,7 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 		}
 		{
 			RD::Uniform u;
-			u.binding = 2;
+			u.binding = 2;	// binding=2：blendshape 数据
 			u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 			if (s->blend_shape_buffer.is_valid()) {
 				u.append_id(s->blend_shape_buffer);
@@ -474,37 +514,57 @@ void MeshStorage::mesh_add_surface(RID p_mesh, const RS::SurfaceData &p_surface)
 			uniforms.push_back(u);
 		}
 
+		// 创建 UniformSet（对应 SkeletonShader 的某个 set）
 		s->uniform_set = RD::get_singleton()->uniform_set_create(uniforms, skeleton_shader.version_shader[0], SkeletonShader::UNIFORM_SET_SURFACE);
 	}
 
 	if (mesh->surface_count == 0) {
-		mesh->aabb = new_surface.aabb;
+		mesh->aabb = new_surface.aabb;		// 第一个 surface：直接用它的 AABB 初始化 Mesh AABB
 	} else {
-		mesh->aabb.merge_with(new_surface.aabb);
+		mesh->aabb.merge_with(new_surface.aabb);	// 后续 surface：把 AABB 合并到 Mesh 的总体 AABB
 	}
 	mesh->skeleton_aabb_version = 0;
 
-	s->material = new_surface.material;
+	s->material = new_surface.material;		// 记录材质 RID（每个 surface 自有材质）
 
+	// 扩容 Mesh 的 surfaces 指针数组
 	mesh->surfaces = (Mesh::Surface **)memrealloc(mesh->surfaces, sizeof(Mesh::Surface *) * (mesh->surface_count + 1));
-	mesh->surfaces[mesh->surface_count] = s;
+	mesh->surfaces[mesh->surface_count] = s;	// 新的指针放入数组
 	mesh->surface_count++;
 
-	for (MeshInstance *mi : mesh->instances) {
-		_mesh_instance_add_surface(mi, mesh, mesh->surface_count - 1);
+	for (MeshInstance *mi : mesh->instances) {	// 已存在的所有 MeshInstance 需要“补挂”这个新 surface
+		_mesh_instance_add_surface(mi, mesh, mesh->surface_count - 1);	// 同步到实例级的数据结构（顶点数组、材质实例化等）
 	}
 
-	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
+	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);	// 通知依赖系统：Mesh 结构变更（驱动资源/可见性/缓存刷新）
 
+	/// 如果本 Mesh 被其他“阴影拥有者”引用（shadow caster/receiver）
+	/// 使其无效，并且通知相关依赖
 	for (Mesh *E : mesh->shadow_owners) {
 		Mesh *shadow_owner = E;
 		shadow_owner->shadow_mesh = RID();
 		shadow_owner->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
 	}
 
+	// 清掉材质缓存（surface 发生改变，材质相关的派生缓存需失效）
 	mesh->material_cache.clear();
 }
 
+/// <summary>
+///  清理一个表面
+/// 释放顶点缓存
+/// 释放属性缓存
+/// 释放蒙皮缓存
+/// 释放版本
+/// 释放索引缓存
+/// 释放表面的LOD
+/// 释放blend shape缓存
+/// 最后回收这个表面的内存
+///
+/// 但是奇怪，AABB不需要更新吗？引用不需要重置吗?
+/// </summary>
+/// <param name="p_mesh"></param>
+/// <param name="p_surface"></param>
 void MeshStorage::_mesh_surface_clear(Mesh *p_mesh, int p_surface) {
 	Mesh::Surface &s = *p_mesh->surfaces[p_surface];
 
@@ -559,6 +619,13 @@ RS::BlendShapeMode MeshStorage::mesh_get_blend_shape_mode(RID p_mesh) const {
 	return mesh->blend_shape_mode;
 }
 
+/// <summary>
+///  更新网格某个 surface 的顶点缓冲区的一部分数据
+/// </summary>
+/// <param name="p_mesh">网格RID</param>
+/// <param name="p_surface">表面索引</param>
+/// <param name="p_offset">表面内顶点偏移</param>
+/// <param name="p_data">顶点数据</param>
 void MeshStorage::mesh_surface_update_vertex_region(RID p_mesh, int p_surface, int p_offset, const Vector<uint8_t> &p_data) {
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
@@ -613,6 +680,7 @@ RID MeshStorage::mesh_surface_get_material(RID p_mesh, int p_surface) const {
 	return mesh->surfaces[p_surface]->material;
 }
 
+// 获取表面数据，是将用于渲染的数据结构转换到用于控制的数据结构
 RS::SurfaceData MeshStorage::mesh_get_surface(RID p_mesh, int p_surface) const {
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL_V(mesh, RS::SurfaceData());
@@ -625,25 +693,31 @@ RS::SurfaceData MeshStorage::mesh_get_surface(RID p_mesh, int p_surface) const {
 	if (s.vertex_buffer.is_valid()) {
 		sd.vertex_data = RD::get_singleton()->buffer_get_data(s.vertex_buffer);
 		// When using an uncompressed buffer with normals, but without tangents, we have to trim the padding.
+		// 如果是未压缩带法线的，而且不带切线，那么会有一个多出来的占位区域
 		if (!(s.format & RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES) && (s.format & RS::ARRAY_FORMAT_NORMAL) && !(s.format & RS::ARRAY_FORMAT_TANGENT)) {
 			sd.vertex_data.resize(sd.vertex_data.size() - sizeof(uint16_t) * 2);
 		}
 	}
+	// 属性数据获取
 	if (s.attribute_buffer.is_valid()) {
 		sd.attribute_data = RD::get_singleton()->buffer_get_data(s.attribute_buffer);
 	}
+	// 获取蒙皮数据
 	if (s.skin_buffer.is_valid()) {
 		sd.skin_data = RD::get_singleton()->buffer_get_data(s.skin_buffer);
 	}
-	sd.vertex_count = s.vertex_count;
-	sd.index_count = s.index_count;
-	sd.primitive = s.primitive;
+	sd.vertex_count = s.vertex_count;		// 顶点数量
+	sd.index_count = s.index_count;			// 索引数量
+	sd.primitive = s.primitive;				// 图元类型
 
+	// 索引数据
 	if (sd.index_count) {
 		sd.index_data = RD::get_singleton()->buffer_get_data(s.index_buffer);
 	}
 	sd.aabb = s.aabb;
 	sd.uv_scale = s.uv_scale;
+
+	// LOD信息
 	for (uint32_t i = 0; i < s.lod_count; i++) {
 		RS::SurfaceData::LOD lod;
 		lod.edge_length = s.lods[i].edge_length;
@@ -654,6 +728,7 @@ RS::SurfaceData MeshStorage::mesh_get_surface(RID p_mesh, int p_surface) const {
 	sd.bone_aabbs = s.bone_aabbs;
 	sd.mesh_to_skeleton_xform = s.mesh_to_skeleton_xform;
 
+	//blend shape数据
 	if (s.blend_shape_buffer.is_valid()) {
 		sd.blend_shape_data = RD::get_singleton()->buffer_get_data(s.blend_shape_buffer);
 	}
@@ -816,6 +891,11 @@ String MeshStorage::mesh_get_path(RID p_mesh) const {
 	return mesh->path;
 }
 
+/// <summary>
+/// 设置阴影网格体
+/// </summary>
+/// <param name="p_mesh"></param>
+/// <param name="p_shadow_mesh"></param>
 void MeshStorage::mesh_set_shadow_mesh(RID p_mesh, RID p_shadow_mesh) {
 	ERR_FAIL_COND_MSG(p_mesh == p_shadow_mesh, "Cannot set a mesh as its own shadow mesh.");
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
@@ -836,6 +916,14 @@ void MeshStorage::mesh_set_shadow_mesh(RID p_mesh, RID p_shadow_mesh) {
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
 }
 
+/// <summary>
+/// 清空网格
+/// 清除实例数据
+/// 清除表面数据
+/// 释放表面内存
+/// 清除以此mesh作为阴影mesh的数据
+/// </summary>
+/// <param name="p_mesh"></param>
 void MeshStorage::mesh_clear(RID p_mesh) {
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
@@ -866,21 +954,30 @@ void MeshStorage::mesh_clear(RID p_mesh) {
 	}
 }
 
+/// <summary>
+/// 移除网格的一个表面
+/// </summary>
+/// <param name="p_mesh"></param>
+/// <param name="p_surface"></param>
 void MeshStorage::mesh_surface_remove(RID p_mesh, int p_surface) {
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL(mesh);
 	ERR_FAIL_UNSIGNED_INDEX((uint32_t)p_surface, mesh->surface_count);
 
 	// Clear instance data before mesh data.
+	// 清除实例的表面
 	for (MeshInstance *mi : mesh->instances) {
 		_mesh_instance_remove_surface(mi, p_surface);
 	}
 
+	// 当前表面数据清理
 	_mesh_surface_clear(mesh, p_surface);
 
+	// 如果不是最后一个表面，就把后面的表面数据往前移
 	if ((uint32_t)p_surface < mesh->surface_count - 1) {
 		memmove(mesh->surfaces + p_surface, mesh->surfaces + p_surface + 1, sizeof(Mesh::Surface *) * (mesh->surface_count - (p_surface + 1)));
 	}
+	// 数据信息重新分配
 	mesh->surfaces = (Mesh::Surface **)memrealloc(mesh->surfaces, sizeof(Mesh::Surface *) * (mesh->surface_count - 1));
 	--mesh->surface_count;
 
@@ -888,6 +985,7 @@ void MeshStorage::mesh_surface_remove(RID p_mesh, int p_surface) {
 
 	mesh->skeleton_aabb_version = 0;
 
+	// 重新判断是否有骨骼权重
 	if (mesh->has_bone_weights) {
 		mesh->has_bone_weights = false;
 		for (uint32_t i = 0; i < mesh->surface_count; i++) {
@@ -898,6 +996,7 @@ void MeshStorage::mesh_surface_remove(RID p_mesh, int p_surface) {
 		}
 	}
 
+	// 调整AABB的数据
 	if (mesh->surface_count == 0) {
 		mesh->aabb = AABB();
 	} else {
@@ -907,8 +1006,10 @@ void MeshStorage::mesh_surface_remove(RID p_mesh, int p_surface) {
 		}
 	}
 
+	// 网格改变的通知
 	mesh->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
 
+	// 阴影网格改变的通知
 	for (Mesh *E : mesh->shadow_owners) {
 		Mesh *shadow_owner = E;
 		shadow_owner->shadow_mesh = RID();
@@ -916,6 +1017,9 @@ void MeshStorage::mesh_surface_remove(RID p_mesh, int p_surface) {
 	}
 }
 
+// 是否需要顶点实例
+// 和meshinstance不同，这里的情况是如果它有混合，那么它需要顶点实例，是顶点数据，而不是meshinstance这种共享顶点数据，
+// 然后提供transform就行了。
 bool MeshStorage::mesh_needs_instance(RID p_mesh, bool p_has_skeleton) {
 	Mesh *mesh = mesh_owner.get_or_null(p_mesh);
 	ERR_FAIL_NULL_V(mesh, false);
@@ -931,27 +1035,35 @@ Dependency *MeshStorage::mesh_get_dependency(RID p_mesh) const {
 }
 
 /* MESH INSTANCE */
-
+/// 创建实例的过程
 RID MeshStorage::mesh_instance_create(RID p_base) {
 	Mesh *mesh = mesh_owner.get_or_null(p_base);
 	ERR_FAIL_NULL_V(mesh, RID());
 
+	// 创建一个rid
 	RID rid = mesh_instance_owner.make_rid();
 	MeshInstance *mi = mesh_instance_owner.get_or_null(rid);
 
-	mi->mesh = mesh;
+	mi->mesh = mesh;	// 设置对应的网格
 
+	// 将网格的每个表面数据都添加到实例中
 	for (uint32_t i = 0; i < mesh->surface_count; i++) {
 		_mesh_instance_add_surface(mi, mesh, i);
 	}
 
+	// 在网格中记录实例
 	mi->I = mesh->instances.push_back(mi);
 
+	// 标记实例需要更新
 	mi->dirty = true;
 
 	return rid;
 }
 
+/// <summary>
+///  释放实例
+/// </summary>
+/// <param name="p_rid"></param>
 void MeshStorage::mesh_instance_free(RID p_rid) {
 	MeshInstance *mi = mesh_instance_owner.get_or_null(p_rid);
 	_mesh_instance_clear(mi);
@@ -987,6 +1099,13 @@ void MeshStorage::_mesh_instance_clear(MeshInstance *mi) {
 	mi->dirty = false;
 }
 
+/// <summary>
+/// 如果没有blend shape，那就直接把表面添加进去。
+/// 如果有，那么需要把权重什么都放进去
+/// </summary>
+/// <param name="mi"></param>
+/// <param name="mesh"></param>
+/// <param name="p_surface"></param>
 void MeshStorage::_mesh_instance_add_surface(MeshInstance *mi, Mesh *mesh, uint32_t p_surface) {
 	if (mesh->blend_shape_count > 0 && mi->blend_weights_buffer.is_null()) {
 		mi->blend_weights.resize(mesh->blend_shape_count);
@@ -997,6 +1116,7 @@ void MeshStorage::_mesh_instance_add_surface(MeshInstance *mi, Mesh *mesh, uint3
 		mi->weights_dirty = true;
 	}
 
+	// 实例侧的表面缓冲添加
 	MeshInstance::Surface s;
 	if ((mesh->blend_shape_count > 0 || (mesh->surfaces[p_surface]->format & RS::ARRAY_FORMAT_BONES)) && mesh->surfaces[p_surface]->vertex_buffer_size > 0) {
 		_mesh_instance_add_surface_buffer(mi, mesh, &s, p_surface, 0);
@@ -1007,6 +1127,7 @@ void MeshStorage::_mesh_instance_add_surface(MeshInstance *mi, Mesh *mesh, uint3
 }
 
 void MeshStorage::_mesh_instance_add_surface_buffer(MeshInstance *mi, Mesh *mesh, MeshInstance::Surface *s, uint32_t p_surface, uint32_t p_buffer_index) {
+	// 先创建一个顶点缓冲
 	s->vertex_buffer[p_buffer_index] = RD::get_singleton()->vertex_buffer_create(mesh->surfaces[p_surface]->vertex_buffer_size, Vector<uint8_t>(), true);
 
 	Vector<RD::Uniform> uniforms;
@@ -1014,7 +1135,7 @@ void MeshStorage::_mesh_instance_add_surface_buffer(MeshInstance *mi, Mesh *mesh
 		RD::Uniform u;
 		u.binding = 1;
 		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-		u.append_id(s->vertex_buffer[p_buffer_index]);
+		u.append_id(s->vertex_buffer[p_buffer_index]);	// 添加顶点缓冲的RID
 		uniforms.push_back(u);
 	}
 	{
@@ -1022,15 +1143,21 @@ void MeshStorage::_mesh_instance_add_surface_buffer(MeshInstance *mi, Mesh *mesh
 		u.binding = 2;
 		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
 		if (mi->blend_weights_buffer.is_valid()) {
-			u.append_id(mi->blend_weights_buffer);
+			u.append_id(mi->blend_weights_buffer);		// 添加混合权重的RID
 		} else {
 			u.append_id(default_rd_storage_buffer);
 		}
 		uniforms.push_back(u);
 	}
+	// 创建uniform集
 	s->uniform_set[p_buffer_index] = RD::get_singleton()->uniform_set_create(uniforms, skeleton_shader.version_shader[0], SkeletonShader::UNIFORM_SET_INSTANCE);
 }
 
+/*
+vertex_buffer：原始数据存储，相当于硬盘上的文件。
+
+vertex_array：数据解释方式，相当于文件的“读取器/解析器”。
+*/
 void MeshStorage::_mesh_instance_remove_surface(MeshInstance *mi, int p_surface) {
 	MeshInstance::Surface &surface = mi->surfaces[p_surface];
 
@@ -1083,6 +1210,7 @@ void MeshStorage::mesh_instance_check_for_update(RID p_mesh_instance) {
 	}
 
 	if (needs_update) {
+		// 将需要更新的列表加入到脏实例数组中
 		dirty_mesh_instance_arrays.add(&mi->array_update_list);
 	}
 }
@@ -1092,7 +1220,14 @@ void MeshStorage::mesh_instance_set_canvas_item_transform(RID p_mesh_instance, c
 	mi->canvas_item_transform_2d = p_transform;
 }
 
+/// <summary>
+/// 把“脏”的 MeshInstance 做一次批处理更新——先把需要刷新的 blend shape 权重写回到 GPU；
+/// 然后为需要做骨骼/形变（以及运动矢量）的实例按需切换/创建双缓冲的顶点目标缓冲，绑定对应
+/// 的计算着色器与 uniform sets，填充 push constants，并通过 GPU 计算管线对每个表面的顶
+/// 点/法线/切线/皮肤权重做一次“烘焙”（skin + blendshape）计算，最后结束 compute list
+/// </summary>
 void MeshStorage::update_mesh_instances() {
+	/// 更新GPU端的权重缓冲区
 	while (dirty_mesh_instance_weights.first()) {
 		MeshInstance *mi = dirty_mesh_instance_weights.first()->self();
 

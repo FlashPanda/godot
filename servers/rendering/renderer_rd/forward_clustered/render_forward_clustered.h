@@ -497,7 +497,7 @@ private:
 				compilation_dirty_element(this), compilation_all_element(this) {}
 	};
 
-	// 前向集群渲染器的几何实例集
+	// 前向集群渲染器的几何实例：针对渲染器的实例
 	class GeometryInstanceForwardClustered : public RenderGeometryInstanceBase {
 	public:
 		// lightmap
