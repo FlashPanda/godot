@@ -892,31 +892,43 @@ void RenderForwardClustered::_update_instance_data_buffer(RenderListType p_rende
 		RD::get_singleton()->buffer_update(scene_state.instance_buffer[p_render_list], 0, sizeof(SceneState::InstanceData) * scene_state.instance_data[p_render_list].size(), scene_state.instance_data[p_render_list].ptr());
 	}
 }
-void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, int *p_render_info, uint32_t p_offset, int32_t p_max_elements, bool p_update_buffer) {
+void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list,
+int *p_render_info,
+uint32_t p_offset,
+int32_t p_max_elements,
+bool p_update_buffer)
+{
 	RenderList *rl = &render_list[p_render_list];
+	// 如果触发了最大的，那么之后多出来的怎么办？
 	uint32_t element_total = p_max_elements >= 0 ? uint32_t(p_max_elements) : rl->elements.size();
 
+	// 场景状态，实例数据空间重分配
 	scene_state.instance_data[p_render_list].resize(p_offset + element_total);
+	// 渲染列表中的附加信息重分配
 	rl->element_info.resize(p_offset + element_total);
 
+	// 信息统计
 	if (p_render_info) {
 		p_render_info[RS::VIEWPORT_RENDER_INFO_OBJECTS_IN_FRAME] += element_total;
 	}
 	uint64_t frame = RSG::rasterizer->get_frame_number();
-	uint32_t repeats = 0;
+	uint32_t repeats = 0;	// 重复次数
 	GeometryInstanceSurfaceDataCache *prev_surface = nullptr;
 	for (uint32_t i = 0; i < element_total; i++) {
+	// 获取表面与实例
 		GeometryInstanceSurfaceDataCache *surface = rl->elements[i + p_offset];
 		GeometryInstanceForwardClustered *inst = surface->owner;
 
+		// 实例列表中的实例数据
 		SceneState::InstanceData &instance_data = scene_state.instance_data[p_render_list][i + p_offset];
 
+		// 需要更新前一个变换
 		if (inst->prev_transform_dirty && frame > inst->prev_transform_change_frame + 1 && inst->prev_transform_change_frame) {
 			inst->prev_transform = inst->transform;
 			inst->prev_transform_dirty = false;
 		}
 
-		if (inst->store_transform_cache) {
+		if (inst->store_transform_cache) {	// 如果需要维护历史缓存
 			RendererRD::MaterialStorage::store_transform(inst->transform, instance_data.transform);
 			RendererRD::MaterialStorage::store_transform(inst->prev_transform, instance_data.prev_transform);
 
@@ -932,6 +944,7 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 			RendererRD::MaterialStorage::store_transform(Transform3D(), instance_data.prev_transform);
 		}
 
+		// 构造场景状态中的实例数据
 		instance_data.flags = inst->flags_cache;
 		instance_data.gi_offset = inst->gi_offset_cache;
 		instance_data.layer_mask = inst->layer_mask;
@@ -942,9 +955,11 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 		instance_data.lightmap_uv_scale[3] = inst->lightmap_uv_scale.size.y;
 
 		AABB surface_aabb = AABB(Vector3(0.0, 0.0, 0.0), Vector3(1.0, 1.0, 1.0));
+		// 表面格式
 		uint64_t format = RendererRD::MeshStorage::get_singleton()->mesh_surface_get_format(surface->surface);
 		Vector4 uv_scale = Vector4(0.0, 0.0, 0.0, 0.0);
 
+		/// 表面aabb数据以及uv缩放数据的获取
 		if (format & RS::ARRAY_FLAG_COMPRESS_ATTRIBUTES) {
 			surface_aabb = RendererRD::MeshStorage::get_singleton()->mesh_surface_get_aabb(surface->surface);
 			uv_scale = RendererRD::MeshStorage::get_singleton()->mesh_surface_get_uv_scale(surface->surface);
@@ -964,9 +979,20 @@ void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, i
 		instance_data.uv_scale[3] = uv_scale.w;
 
 		bool cant_repeat = instance_data.flags & INSTANCE_DATA_FLAG_MULTIMESH || inst->mesh_instance.is_valid();
+		//bool can_repeat_t = !(instance_data.flags & INSTANCE_DATA_FLAG_MULTIMESH) && !instance->mesh_instance.is_valid();
 
-		if (prev_surface != nullptr && !cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_surface->owner->mirror && repeats < RenderElementInfo::MAX_REPEATS) {
+		if (prev_surface != nullptr &&
+			!cant_repeat &&
+			prev_surface->sort.sort_key1 == surface->sort.sort_key &&
+			prev_surface->sort.sort_key2 == surface->sort.sort_key2 &&
+			inst->mirror == prev_surface->owner->mirror &&
+			repeats < RenderElementInfo::MAX_REPEATS) {
 			//this element is the same as the previous one, count repeats to draw it using instancing
+			// 这个元素和之前的是一样的，所以可以重复绘制，判断相同的标准是
+			// 前一个surface指针有
+			// 不是multimesh，并且没有网格实例
+			// 两个表面的排序key1和key2都一样
+			// 
 			repeats++;
 		} else {
 			if (repeats > 0) {
@@ -1019,9 +1045,11 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list,
 	bool p_using_motion_pass,
 	bool p_append)
 {
+	// 网格存储数据
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
-	uint64_t frame = RSG::rasterizer->get_frame_number();
+	uint64_t frame = RSG::rasterizer->get_frame_number();	// 帧数
 
+	/// 如果是不透明渲染列表，那么就要填充一些场景的设置
 	if (p_render_list == RENDER_LIST_OPAQUE) {
 		scene_state.used_sss = false;
 		scene_state.used_screen_texture = false;
@@ -1029,29 +1057,36 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list,
 		scene_state.used_depth_texture = false;
 		scene_state.used_lightmap = false;
 	}
+	// 是记录本帧在渲染列表构建过程中，有多少 lightmap capture probes（光照贴图捕捉点）被真正使用到了
 	uint32_t lightmap_captures_used = 0;
 
+	// 相机在世界空间中的近平面点法式方程
 	Plane near_plane = Plane(-p_render_data->scene_data->cam_transform.basis.get_column(Vector3::AXIS_Z), p_render_data->scene_data->cam_transform.origin);
 	near_plane.d += p_render_data->scene_data->cam_projection.get_z_near();
 	float z_max = p_render_data->scene_data->cam_projection.get_z_far() - p_render_data->scene_data->cam_projection.get_z_near();
 
+	// 渲染列表数据
 	RenderList *rl = &render_list[p_render_list];
+	// 类成员geometry_instance_dirty_list的更新
 	_update_dirty_geometry_instances();
 
+	// 如果不是追加，就清除这个渲染列表
 	if (!p_append) {
 		rl->clear();
 		if (p_render_list == RENDER_LIST_OPAQUE) {
 			// Opaque fills motion and alpha lists.
+			// 不透明列表回填充运动和alpha列表
 			render_list[RENDER_LIST_MOTION].clear();
 			render_list[RENDER_LIST_ALPHA].clear();
 		}
 	}
 
 	//fill list
-
+	// 渲染数据中的实例列表
 	for (int i = 0; i < (int)p_render_data->instances->size(); i++) {
 		GeometryInstanceForwardClustered *inst = static_cast<GeometryInstanceForwardClustered *>((*p_render_data->instances)[i]);
 
+		/// 在不同的投影模式下，计算实例的中心点和深度值
 		Vector3 center = inst->transform.origin;
 		if (p_render_data->scene_data->cam_orthogonal) {
 			if (inst->use_aabb_center) {
@@ -1064,8 +1099,24 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list,
 			}
 			inst->depth = p_render_data->scene_data->cam_transform.origin.distance_to(center) - inst->sorting_offset;
 		}
+		// 将深度值量化到离散的深度层，一共16层
+
+/*
+Forward+ / Clustered 渲染的分桶
+
+在 Godot 里，Forward Clustered 渲染会把相机空间分成若干个 “tile × depth slice” 的 cluster。
+
+depth_layer 就是该实例所在的 深度 slice 索引，用于后续光源/阴影裁剪和灯光分配。
+
+排序/批处理优化
+
+同一层的物体可以一起处理，减少光源遍历范围。
+
+在透明物体排序时，可以粗略先按层分，再在层内细排。
+*/
 		uint32_t depth_layer = CLAMP(int(inst->depth * 16 / z_max), 0, 15);
 
+		// 实例的基础标记
 		uint32_t flags = inst->base_flags; //fill flags if appropriate
 
 		if (inst->non_uniform_scale) {
@@ -1076,6 +1127,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list,
 		bool uses_motion = false;
 		float fade_alpha = 1.0;
 
+		// 淡入淡出的效果
 		if (inst->fade_near || inst->fade_far) {
 			float fade_dist = inst->transform.origin.distance_to(p_render_data->scene_data->cam_transform.origin);
 			// Use `smoothstep()` to make opacity changes more gradual and less noticeable to the player.
@@ -1086,8 +1138,10 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list,
 			}
 		}
 
+		// 这个计算的值再乘上强制alpha，以及父淡入淡出值
 		fade_alpha *= inst->force_alpha * inst->parent_fade_alpha;
 
+		// 打包一个浮点的透明度系数（fade_alpha）到一个 32 位的 flags 位域里
 		flags = (flags & ~INSTANCE_DATA_FLAGS_FADE_MASK) | (uint32_t(fade_alpha * 255.0) << INSTANCE_DATA_FLAGS_FADE_SHIFT);
 
 		if (p_render_list == RENDER_LIST_OPAQUE) {
@@ -1176,6 +1230,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list,
 		}
 		inst->flags_cache = flags;
 
+		// 几何实例的表面缓存
 		GeometryInstanceSurfaceDataCache *surf = inst->surface_caches;
 
 		float lod_distance = 0.0;
@@ -1195,7 +1250,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list,
 			surf->sort.uses_forward_gi = 0;
 			surf->sort.uses_lightmap = 0;
 
-			// LOD
+			// 信息统计
 			if (p_render_data->scene_data->screen_mesh_lod_threshold > 0.0 && mesh_storage->mesh_surface_has_lod(surf->surface)) {
 				uint32_t indices = 0;
 				surf->sort.lod_index = mesh_storage->mesh_surface_get_lod(surf->surface, inst->lod_model_scale * inst->lod_bias, lod_distance * p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, indices);
@@ -1233,6 +1288,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list,
 					force_alpha = true;
 				}
 
+				// 这两个pass才要添加元素进去
 				if (!force_alpha && (surf->flags & (GeometryInstanceSurfaceDataCache::FLAG_PASS_DEPTH | GeometryInstanceSurfaceDataCache::FLAG_PASS_OPAQUE))) {
 					rl->add_element(surf);
 				}
@@ -1287,6 +1343,7 @@ void RenderForwardClustered::_fill_render_list(RenderListType p_render_list,
 		}
 	}
 
+	// 把 CPU 上准备好的 lightmap probe 数据（lightmap captures）上传到 GPU 的 uniform/storage buffer
 	if (p_render_list == RENDER_LIST_OPAQUE && lightmap_captures_used) {
 		RD::get_singleton()->buffer_update(scene_state.lightmap_capture_buffer, 0, sizeof(LightmapCaptureData) * lightmap_captures_used, scene_state.lightmap_captures);
 	}
@@ -4372,28 +4429,43 @@ void RenderForwardClustered::_geometry_instance_add_surface_with_material(
 	RID p_mesh)
 {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
-	uint32_t flags = 0;
+	uint32_t flags = 0;	// 一些着色标记
 
+	/// 是否使用SSS
 	if (p_material->shader_data->uses_sss) {
 		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_SUBSURFACE_SCATTERING;
 	}
 
+	/// 是否使用屏幕纹理
 	if (p_material->shader_data->uses_screen_texture) {
 		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_SCREEN_TEXTURE;
 	}
 
+	/// 是否使用深度纹理（这里是要读还是要写？）
 	if (p_material->shader_data->uses_depth_texture) {
 		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_DEPTH_TEXTURE;
 	}
 
+	/// 是否使用法线贴图
 	if (p_material->shader_data->uses_normal_texture) {
 		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_NORMAL_TEXTURE;
 	}
+
+	/// 是否会使用双面阴影
+	/*
+		默认情况下，阴影贴图的采样是基于三角形表面的 正面朝向。也就是说，
+		如果一个物体的几何体法线背向光源，那么那一面就不会写入阴影贴图。
+
+		这样能提升性能（少绘制一半面），也避免不必要的 overdraw。但问题是对
+		于一些模型（例如：树叶平面、纸片、布料、只有单面几何的壳子），如果只
+		画正面，阴影会出现穿透、漏光或者不完整。
+	*/
 
 	if (ginstance->data->cast_double_sided_shadows) {
 		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_DOUBLE_SIDED_SHADOWS;
 	}
 
+	/// 是否使用alpha通道：是就用alpha通道，不是就用opaque通道
 	if (p_material->shader_data->uses_alpha_pass()) {
 		flags |= GeometryInstanceSurfaceDataCache::FLAG_PASS_ALPHA;
 		if (p_material->shader_data->uses_depth_in_alpha_pass()) {
@@ -4406,14 +4478,37 @@ void RenderForwardClustered::_geometry_instance_add_surface_with_material(
 		flags |= GeometryInstanceSurfaceDataCache::FLAG_PASS_SHADOW;
 	}
 
+	/// 是否使用粒子拖尾
+	/*
+		在 Godot 粒子系统里，有一种效果是让运动的粒子在其运动路径上留下“拖尾”
+		（类似流星尾巴、烟雾丝带、火焰拖尾）。
+		实现方式一般有两种：
+			几何方式：由 GPU 在相邻帧之间连接粒子的历史位置，生成带状或线段几何体。
+			Shader 方式：在材质中访问额外的 trail 缓冲区（包含历史粒子数据），然后
+			根据这些数据扩展渲染。
+		Godot 的 ShaderMaterial 在粒子模式下会标记 uses_particle_trails = true，
+		代表 shader 编译时检测到了拖尾相关的内置变量（例如 TRAIL_COORD, TRAIL_LEN 等）。
+
+		当 FLAG_USES_PARTICLE_TRAILS 被设置后：
+
+		渲染管线在准备绘制这个几何实例时，会启用与拖尾相关的资源/Uniform 设置。
+
+		渲染时，会为该实例绑定额外的粒子数据缓冲（trail buffer），供 shader 使用。
+
+		确保该物体在 排序、批处理、实例化 时不会被错误地合并到普通粒子实例里（因为它有额外的依赖）。
+	*/
 	if (p_material->shader_data->uses_particle_trails) {
 		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_PARTICLE_TRAILS;
 	}
 
+	/// 是否使用运动模糊
 	if (p_material->shader_data->is_animated()) {
 		flags |= GeometryInstanceSurfaceDataCache::FLAG_USES_MOTION_VECTOR;
 	}
 
+	/// 是否使用共享阴影材质
+	// 因为阴影pass的特殊性，所以不一定需要用自己的材质才能绘制阴影，使用共享材质更能节省资源
+	// 速度也更快
 	SceneShaderForwardClustered::MaterialData *material_shadow = nullptr;
 	void *surface_shadow = nullptr;
 	if (p_material->shader_data->uses_shared_shadow_material()) {
@@ -4428,30 +4523,34 @@ void RenderForwardClustered::_geometry_instance_add_surface_with_material(
 		material_shadow = p_material;
 	}
 
+	// 分配一个实例表面的缓存
 	GeometryInstanceSurfaceDataCache *sdcache = geometry_instance_surface_alloc.alloc();
 
+	// 表面标记
 	sdcache->flags = flags;
 
-	sdcache->shader = p_material->shader_data;
-	sdcache->material = p_material;
-	sdcache->material_uniform_set = p_material->uniform_set;
-	sdcache->surface = mesh_storage->mesh_get_surface(p_mesh, p_surface);
-	sdcache->primitive = mesh_storage->mesh_surface_get_primitive(sdcache->surface);
-	sdcache->surface_index = p_surface;
+	sdcache->shader = p_material->shader_data;		// 着色器数据
+	sdcache->material = p_material;		// 材质
+	sdcache->material_uniform_set = p_material->uniform_set;	// 材质的uniform集
+	sdcache->surface = mesh_storage->mesh_get_surface(p_mesh, p_surface);	// 获取存储的网格表面数据
+	sdcache->primitive = mesh_storage->mesh_surface_get_primitive(sdcache->surface);	// 图元类型
+	sdcache->surface_index = p_surface;	// 表面的索引编号
 
 	if (ginstance->data->dirty_dependencies) {
 		RSG::utilities->base_update_dependency(p_mesh, &ginstance->data->dependency_tracker);
 	}
 
 	//shadow
+	// 阴影着色器
 	sdcache->shader_shadow = material_shadow->shader_data;
+	// 阴影的材质uniform集
 	sdcache->material_uniform_set_shadow = material_shadow->uniform_set;
 
-	sdcache->surface_shadow = surface_shadow ? surface_shadow : sdcache->surface;
+	sdcache->surface_shadow = surface_shadow ? surface_shadow : sdcache->surface;	// 阴影用的表面
 
-	sdcache->owner = ginstance;
+	sdcache->owner = ginstance;		// 缓存放在ginstance中
 
-	sdcache->next = ginstance->surface_caches;
+	sdcache->next = ginstance->surface_caches;	// 插入到头部
 	ginstance->surface_caches = sdcache;	// 加入实例的链表
 
 	//sortkey
@@ -4469,6 +4568,7 @@ void RenderForwardClustered::_geometry_instance_add_surface_with_material(
 	sdcache->sort.uses_projector = ginstance->using_projectors;
 	sdcache->sort.uses_softshadow = ginstance->using_softshadows;
 
+	/// 用来防止 Shader 需要切线 (Tangent) 但 网格没有提供切线数据 的情况。
 	uint64_t format = RendererRD::MeshStorage::get_singleton()->mesh_surface_get_format(sdcache->surface);
 	if (p_material->shader_data->uses_tangent && !(format & RS::ARRAY_FORMAT_TANGENT)) {
 		String shader_path = p_material->shader_data->path.is_empty() ? "" : "(" + p_material->shader_data->path + ")";
@@ -4476,6 +4576,7 @@ void RenderForwardClustered::_geometry_instance_add_surface_with_material(
 		WARN_PRINT_ED(vformat("Attempting to use a shader %s that requires tangents with a mesh %s that doesn't contain tangents. Ensure that meshes are imported with the 'ensure_tangents' option. If creating your own meshes, add an `ARRAY_TANGENT` array (when using ArrayMesh) or call `generate_tangents()` (when using SurfaceTool).", shader_path, mesh_path));
 	}
 
+	/// 把这个 surface 对应的渲染管线编译任务登记到待编译队列里
 #if PRELOAD_PIPELINES_ON_SURFACE_CACHE_CONSTRUCTION
 	if (!sdcache->compilation_dirty_element.in_list()) {
 		geometry_surface_compilation_dirty_list.add(&sdcache->compilation_dirty_element);
@@ -4487,12 +4588,18 @@ void RenderForwardClustered::_geometry_instance_add_surface_with_material(
 #endif
 }
 
-void RenderForwardClustered::_geometry_instance_add_surface_with_material_chain(GeometryInstanceForwardClustered *ginstance, uint32_t p_surface, SceneShaderForwardClustered::MaterialData *p_material, RID p_mat_src, RID p_mesh) {
+void RenderForwardClustered::_geometry_instance_add_surface_with_material_chain(GeometryInstanceForwardClustered *ginstance,
+uint32_t p_surface,		// 表面索引
+SceneShaderForwardClustered::MaterialData *p_material,	// 材质数据
+RID p_mat_src,	// 材质的RID
+RID p_mesh)			// 网格的RID
+{
 	SceneShaderForwardClustered::MaterialData *material = p_material;
 	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 
 	_geometry_instance_add_surface_with_material(ginstance, p_surface, material, p_mat_src.get_local_index(), material_storage->material_get_shader_id(p_mat_src), p_mesh);
 
+	/// 如果材质有多通道，那么换个材质再加一次网格表面
 	while (material->next_pass.is_valid()) {
 		RID next_pass = material->next_pass;
 		material = static_cast<SceneShaderForwardClustered::MaterialData *>(material_storage->material_get_data(next_pass, RendererRD::MaterialStorage::SHADER_TYPE_3D));
@@ -4506,14 +4613,20 @@ void RenderForwardClustered::_geometry_instance_add_surface_with_material_chain(
 	}
 }
 
-void RenderForwardClustered::_geometry_instance_add_surface(GeometryInstanceForwardClustered *ginstance, uint32_t p_surface, RID p_material, RID p_mesh) {
+void RenderForwardClustered::_geometry_instance_add_surface(GeometryInstanceForwardClustered *ginstance,
+	uint32_t p_surface,		// 表面索引
+	RID p_material,			// 材质RID
+	RID p_mesh)				// 网格RID
+{
 	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 	RID m_src;
 
+	// 以实例数据中的覆盖材质为优先，没有才用传入的表面材质
 	m_src = ginstance->data->material_override.is_valid() ? ginstance->data->material_override : p_material;
 
 	SceneShaderForwardClustered::MaterialData *material = nullptr;
 
+	/// 获取材质数据（material data)
 	if (m_src.is_valid()) {
 		material = static_cast<SceneShaderForwardClustered::MaterialData *>(material_storage->material_get_data(m_src, RendererRD::MaterialStorage::SHADER_TYPE_3D));
 		if (!material || !material->shader_data->is_valid()) {
@@ -4521,11 +4634,14 @@ void RenderForwardClustered::_geometry_instance_add_surface(GeometryInstanceForw
 		}
 	}
 
+	// 如果有材质数据
 	if (material) {
 		if (ginstance->data->dirty_dependencies) {
+		//	更新材质依赖
 			material_storage->material_update_dependency(m_src, &ginstance->data->dependency_tracker);
 		}
 	} else {
+	// 获取默认材质，这是系统保有的材质
 		material = static_cast<SceneShaderForwardClustered::MaterialData *>(material_storage->material_get_data(scene_shader.default_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
 		m_src = scene_shader.default_material;
 	}
@@ -4534,6 +4650,7 @@ void RenderForwardClustered::_geometry_instance_add_surface(GeometryInstanceForw
 
 	_geometry_instance_add_surface_with_material_chain(ginstance, p_surface, material, m_src, p_mesh);
 
+	// 材质覆盖层如果存在，那么也需要做一次添加表面的过程（用覆盖材质）
 	if (ginstance->data->material_overlay.is_valid()) {
 		m_src = ginstance->data->material_overlay;
 
@@ -4548,7 +4665,9 @@ void RenderForwardClustered::_geometry_instance_add_surface(GeometryInstanceForw
 	}
 }
 
-void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p_geometry_instance) {
+// 几何实例数据更新
+void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p_geometry_instance)
+{
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
 	GeometryInstanceForwardClustered *ginstance = static_cast<GeometryInstanceForwardClustered *>(p_geometry_instance);
@@ -4558,29 +4677,33 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 	}
 
 	//add geometry for drawing
+	// 几何实例的数据类型
 	switch (ginstance->data->base_type) {
-		case RS::INSTANCE_MESH: {
-			const RID *materials = nullptr;
-			uint32_t surface_count;
-			RID mesh = ginstance->data->base;
+		case RS::INSTANCE_MESH: {	// 网格实例
+			const RID *materials = nullptr;		// 材质ID列表
+			uint32_t surface_count;		// 表面数量
+			RID mesh = ginstance->data->base;	// 基准网格RID
 
+			// 获取表面数量以及材质
 			materials = mesh_storage->mesh_get_surface_count_and_materials(mesh, surface_count);
 			if (materials) {
 				//if no materials, no surfaces.
+				// 表面的材质列表，以及表面的材质数
 				const RID *inst_materials = ginstance->data->surface_materials.ptr();
 				uint32_t surf_mat_count = ginstance->data->surface_materials.size();
 
+				// 如果有表面材质就用表面材质，没有就用实例材质
 				for (uint32_t j = 0; j < surface_count; j++) {
 					RID material = (j < surf_mat_count && inst_materials[j].is_valid()) ? inst_materials[j] : materials[j];
 					_geometry_instance_add_surface(ginstance, j, material, mesh);
 				}
 			}
 
-			ginstance->instance_count = 1;
+			ginstance->instance_count = 1;	// 实例数为1
 
 		} break;
 
-		case RS::INSTANCE_MULTIMESH: {
+		case RS::INSTANCE_MULTIMESH: {	// 多网格实例
 			RID mesh = mesh_storage->multimesh_get_mesh(ginstance->data->base);
 			if (mesh.is_valid()) {
 				const RID *materials = nullptr;
@@ -4593,6 +4716,7 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 					}
 				}
 
+				// 实例数不一样
 				ginstance->instance_count = mesh_storage->multimesh_get_instances_to_draw(ginstance->data->base);
 			}
 
@@ -4640,6 +4764,7 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 
 	bool store_transform = true;
 
+	// 多实例对基础标记的影响
 	if (ginstance->data->base_type == RS::INSTANCE_MULTIMESH) {
 		ginstance->base_flags |= INSTANCE_DATA_FLAG_MULTIMESH;
 		if (mesh_storage->multimesh_get_transform_format(ginstance->data->base) == RS::MULTIMESH_TRANSFORM_2D) {
@@ -4655,6 +4780,7 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 		ginstance->transforms_uniform_set = mesh_storage->multimesh_get_3d_uniform_set(ginstance->data->base, scene_shader.default_shader_rd, TRANSFORMS_UNIFORM_SET);
 
 	} else if (ginstance->data->base_type == RS::INSTANCE_PARTICLES) {
+	// 粒子对基础标记的影响
 		ginstance->base_flags |= INSTANCE_DATA_FLAG_PARTICLES;
 		ginstance->base_flags |= INSTANCE_DATA_FLAG_MULTIMESH;
 
@@ -4679,11 +4805,13 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 		}
 	} else if (ginstance->data->base_type == RS::INSTANCE_MESH) {
 		if (mesh_storage->skeleton_is_valid(ginstance->data->skeleton)) {
+		// 骨骼的变换uniform集
 			ginstance->transforms_uniform_set = mesh_storage->skeleton_get_3d_uniform_set(ginstance->data->skeleton, scene_shader.default_shader_rd, TRANSFORMS_UNIFORM_SET);
 			if (ginstance->data->dirty_dependencies) {
 				mesh_storage->skeleton_update_dependency(ginstance->data->skeleton, &ginstance->data->dependency_tracker);
 			}
 		} else {
+		// 没有骨骼就不需要变换
 			ginstance->transforms_uniform_set = RID();
 		}
 	}
@@ -4691,6 +4819,7 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 	ginstance->store_transform_cache = store_transform;
 	ginstance->can_sdfgi = false;
 
+	// 判断能否影响或者被影响，sdfgi
 	if (!RendererRD::LightStorage::get_singleton()->lightmap_instance_is_valid(ginstance->lightmap_instance)) {
 		if (ginstance->voxel_gi_instances[0].is_null() && (ginstance->data->use_baked_light || ginstance->data->use_dynamic_gi)) {
 			ginstance->can_sdfgi = true;
@@ -4702,6 +4831,7 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 		ginstance->data->dirty_dependencies = false;
 	}
 
+	// 将此实例从链表中移除
 	ginstance->dirty_list_element.remove_from_list();
 }
 

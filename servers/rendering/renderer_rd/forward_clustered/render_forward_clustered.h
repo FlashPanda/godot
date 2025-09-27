@@ -299,19 +299,41 @@ private:
 		INSTANCE_DATA_FLAGS_FADE_MASK = 0xFFUL << INSTANCE_DATA_FLAGS_FADE_SHIFT
 	};
 
+	/*
+	Set 0：全局不变，绑定一次就能跨帧复用 → 节省大量 bind 调用。
+
+Set 1：跟相机/视图/帧关联 → 每帧更新（SceneState::UBO、InstanceData）。
+
+Set 2：跟材质关联 → 每个 draw 或批次更新。
+
+Set 3+：专门的 pass 用途（例如阴影 pass、后处理）。
+	*/
+
+	// “每帧/每视图（per-frame/per-view）状态与 GPU 接口”的打包体
+	// 它把会被着色器频繁读取，会被CPU每帧更新、以及会被不同渲染那通道共享的数据放在一个地方
 	struct SceneState {
 		// This struct is loaded into Set 1 - Binding 1, populated at start of rendering a frame, must match with shader code
+		// 严格绑定到set 1/ binding 1
 		struct UBO {
+			/// <summary>
+			///  这些cluster都是体素/切片分桶参数（如何将屏幕/视锥划分到cluster，用于灯光/体积等查找）
+			/// </summary>
 			uint32_t cluster_shift;
 			uint32_t cluster_width;
 			uint32_t cluster_type_size;
-			uint32_t max_cluster_element_count_div_32;
+			uint32_t max_cluster_element_count_div_32;	// 以32为单位对齐
 
+			/// <summary>
+			///  屏幕空间效果控制
+			/// </summary>
 			uint32_t ss_effects_flags;
 			float ssao_light_affect;
 			float ssao_ao_affect;
-			uint32_t pad1;
+			uint32_t pad1;	// 对齐
 
+			/// <summary>
+			/// sdfgi相关
+			/// </summary>
 			float sdf_to_bounds[16];
 
 			int32_t sdf_offset[3];
@@ -320,12 +342,16 @@ private:
 			int32_t sdf_size[3];
 			uint32_t gi_upscale_for_msaa;
 
+			/// <summary>
+			/// 体积雾相关
+			/// </summary>
 			uint32_t volumetric_fog_enabled;
 			float volumetric_fog_inv_length;
 			float volumetric_fog_detail_spread;
 			uint32_t volumetric_fog_pad;
 		};
 
+		// pushconstant的数据，高频微量
 		struct PushConstantUbershader {
 			SceneShaderForwardClustered::ShaderSpecialization specialization;
 			SceneShaderForwardClustered::UbershaderConstants constants;
@@ -339,24 +365,28 @@ private:
 			PushConstantUbershader ubershader;
 		};
 
+		// 实例数据
 		struct InstanceData {
 			float transform[16];
 			float prev_transform[16];
-			uint32_t flags;
+			uint32_t flags;	// 位域集合
+			// 指向“全局大统一 Uniform/Storage Buffer”里该实例自定义 uniforms 的偏移c
 			uint32_t instance_uniforms_ofs; //base offset in global buffer for instance variables
+			// 实例的 GI 相关索引
 			uint32_t gi_offset; //GI information when using lightmapping (VCT or lightmap index)
-			uint32_t layer_mask;
-			float lightmap_uv_scale[4];
-			float compressed_aabb_position[4];
-			float compressed_aabb_size[4];
-			float uv_scale[4];
+			uint32_t layer_mask;	// 渲染层掩码
+			float lightmap_uv_scale[4];	// 烘焙时光照的uv的平移缩放（通常xy是scale，zw为bias）
+			float compressed_aabb_position[4];	// 压缩后的aabb位置，4float是为了对齐
+			float compressed_aabb_size[4];	// 压缩有的aabb大小，同样4float是为了对齐
+			float uv_scale[4];	// 材质贴图的缩放偏移
 		};
 
 		UBO ubo;
 
-		LocalVector<RID> uniform_buffers;
-		LocalVector<RID> implementation_uniform_buffers;
+		LocalVector<RID> uniform_buffers;	// 常规 UBO/SSBO 的 RID 列表
+		LocalVector<RID> implementation_uniform_buffers;	// 后端特定实现需要的附加 buffer
 
+		// 光照贴图属性
 		LightmapData lightmaps[MAX_LIGHTMAPS];
 		RID lightmap_ids[MAX_LIGHTMAPS];
 		bool lightmap_has_sh[MAX_LIGHTMAPS];
@@ -364,29 +394,41 @@ private:
 		uint32_t max_lightmaps;
 		RID lightmap_buffer;
 
+		// 按渲染列表分桶的实例缓冲
 		RID instance_buffer[RENDER_LIST_MAX];
 		uint32_t instance_buffer_size[RENDER_LIST_MAX] = { 0, 0, 0 };
 		LocalVector<InstanceData> instance_data[RENDER_LIST_MAX];
 
+		/// <summary>
+		///  体积内插/探针式烘焙（补充 SH/辐照度），上传到一个专用 SSBO/UBO。
+		/// </summary>
 		LightmapCaptureData *lightmap_captures = nullptr;
 		uint32_t max_lightmap_captures;
 		RID lightmap_capture_buffer;
 
+		// 场景里启用的体素 GI 体积
+
 		RID voxelgi_ids[MAX_VOXEL_GI_INSTANCESS];
 		uint32_t voxelgis_used = 0;
 
+		// 是否需要使用这些东西的开关
 		bool used_screen_texture = false;
 		bool used_normal_texture = false;
 		bool used_depth_texture = false;
 		bool used_sss = false;
 		bool used_lightmap = false;
 
+		// 阴影渲染批次
 		struct ShadowPass {
+		// 元素范围
 			uint32_t element_from;
 			uint32_t element_count;
 			PassMode pass_mode;
 
-			RID rp_uniform_set;
+			RID rp_uniform_set;		//  专属的uniform集
+			/// <summary>
+			///  LOD控制，阴影可以用更激进的LOD控制
+			/// </summary>
 			float lod_distance_multiplier;
 			float screen_mesh_lod_threshold;
 
@@ -436,6 +478,7 @@ private:
 
 	// Cached data for drawing surfaces
 	// 前向集群渲染器的几何实例的表面数据缓存
+	// 这个就是渲染视角下的网格实例表面的缓存
 	struct GeometryInstanceSurfaceDataCache {
 		enum {
 			FLAG_PASS_DEPTH = 1,
@@ -489,7 +532,7 @@ private:
 		SceneShaderForwardClustered::ShaderData *shader_shadow = nullptr;
 
 		GeometryInstanceSurfaceDataCache *next = nullptr;
-		GeometryInstanceForwardClustered *owner = nullptr;
+		GeometryInstanceForwardClustered *owner = nullptr;	// 哪个实例的表面
 		SelfList<GeometryInstanceSurfaceDataCache> compilation_dirty_element;
 		SelfList<GeometryInstanceSurfaceDataCache> compilation_all_element;
 
@@ -501,28 +544,49 @@ private:
 	class GeometryInstanceForwardClustered : public RenderGeometryInstanceBase {
 	public:
 		// lightmap
-		RID lightmap_instance;
+		RID lightmap_instance;		// 相关的光照贴图实例iD
+		/*
+			将网格的 Lightmap UV（通常是 UV2）缩放+偏移到光照图图集中的那一块区域（scale+offset 两部分）。
+			有了它，顶点/片段着色器能把 0..1 的局部 UV 映射到大图集里的实际矩形。
+		*/
 		Rect2 lightmap_uv_scale;
+		// 光照图通常打包在纹理数组（array texture）或多层图里，这个是要采样的图层索引（哪一层）
 		uint32_t lightmap_slice_index;
 		GeometryInstanceLightmapSH *lightmap_sh = nullptr;
 
 		//used during rendering
 
+		// 该实例在GI 相关的大型缓冲/表里的偏移/索引缓存。
 		uint32_t gi_offset_cache = 0;
+		// 标记这个实例是否需要维护变换历史缓存（例如为了运动矢量、TAA/Motion Blur、粒子拖尾等）
 		bool store_transform_cache = true;
+		// 该实例的变换缓冲描述符集（Uniform/Storage Set）
 		RID transforms_uniform_set;
+		// 实例数量
 		uint32_t instance_count = 0;
+		// 拖尾(trails) 所需的步数。粒子拖尾或需要跨多帧插值的效果会把同一实例的多步历史变换打包进 transforms_uniform_set，此值决定每个实例要取的历史步数。
 		uint32_t trail_steps = 1;
+		// 该实例是否能参与/受益于 SDFGI
 		bool can_sdfgi = false;
+		// 标记是否有投影器(Projector/Gobo/Decal-式投影) 影响到这个实例。着色器会据此选择是否走带有投影贴图/UV 投影计算的管线变体，以免无谓开销。
 		bool using_projectors = false;
+		// 标记是否有软阴影（如带 PCSS/PCF 级联的设置）作用到该实例
 		bool using_softshadows = false;
 
-		//used during setup
+		//used during setup；构建渲染列表/更新缓存时使用
+
+		// 记录上一帧变换缓存变更的帧号。用来判断何时需要刷新 prev_transform 和 GPU 侧的历史数据（避免每帧都更新）。
 		uint64_t prev_transform_change_frame = 0xFFFFFFFF;
+		// 标记上一帧变换是否脏
 		bool prev_transform_dirty = true;
+		// 上一帧的模型变换。用于计算运动矢量(velocity)、TAA 历史重投影以及拖尾等与跨帧相关的效果。
 		Transform3D prev_transform;
+		// 与该几何实例相交或影响到它的若干 VoxelGI 体素体积的句柄数组
 		RID voxel_gi_instances[MAX_VOXEL_GI_INSTANCESS_PER_INSTANCE];
+		// 几何实例表面数据缓存
 		GeometryInstanceSurfaceDataCache *surface_caches = nullptr;
+		// 脏的几何实例列表
+		// 一个自链表节点，用于把该实例挂入渲染器的脏队列
 		SelfList<GeometryInstanceForwardClustered> dirty_list_element;
 
 		GeometryInstanceForwardClustered() :
@@ -605,7 +669,7 @@ private:
 	void _update_dirty_geometry_pipelines();
 
 	/* Render List */
-
+	// 几何表面数据缓存的列表，以及对应的渲染元素信息
 	struct RenderList {
 		LocalVector<GeometryInstanceSurfaceDataCache *> elements;
 		LocalVector<RenderElementInfo> element_info;
