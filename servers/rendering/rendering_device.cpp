@@ -494,7 +494,8 @@ Error RenderingDevice::buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t 
 	return OK;
 }
 
-Error RenderingDevice::buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p_size, const void *p_data) {
+Error RenderingDevice::buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p_size, const void *p_data)
+{
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
 
 	copy_bytes_count += p_size;
@@ -508,17 +509,19 @@ Error RenderingDevice::buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p
 	ERR_FAIL_NULL_V_MSG(buffer, ERR_INVALID_PARAMETER, "Buffer argument is not a valid buffer of any type.");
 	ERR_FAIL_COND_V_MSG(p_offset + p_size > buffer->size, ERR_INVALID_PARAMETER, "Attempted to write buffer (" + itos((p_offset + p_size) - buffer->size) + " bytes) past the end.");
 
+	// 检查是否正在被传输线程使用
 	_check_transfer_worker_buffer(buffer);
 
 	// Submitting may get chunked for various reasons, so convert this to a task.
-	size_t to_submit = p_size;
-	size_t submit_from = 0;
+	size_t to_submit = p_size;		// 需要上传的数据总量
+	size_t submit_from = 0;			// 本次上传的数据在整体数据中的偏移
 
+	// 线程本地的“本批次要做的 GPU 拷贝命令列表”。用 thread_local 减少频繁分配
 	thread_local LocalVector<RDG::RecordedBufferCopy> command_buffer_copies_vector;
 	command_buffer_copies_vector.clear();
 
-	const uint8_t *src_data = reinterpret_cast<const uint8_t *>(p_data);
-	const uint32_t required_align = 32;
+	const uint8_t *src_data = reinterpret_cast<const uint8_t *>(p_data);	// 转为字节流指针
+	const uint32_t required_align = 32;	// 32字节对齐
 	while (to_submit > 0) {
 		uint32_t block_write_offset;
 		uint32_t block_write_amount;

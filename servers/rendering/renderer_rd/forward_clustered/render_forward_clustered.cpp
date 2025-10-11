@@ -892,6 +892,7 @@ void RenderForwardClustered::_update_instance_data_buffer(RenderListType p_rende
 		RD::get_singleton()->buffer_update(scene_state.instance_buffer[p_render_list], 0, sizeof(SceneState::InstanceData) * scene_state.instance_data[p_render_list].size(), scene_state.instance_data[p_render_list].ptr());
 	}
 }
+
 void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list,
 int *p_render_info,
 uint32_t p_offset,
@@ -1007,7 +1008,7 @@ bool p_update_buffer)
 		}
 
 		RenderElementInfo &element_info = rl->element_info[p_offset + i];
-
+		// 元素的额外附加信息
 		element_info.lod_index = surface->sort.lod_index;
 		element_info.uses_forward_gi = surface->sort.uses_forward_gi;
 		element_info.uses_lightmap = surface->sort.uses_lightmap;
@@ -1021,6 +1022,7 @@ bool p_update_buffer)
 		}
 	}
 
+	// 重复几次
 	if (repeats > 0) {
 		for (uint32_t j = 1; j <= repeats; j++) {
 			rl->element_info[p_offset + element_total - j].repeat = j;

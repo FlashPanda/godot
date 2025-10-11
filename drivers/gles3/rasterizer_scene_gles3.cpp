@@ -3115,9 +3115,13 @@ void RasterizerSceneGLES3::_render_list_template(RenderListParameters *p_params,
 				cull_mode = RS::CULL_MODE_DISABLED;
 			} else {
 				bool mirror = inst->mirror;
+				// 如果开了反剔除，相当于镜像再镜像
 				if (p_params->reverse_cull) {
 					mirror = !mirror;
 				}
+
+				// 如果来了正面剔除，但是镜像开了，就意味着是背面剔除。
+				// 如果反过来，那就意味着正面剔除。
 				if (cull_mode == RS::CULL_MODE_FRONT && mirror) {
 					cull_mode = RS::CULL_MODE_BACK;
 				} else if (cull_mode == RS::CULL_MODE_BACK && mirror) {
@@ -3125,12 +3129,15 @@ void RasterizerSceneGLES3::_render_list_template(RenderListParameters *p_params,
 				}
 			}
 
+			// 设置剔除模式。
 			scene_state.set_gl_cull_mode(cull_mode);
 
+			// 图元类型
 			RS::PrimitiveType primitive = surf->primitive;
-			if (shader->uses_point_size) {
+			if (shader->uses_point_size) {	// 使用点尺寸意味着图元是点。
 				primitive = RS::PRIMITIVE_POINTS;
 			}
+			// 枚举所有支持的图元类型
 			static const GLenum prim[5] = { GL_POINTS, GL_LINES, GL_LINE_STRIP, GL_TRIANGLES, GL_TRIANGLE_STRIP };
 			GLenum primitive_gl = prim[int(primitive)];
 
