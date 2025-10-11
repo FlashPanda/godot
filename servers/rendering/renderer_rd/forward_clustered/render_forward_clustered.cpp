@@ -697,7 +697,11 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 	}
 }
 
-void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
+void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_list,
+	RenderingDevice::FramebufferFormatID p_framebuffer_Format,
+	RenderListParameters *p_params,
+	uint32_t p_from_element,
+	uint32_t p_to_element) {
 	//use template for faster performance (pass mode comparisons are inlined)
 
 	switch (p_params->pass_mode) {
@@ -1642,6 +1646,7 @@ void RenderForwardClustered::_copy_framebuffer_to_ssil(Ref<RenderSceneBuffersRD>
 
 void RenderForwardClustered::_pre_opaque_render(RenderDataRD *p_render_data, bool p_use_ssao, bool p_use_ssil, bool p_use_gi, const RID *p_normal_roughness_slices, RID p_voxel_gi_buffer) {
 	// Render shadows while GI is rendering, due to how barriers are handled, this should happen at the same time
+	// 在GI渲染的同时渲染阴影，取决于如何处理屏障，这应该时同时发生的。
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
@@ -2248,6 +2253,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 				// 如果不是透明背景，且存在雾效，则只绘制雾效
 				if (!p_render_data->transparent_bg && (rb->has_custom_data(RB_SCOPE_FOG) || environment_get_fog_enabled(p_render_data->environment))) {
 					draw_sky_fog_only = true;
+					// 为材质设置参数
 					RendererRD::MaterialStorage::get_singleton()->material_set_param(sky.sky_scene_state.fog_material, "clear_color", Variant(clear_color.srgb_to_linear()));
 				}
 			} break;

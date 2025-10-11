@@ -1248,6 +1248,8 @@ private:
 	// validation is cheap so most of it can
 	// also run in release builds.
 
+	// 绘制列表包括了绘制需要的命令缓冲，以及很多用来验证的信息。
+	// 这些验证很消耗很低，所以在发布版中也可保留。
 	struct DrawList {
 		Rect2i viewport;
 		bool viewport_set = false;
@@ -1264,7 +1266,7 @@ private:
 			SetState sets[MAX_UNIFORM_SETS];
 			uint32_t set_count = 0;
 			RID pipeline;
-			RID pipeline_shader;
+			RID pipeline_shader;	// 这里是整套图形着色阶段的组合（VS/FS/可选的GS/TS/mesh 等），而不是单独的某一个阶段，所以只需要一个“管线着色器 ID”来标识这套组合
 			RDD::ShaderID pipeline_shader_driver_id;
 			uint32_t pipeline_shader_layout_hash = 0;
 			uint32_t pipeline_push_constant_size = 0;

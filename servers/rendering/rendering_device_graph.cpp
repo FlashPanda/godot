@@ -2022,12 +2022,14 @@ void RenderingDeviceGraph::add_draw_list_bind_uniform_sets(RDD::ShaderID p_shade
 	}
 }
 
+// 渲染列表绑定顶点数组的操作
 void RenderingDeviceGraph::add_draw_list_bind_vertex_buffers(VectorView<RDD::BufferID> p_vertex_buffers, VectorView<uint64_t> p_vertex_buffer_offsets) {
 	DEV_ASSERT(p_vertex_buffers.size() == p_vertex_buffer_offsets.size());
 
+	// 指令的大小包括指令本身以及这么多传入参数
 	uint32_t instruction_size = sizeof(DrawListBindVertexBuffersInstruction) + sizeof(RDD::BufferID) * p_vertex_buffers.size() + sizeof(uint64_t) * p_vertex_buffer_offsets.size();
 	DrawListBindVertexBuffersInstruction *instruction = reinterpret_cast<DrawListBindVertexBuffersInstruction *>(_allocate_draw_list_instruction(instruction_size));
-	instruction->type = DrawListInstruction::TYPE_BIND_VERTEX_BUFFERS;
+	instruction->type = DrawListInstruction::TYPE_BIND_VERTEX_BUFFERS;	// 指令类型设置为绑定顶点缓冲
 	instruction->vertex_buffers_count = p_vertex_buffers.size();
 
 	RDD::BufferID *vertex_buffers = instruction->vertex_buffers();

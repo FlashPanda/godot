@@ -5048,7 +5048,11 @@ void RenderingDeviceDriverVulkan::command_render_draw_indirect_count(CommandBuff
 }
 
 // 绑定到管线的顶点输入绑定槽（binding slots）上
-void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID *p_buffers, const uint64_t *p_offsets) {
+void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer,
+	uint32_t p_binding_count,
+	const BufferID *p_buffers,
+	const uint64_t *p_offsets)
+{
 	VkBuffer *vk_buffers = ALLOCA_ARRAY(VkBuffer, p_binding_count);
 	for (uint32_t i = 0; i < p_binding_count; i++) {
 		vk_buffers[i] = ((const BufferInfo *)p_buffers[i].id)->vk_buffer;

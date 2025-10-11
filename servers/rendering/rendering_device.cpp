@@ -4879,12 +4879,14 @@ void RenderingDevice::draw_list_bind_uniform_set(DrawListID p_list, RID p_unifor
 void RenderingDevice::draw_list_bind_vertex_array(DrawListID p_list, RID p_vertex_array) {
 	ERR_RENDER_THREAD_GUARD();
 
+	// 从绘制列表ID获取真正的绘制列表结构
 	DrawList *dl = _get_draw_list_ptr(p_list);
 	ERR_FAIL_NULL(dl);
 #ifdef DEBUG_ENABLED
 	ERR_FAIL_COND_MSG(!dl->validation.active, "Submitted Draw Lists can no longer be modified.");
 #endif
 
+	// 获取真正的顶点数组
 	VertexArray *vertex_array = vertex_array_owner.get_or_null(p_vertex_array);
 	ERR_FAIL_NULL(vertex_array);
 
@@ -4894,6 +4896,7 @@ void RenderingDevice::draw_list_bind_vertex_array(DrawListID p_list, RID p_verte
 
 	_check_transfer_worker_vertex_array(vertex_array);
 
+	// 绘制列表状态的顶点数组拿到手
 	dl->state.vertex_array = p_vertex_array;
 
 #ifdef DEBUG_ENABLED
