@@ -520,9 +520,11 @@ public:
 	struct BoundUniform {
 		UniformType type = UNIFORM_TYPE_MAX;
 		uint32_t binding = 0xffffffff; // Binding index as specified in shader.
+									// 绑定索引，与着色器中指定的绑定索引相同。
 		LocalVector<ID> ids;
 		// Flag to indicate  that this is an immutable sampler so it is skipped when creating uniform
 		// sets, as it would be set previously when creating the pipeline layout.
+		// 该标志表示这是一个不可变采样器，因此在创建统一集时会跳过它，因为它会在创建管道布局前设置。
 		bool immutable_sampler = false;
 	};
 

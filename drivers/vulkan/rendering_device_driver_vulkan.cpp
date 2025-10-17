@@ -3987,7 +3987,8 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 	DescriptorSetPoolKey pool_key;
 	// Immutable samplers will be skipped so we need to track the number of vk_writes used.
 	// 不可变的采样器会被跳过，所以我们需要追踪使用的vk_writes数量
-	// VkWriteDescriptorSet的作用是定义如何将具体的资源（如缓冲区、图像或采样器）绑定到描述符集（Descriptor Set）的特定绑定点，以便着色器在渲染过程中能够访问这些资源
+	// VkWriteDescriptorSet的作用是定义如何将具体的资源（如缓冲区、图像或采样器）绑定到
+	// 描述符集（Descriptor Set）的特定绑定点，以便着色器在渲染过程中能够访问这些资源
 	VkWriteDescriptorSet *vk_writes = ALLOCA_ARRAY(VkWriteDescriptorSet, p_uniforms.size());
 	uint32_t writes_amount = 0;
 	for (uint32_t i = 0; i < p_uniforms.size(); i++) {
@@ -3999,11 +4000,12 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 		uint32_t num_descriptors = 1;
 
 		switch (uniform.type) {
-			case UNIFORM_TYPE_SAMPLER: {
+			case UNIFORM_TYPE_SAMPLER: {	// 采样器类型
 				if (uniform.immutable_sampler && immutable_samplers_enabled) {
 					continue; // Skipping immutable samplers.
 				}
-				num_descriptors = uniform.ids.size();
+				num_descriptors = uniform.ids.size();	// 描述符的数量是id的数量
+				// 图片信息的描述数组
 				VkDescriptorImageInfo *vk_img_infos = ALLOCA_ARRAY(VkDescriptorImageInfo, num_descriptors);
 
 				for (uint32_t j = 0; j < num_descriptors; j++) {
@@ -4016,8 +4018,8 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
 				vk_writes[writes_amount].pImageInfo = vk_img_infos;
 			} break;
-			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {
-				num_descriptors = uniform.ids.size() / 2;	// 这是为啥？
+			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE: {	// 有纹理的采样器
+				num_descriptors = uniform.ids.size() / 2;	// 纹理和采样器放在一个descriptor里，所以是一般的描述符数量
 				VkDescriptorImageInfo *vk_img_infos = ALLOCA_ARRAY(VkDescriptorImageInfo, num_descriptors);
 
 				for (uint32_t j = 0; j < num_descriptors; j++) {
@@ -4027,15 +4029,15 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 					}
 #endif
 					vk_img_infos[j] = {};
-					vk_img_infos[j].sampler = (VkSampler)uniform.ids[j * 2 + 0].id;
-					vk_img_infos[j].imageView = ((const TextureInfo *)uniform.ids[j * 2 + 1].id)->vk_view;
-					vk_img_infos[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+					vk_img_infos[j].sampler = (VkSampler)uniform.ids[j * 2 + 0].id;	// 采样器的信息
+					vk_img_infos[j].imageView = ((const TextureInfo*)uniform.ids[j * 2 + 1].id)->vk_view;	// 纹理的信息
+					vk_img_infos[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;	// 图片作用：shader 采样纹理
 				}
 
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 				vk_writes[writes_amount].pImageInfo = vk_img_infos;
 			} break;
-			case UNIFORM_TYPE_TEXTURE: {
+			case UNIFORM_TYPE_TEXTURE: {	// 这就是纹理类型。
 				num_descriptors = uniform.ids.size();
 				VkDescriptorImageInfo *vk_img_infos = ALLOCA_ARRAY(VkDescriptorImageInfo, num_descriptors);
 
@@ -4046,6 +4048,7 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 					}
 #endif
 					vk_img_infos[j] = {};
+					// 跟上面的相比就是没有采样器了
 					vk_img_infos[j].imageView = ((const TextureInfo *)uniform.ids[j].id)->vk_view;
 					vk_img_infos[j].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				}
@@ -4053,7 +4056,7 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 				vk_writes[writes_amount].pImageInfo = vk_img_infos;
 			} break;
-			case UNIFORM_TYPE_IMAGE: {
+			case UNIFORM_TYPE_IMAGE: {	// 图片类型，这里的图片的定义是可以被写入的。
 				num_descriptors = uniform.ids.size();
 				VkDescriptorImageInfo *vk_img_infos = ALLOCA_ARRAY(VkDescriptorImageInfo, num_descriptors);
 
@@ -4065,16 +4068,16 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 #endif
 					vk_img_infos[j] = {};
 					vk_img_infos[j].imageView = ((const TextureInfo *)uniform.ids[j].id)->vk_view;
-					vk_img_infos[j].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+					vk_img_infos[j].imageLayout = VK_IMAGE_LAYOUT_GENERAL;	// 图片的布局是通用布局
 				}
 
-				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;	// 这个意思是保存图片
 				vk_writes[writes_amount].pImageInfo = vk_img_infos;
 			} break;
-			case UNIFORM_TYPE_TEXTURE_BUFFER: {
+			case UNIFORM_TYPE_TEXTURE_BUFFER: {	// 纹理缓冲类型
 				num_descriptors = uniform.ids.size();
 				VkDescriptorBufferInfo *vk_buf_infos = ALLOCA_ARRAY(VkDescriptorBufferInfo, num_descriptors);
-				VkBufferView *vk_buf_views = ALLOCA_ARRAY(VkBufferView, num_descriptors);
+				VkBufferView *vk_buf_views = ALLOCA_ARRAY(VkBufferView, num_descriptors);	// 从这里开始就是bufferview了
 
 				for (uint32_t j = 0; j < num_descriptors; j++) {
 					const BufferInfo *buf_info = (const BufferInfo *)uniform.ids[j].id;
@@ -4085,12 +4088,14 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 					vk_buf_views[j] = buf_info->vk_view;
 				}
 
+				// “纹理缓冲（Texture Buffer）”，或简称 TBO（Texel Buffer Object），这是一维数组形式的贴图数据
 				vk_writes[writes_amount].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
 				vk_writes[writes_amount].pBufferInfo = vk_buf_infos;
 				vk_writes[writes_amount].pTexelBufferView = vk_buf_views;
 			} break;
-			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER: {
+			case UNIFORM_TYPE_SAMPLER_WITH_TEXTURE_BUFFER: {	// 带纹理缓冲的采样器，和直接的纹理还不一样，本质上是缓冲
 				num_descriptors = uniform.ids.size() / 2;
+				// 很神奇，既要图片信息，又要缓冲信息。
 				VkDescriptorImageInfo *vk_img_infos = ALLOCA_ARRAY(VkDescriptorImageInfo, num_descriptors);
 				VkDescriptorBufferInfo *vk_buf_infos = ALLOCA_ARRAY(VkDescriptorBufferInfo, num_descriptors);
 				VkBufferView *vk_buf_views = ALLOCA_ARRAY(VkBufferView, num_descriptors);
@@ -4113,10 +4118,10 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 				vk_writes[writes_amount].pBufferInfo = vk_buf_infos;
 				vk_writes[writes_amount].pTexelBufferView = vk_buf_views;
 			} break;
-			case UNIFORM_TYPE_IMAGE_BUFFER: {
+			case UNIFORM_TYPE_IMAGE_BUFFER: {	// 图像缓冲类型
 				CRASH_NOW_MSG("Unimplemented!"); // TODO.
 			} break;
-			case UNIFORM_TYPE_UNIFORM_BUFFER: {
+			case UNIFORM_TYPE_UNIFORM_BUFFER: {	// 通用缓冲类型
 				// 把内存地址当成id？
 				const BufferInfo *buf_info = (const BufferInfo *)uniform.ids[0].id;
 				VkDescriptorBufferInfo *vk_buf_info = ALLOCA_SINGLE(VkDescriptorBufferInfo);
@@ -4167,6 +4172,7 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 	}
 
 	// Need a descriptor pool.
+	// 找一个，或者创建一个描述符池
 	DescriptorSetPools::Iterator pool_sets_it;
 	VkDescriptorPool vk_pool = _descriptor_set_pool_find_or_create(pool_key, &pool_sets_it, p_linear_pool_index);
 	DEV_ASSERT(vk_pool);
@@ -4178,6 +4184,7 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 	descriptor_set_allocate_info.descriptorSetCount = 1;
 	const ShaderInfo *shader_info = (const ShaderInfo *)p_shader.id;
 	descriptor_set_allocate_info.pSetLayouts = &shader_info->vk_descriptor_set_layouts[p_set_index];
+	// 着色器里面的描述符集布局
 
 	VkDescriptorSet vk_descriptor_set = VK_NULL_HANDLE;
 
@@ -4190,6 +4197,7 @@ RDD::UniformSetID RenderingDeviceDriverVulkan::uniform_set_create(VectorView<Bou
 	for (uint32_t i = 0; i < writes_amount; i++) {
 		vk_writes[i].dstSet = vk_descriptor_set;
 	}
+	// Descriptor set 不是 frame-specific（帧相关的），而是资源描述表。更新一次后，可以多次使用，直到你主动改掉或销毁。
 	vkUpdateDescriptorSets(vk_device, writes_amount, vk_writes, 0, nullptr);
 
 	// Bookkeep.

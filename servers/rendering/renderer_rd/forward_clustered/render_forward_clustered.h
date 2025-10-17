@@ -59,6 +59,7 @@ namespace RendererSceneRenderImplementation {
 class RenderForwardClustered : public RendererSceneRenderRD {
 	friend SceneShaderForwardClustered;
 
+	// 这是4个set的位置
 	enum {
 		SCENE_UNIFORM_SET = 0,
 		RENDER_PASS_UNIFORM_SET = 1,

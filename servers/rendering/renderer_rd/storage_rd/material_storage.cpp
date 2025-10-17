@@ -2223,7 +2223,9 @@ MaterialStorage::ShaderData *MaterialStorage::material_get_shader_data(RID p_mat
 	return nullptr;
 }
 
+// 这个材质存储是Render方面的。
 void MaterialStorage::material_set_param(RID p_material, const StringName &p_param, const Variant &p_value) {
+	// 这个material是data层面的
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
 
