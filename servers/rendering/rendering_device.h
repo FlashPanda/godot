@@ -1104,12 +1104,18 @@ private:
 	//
 	// Keep also in mind that you can share buffers between descriptor sets, so
 	// the above restriction is not too serious.
-
+	// 这个结构体包含了 descriptor set（描述符集）。
+	// 它们必须要为某个 shader 分配（当这个 shader 被销毁时，它们也会被删除），
+	// 但只要哈希值匹配，它们在其他 shader 中也能正常使用——这就覆盖了 shader 变体的情况。
+	//
+	// 另外要注意，你可以在多个 descriptor set 之间共享缓冲区，
+	// 因此上面的限制其实并不算太严格。
 	struct UniformSet {
-		uint32_t format = 0;
-		RID shader_id;
-		uint32_t shader_set = 0;
-		RDD::UniformSetID driver_id;
+		uint32_t format = 0;		// 资源布局签名哈希
+		RID shader_id;				// 该 UniformSet 关联的 Shader 资源 ID
+		uint32_t shader_set = 0;	// 表示这是第几个 Set（即 Vulkan Binding Set 索引），通常是0，1，2，3
+		RDD::UniformSetID driver_id;	// 后端驱动层实际的 DescriptorSet 句柄
+										// 这里虽然名为ID，但是对驱动来说，是一个句柄
 		struct AttachableTexture {
 			uint32_t bind = 0;
 			RID texture;
@@ -1121,11 +1127,13 @@ private:
 		};
 
 		LocalVector<AttachableTexture> attachable_textures; // Used for validation.
-		Vector<RDG::ResourceTracker *> draw_trackers;
-		Vector<RDG::ResourceUsage> draw_trackers_usage;
-		HashMap<RID, RDG::ResourceUsage> untracked_usage;
-		LocalVector<SharedTexture> shared_textures_to_update;
-		InvalidationCallback invalidated_callback = nullptr;
+															// 记录哪些纹理被“附加”（Attach）到这个 Set 中，用于验证
+		Vector<RDG::ResourceTracker *> draw_trackers;		// 跟踪哪些 GPU 资源在当前帧被使用
+		Vector<RDG::ResourceUsage> draw_trackers_usage;		// 对应上面 draw_trackers，记录每个资源在本 Set 中的用途（读 / 写 / 采样等）
+		HashMap<RID, RDG::ResourceUsage> untracked_usage;	// 记录未在 draw_trackers 里登记，但仍然被引用的资源使用情况
+															// 某些外部资源（比如 ViewportTexture）不参与渲染调度跟踪，因此单独记录。
+		LocalVector<SharedTexture> shared_textures_to_update;	// 存储需要在多 Set 间同步更新的“共享纹理”
+		InvalidationCallback invalidated_callback = nullptr;	// 注册一个回调，当 UniformSet 因资源销毁或 Shader 被释放而无效时触发
 		void *invalidated_callback_userdata = nullptr;
 	};
 
@@ -1251,17 +1259,21 @@ private:
 	// 绘制列表包括了绘制需要的命令缓冲，以及很多用来验证的信息。
 	// 这些验证很消耗很低，所以在发布版中也可保留。
 	struct DrawList {
-		Rect2i viewport;
-		bool viewport_set = false;
+		Rect2i viewport;			// 绘制列表对应的视口矩形
+									// 在调用 draw_list_set_viewport() 后写入；提交绘制时若 viewport_set == false 会报错
+		bool viewport_set = false;	// 标记viewport是否被显式设置
+									// 有些pass需要延迟确定视口大小，这个flag用来做安全检查
 
+		// 当前 GPU 命令列表（draw list）里各个 descriptor set 的绑定状态
 		struct SetState {
-			uint32_t pipeline_expected_format = 0;
-			uint32_t uniform_set_format = 0;
-			RDD::UniformSetID uniform_set_driver_id;
-			RID uniform_set;
-			bool bound = false;
+			uint32_t pipeline_expected_format = 0;		// 管线期望的格式
+			uint32_t uniform_set_format = 0;			// 实际的set的格式
+			RDD::UniformSetID uniform_set_driver_id;	// 后端驱动的 DescriptorSet 句柄
+			RID uniform_set;		// Godot侧的uniformset的资源ID
+			bool bound = false;		// 表示这个set在当前draw list中是否已绑定
 		};
 
+		// 当前 GPU 命令列表（draw list）的状态
 		struct State {
 			SetState sets[MAX_UNIFORM_SETS];
 			uint32_t set_count = 0;

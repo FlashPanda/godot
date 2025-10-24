@@ -570,7 +570,7 @@ public:
 	/**** UNIFORM SET ****/
 	/*********************/
 
-	static const uint32_t MAX_UNIFORM_SETS = 16;
+	static const uint32_t MAX_UNIFORM_SETS = 16;	// uniform set最大数量是16
 
 	// 着色器（Shader）所需的 Uniform 资源类型
 	enum UniformType {
