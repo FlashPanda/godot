@@ -988,7 +988,7 @@ bool p_update_buffer)
 
 		if (prev_surface != nullptr &&
 			!cant_repeat &&
-			prev_surface->sort.sort_key1 == surface->sort.sort_key &&
+			prev_surface->sort.sort_key1 == surface->sort.sort_key1 &&
 			prev_surface->sort.sort_key2 == surface->sort.sort_key2 &&
 			inst->mirror == prev_surface->owner->mirror &&
 			repeats < RenderElementInfo::MAX_REPEATS) {
