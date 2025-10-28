@@ -536,6 +536,8 @@ void ShaderRD::_allocate_placeholders(Version *p_version, int p_group) {
 
 // Try to compile all variants for a given group.
 // Will skip variants that are disabled.
+// 尝试编译一个给定组的所有变体
+// 如果变体被禁用，将跳过它们
 void ShaderRD::_compile_version_start(Version *p_version, int p_group) {
 	if (!group_enabled[p_group]) {
 		return;
