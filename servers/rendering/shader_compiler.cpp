@@ -1479,6 +1479,7 @@ ShaderLanguage::DataType ShaderCompiler::_get_global_shader_uniform_type(const S
 }
 
 Error ShaderCompiler::compile(RS::ShaderMode p_mode, const String &p_code, IdentifierActions *p_actions, const String &p_path, GeneratedCode &r_gen_code) {
+	if (0)
 	{
 		static int shader_debug_counter = 0;
 		String user_path = ProjectSettings::get_singleton()->globalize_path("user://");

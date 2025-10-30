@@ -34,6 +34,8 @@
 #include "render_forward_clustered.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
+#include "core/io/file_access.h"
+#include "core/os/time.h"
 
 using namespace RendererSceneRenderImplementation;
 
@@ -526,6 +528,23 @@ SceneShaderForwardClustered::~SceneShaderForwardClustered() {
 void SceneShaderForwardClustered::init(const String p_defines) {
 	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 
+	// 将p_defines输出到文件用于调试
+	if (0)
+	{
+		String debug_file_path = "res://shader_defines_debug.txt";
+		Ref<FileAccess> file = FileAccess::open(debug_file_path, FileAccess::WRITE);
+		if (file.is_valid()) {
+			file->store_string("=== Shader Defines Debug Output ===\n");
+			file->store_string("Timestamp: " + Time::get_singleton()->get_datetime_string_from_system() + "\n");
+			file->store_string("p_defines content:\n");
+			file->store_string(p_defines);
+			file->store_string("\n=== End of Defines ===\n\n");
+			file->flush();
+			print_line("Shader defines written to: " + debug_file_path);
+		} else {
+			print_error("Failed to open debug file for shader defines output");
+		}
+	}
 	{
 		Vector<ShaderRD::VariantDefine> shader_versions;
 		for (uint32_t ubershader = 0; ubershader < 2; ubershader++) {
@@ -578,7 +597,43 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		if (RendererCompositorRD::get_singleton()->is_xr_enabled()) {
 			shader.enable_group(SHADER_GROUP_MULTIVIEW);
 		}
+
+		// 输出shader_versions内容到文件用于调试
+		if (0)
+		{
+			String debug_file_path = "res://shader_versions_debug.txt";
+			Ref<FileAccess> file = FileAccess::open(debug_file_path, FileAccess::WRITE);
+			if (file.is_valid()) {
+				file->store_string("=== Shader Versions Debug Output ===\n");
+				file->store_string("Timestamp: " + Time::get_singleton()->get_datetime_string_from_system() + "\n");
+				file->store_string("Total shader_versions count: " + itos(shader_versions.size()) + "\n\n");
+
+				for (int idx = 0; idx < shader_versions.size(); idx++) {
+					const ShaderRD::VariantDefine& variant = shader_versions[idx];
+					file->store_string("--- Variant " + itos(idx) + " ---\n");
+					file->store_string("Group: " + itos(variant.group) + "\n");
+					file->store_string("Default Enabled: " + String(variant.default_enabled ? "true" : "false") + "\n");
+					file->store_string("Text Content:\n");
+					String text_content = String::utf8(variant.text.get_data());
+					if (text_content.is_empty()) {
+						file->store_string("(empty)\n");
+					}
+					else {
+						file->store_string(text_content + "\n");
+					}
+					file->store_string("\n");
+				}
+
+				file->store_string("=== End of Shader Versions ===\n");
+				file->flush();
+				print_line("Shader versions written to: " + debug_file_path);
+			}
+			else {
+				print_error("Failed to open debug file for shader versions output");
+			}
+		}
 	}
+
 
 	material_storage->shader_set_data_request_function(RendererRD::MaterialStorage::SHADER_TYPE_3D, _create_shader_funcs);
 	material_storage->material_set_data_request_function(RendererRD::MaterialStorage::SHADER_TYPE_3D, _create_material_funcs);
