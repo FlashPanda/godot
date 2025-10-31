@@ -832,14 +832,16 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 
 		actions.check_multiview_samplers = RendererCompositorRD::get_singleton()->is_xr_enabled(); // Make sure we check sampling multiview textures.
 
+		// 编译器需要根据这些action初始化
 		compiler.initialize(actions);
 	}
 
 	{
 		//default material and shader
-		default_shader = material_storage->shader_allocate();
-		material_storage->shader_initialize(default_shader);
-		material_storage->shader_set_code(default_shader, R"(
+		// 默认材质与着色器
+		default_shader = material_storage->shader_allocate();		// 从材质存储中，分配一个着色器的ID
+		material_storage->shader_initialize(default_shader);		// 材质存储：初始化着色器
+		material_storage->shader_set_code(default_shader, R"(		
 // Default 3D material shader (Forward+).
 
 shader_type spatial;
@@ -853,22 +855,31 @@ void fragment() {
 	ROUGHNESS = 0.8;
 	METALLIC = 0.2;
 }
-)");
-		default_material = material_storage->material_allocate();
-		material_storage->material_initialize(default_material);
-		material_storage->material_set_shader(default_material, default_shader);
+)");																// 设置默认着色器的代码
+		default_material = material_storage->material_allocate();	// 从材质存储中，分配一个材质的ID
+		material_storage->material_initialize(default_material);	// 材质存储：初始化材质
+		material_storage->material_set_shader(default_material, default_shader);	// 材质存储：设置材质的着色器
 
+		// 从默认材质中获取材质数据，材质数据是这个RD的材质数据，是material storage里同名结构的子类 
 		MaterialData *md = static_cast<MaterialData *>(material_storage->material_get_data(default_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
-		default_shader_rd = md->shader_data->get_shader_variant(PIPELINE_VERSION_COLOR_PASS, 0, false);
-		default_shader_sdfgi_rd = md->shader_data->get_shader_variant(PIPELINE_VERSION_DEPTH_PASS_WITH_SDF, 0, false);
+		default_shader_rd = md->shader_data->get_shader_variant(PIPELINE_VERSION_COLOR_PASS, 0, false);		// 默认着色器的RID
+		default_shader_sdfgi_rd = md->shader_data->get_shader_variant(PIPELINE_VERSION_DEPTH_PASS_WITH_SDF, 0, false);	// 默认深度着色器的RID
 
-		default_material_shader_ptr = md->shader_data;
-		default_material_uniform_set = md->uniform_set;
+
+
+		default_material_shader_ptr = md->shader_data;		// 默认材质的着色器数据
+		default_material_uniform_set = md->uniform_set;		// 默认材质的uniform 集
 	}
 
+	/* Overdraw（过度绘制）调试视图” 用的专用材质与着色器 */
+	/*
+	 * 当你在编辑器里切到 Debug Draw → Overdraw（或渲染器进入对应调试模式）时，
+	 * 渲染器会用这一套统一的调试材质替换场景里所有物体的原材质，以可视化哪些区域
+	 * 被重复绘制了很多次（填充率/片元压力高）
+	*/
 	{
 		overdraw_material_shader = material_storage->shader_allocate();
-		material_storage->shader_initialize(overdraw_material_shader);
+		material_storage->shader_initialize(overdraw_material_shader);		// 初始化过度绘制着色器
 		// Use relatively low opacity so that more "layers" of overlapping objects can be distinguished.
 		material_storage->shader_set_code(overdraw_material_shader, R"(
 // 3D editor Overdraw debug draw mode shader (Forward+).
@@ -881,16 +892,31 @@ void fragment() {
 	ALBEDO = vec3(0.4, 0.8, 0.8);
 	ALPHA = 0.1;
 }
-)");
+)");	// 融合模式是增加，并且不启用雾，这种方式就意味着如果重叠的越多，那地方就越亮
 		overdraw_material = material_storage->material_allocate();
-		material_storage->material_initialize(overdraw_material);
+		material_storage->material_initialize(overdraw_material);	// 也就是说storage里控制着着色器的初始化，以及别的操作
 		material_storage->material_set_shader(overdraw_material, overdraw_material_shader);
 
+		// 获取这个类型的材质数据
 		MaterialData *md = static_cast<MaterialData *>(material_storage->material_get_data(overdraw_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
 		overdraw_material_shader_ptr = md->shader_data;
 		overdraw_material_uniform_set = md->uniform_set;
 	}
 
+	/* 「阴影级联（Cascaded Shadow Map，CSM）」调试模式 的专用调试材质。 */
+
+	/**
+	在 Forward+ 渲染器 中，平行光的阴影一般采用 Cascaded Shadow Maps（CSM） 技术，也叫 split shadows 或 shadow splits。
+	它的原理是把相机可见范围按距离分成几段（splits），为每一段生成一个单独的 shadow map，这样近处阴影清晰，远处阴影模糊但性能可控。
+
+	然而：
+		这些分割区间通常在运行时动态调整；
+
+		调试时需要看清楚“每个像素到底用了哪一个 split 的 shadow map”。
+
+	👉 这就是 render_mode debug_shadow_splits 的作用：
+	让引擎在渲染阴影时，以不同颜色或灰度标出不同的 split 区域，帮助开发者可视化 CSM 的分布情况。
+	*/
 	{
 		debug_shadow_splits_material_shader = material_storage->shader_allocate();
 		material_storage->shader_initialize(debug_shadow_splits_material_shader);
@@ -915,16 +941,18 @@ void fragment() {
 	}
 
 	{
-		default_vec4_xform_buffer = RD::get_singleton()->storage_buffer_create(256);
+		default_vec4_xform_buffer = RD::get_singleton()->storage_buffer_create(256);	// 创建一个storage buffer的RID
 		Vector<RD::Uniform> uniforms;
 		RD::Uniform u;
-		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;	// uniform类型是存储缓冲区
 		u.append_id(default_vec4_xform_buffer);
-		u.binding = 0;
+		u.binding = 0;		// 绑定位置是0
 		uniforms.push_back(u);
 
 		default_vec4_xform_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, default_shader_rd, RenderForwardClustered::TRANSFORMS_UNIFORM_SET);
 	}
+
+	/* 默认阴影采样器 */
 	{
 		RD::SamplerState sampler;
 		sampler.mag_filter = RD::SAMPLER_FILTER_LINEAR;
