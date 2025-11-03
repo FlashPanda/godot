@@ -437,11 +437,21 @@ private:
 		};
 	};
 
+	// 面向驱动的着色器信息。
 	struct ShaderInfo {
-		VkShaderStageFlags vk_push_constant_stages = 0;
-		TightLocalVector<VkPipelineShaderStageCreateInfo> vk_stages_create_info;
-		TightLocalVector<VkDescriptorSetLayout> vk_descriptor_set_layouts;
-		VkPipelineLayout vk_pipeline_layout = VK_NULL_HANDLE;
+		VkShaderStageFlags vk_push_constant_stages = 0;		// 标志哪些着色器阶段可以访问当前 pipeline layout 中定义的 Push Constant。
+		TightLocalVector<VkPipelineShaderStageCreateInfo> vk_stages_create_info;	// 各个着色器阶段的创建信息
+		/**
+		VkPipelineShaderStageCreateInfo {
+			VkShaderStageFlagBits stage; // 比如 VK_SHADER_STAGE_VERTEX_BIT
+			VkShaderModule module;       // 对应 SPIR-V 模块
+			const char* pName;           // 入口函数，一般是 "main"
+			const VkSpecializationInfo* pSpecializationInfo;
+		}
+		*/
+
+		TightLocalVector<VkDescriptorSetLayout> vk_descriptor_set_layouts;	// 描述此着色器需要的 Descriptor Set 布局 列表
+		VkPipelineLayout vk_pipeline_layout = VK_NULL_HANDLE;	// 整个 shader 的资源布局总描述符
 	};
 
 public:
