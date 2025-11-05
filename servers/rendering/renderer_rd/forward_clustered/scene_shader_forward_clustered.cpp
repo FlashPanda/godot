@@ -36,6 +36,7 @@
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "core/io/file_access.h"
 #include "core/os/time.h"
+#include "core/io/dir_access.h"
 
 using namespace RendererSceneRenderImplementation;
 
@@ -170,23 +171,62 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	uses_normal |= uses_normal_map;
 	uses_tangent |= uses_normal_map;
 
-#if 1
-	print_line("**compiling shader:");
-	print_line("**defines:\n");
+// #if 1
+// 	print_line("**compiling shader:");
+// 	print_line("**defines:\n");
+// 	for (int i = 0; i < gen_code.defines.size(); i++) {
+// 		print_line(gen_code.defines[i]);
+// 	}
+
+// 	HashMap<String, String>::Iterator el = gen_code.code.begin();
+// 	while (el) {
+// 		print_line("\n**code " + el->key + ":\n" + el->value);
+// 		++el;
+// 	}
+
+// 	print_line("\n**uniforms:\n" + gen_code.uniforms);
+// 	print_line("\n**vertex_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX]);
+// 	print_line("\n**fragment_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT]);
+
+// #endif
+
+#if 0
+{
+	String log;
+	log += "**compiling shader:\n";
+	log += "**defines:\n";
 	for (int i = 0; i < gen_code.defines.size(); i++) {
-		print_line(gen_code.defines[i]);
+		log += gen_code.defines[i] + "\n";
 	}
 
 	HashMap<String, String>::Iterator el = gen_code.code.begin();
 	while (el) {
-		print_line("\n**code " + el->key + ":\n" + el->value);
+		log += "\n**code " + el->key + ":\n" + el->value + "\n";
 		++el;
 	}
 
-	print_line("\n**uniforms:\n" + gen_code.uniforms);
-	print_line("\n**vertex_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX]);
-	print_line("\n**fragment_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT]);
+	log += "\n**uniforms:\n" + gen_code.uniforms + "\n";
+	log += "\n**vertex_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX] + "\n";
+	log += "\n**fragment_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT] + "\n";
+
+	// 输出到文件
+	String out_dir = "res://output_analysis/set_code/";
+	DirAccess::make_dir_recursive_absolute(out_dir);
+
+	String timestamp = Time::get_singleton()->get_datetime_string_from_system().replace(":", "-");
+	String filename = vformat("%sforward_clustered_%s.log", out_dir, timestamp);
+
+	Ref<FileAccess> file = FileAccess::open(filename, FileAccess::WRITE);
+	if (file.is_valid()) {
+		file->store_string(log);
+		file->close();
+		print_line(vformat("SceneShaderForwardClustered::ShaderData::set_code log written: %s", filename));
+	} else {
+		print_error(vformat("Failed to write SceneShaderForwardClustered::ShaderData::set_code log: %s", filename));
+	}
+}
 #endif
+
 	SceneShaderForwardClustered::singleton->shader.version_set_code(version, gen_code.code, gen_code.uniforms, gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX], gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT], gen_code.defines);
 
 	ubo_size = gen_code.uniform_total_size;
@@ -196,6 +236,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	pipeline_hash_map.clear_pipelines();
 
 	// If any form of Alpha Antialiasing is enabled, set the blend mode to alpha to coverage.
+	// 如果当前材质/着色器启用了“Alpha 抗锯齿（Alpha Antialiasing）”，就自动把混合模式（blend_mode）切换为 BLEND_MODE_ALPHA_TO_COVERAGE。
 	if (alpha_antialiasing_mode != ALPHA_ANTIALIASING_OFF) {
 		blend_mode = BLEND_MODE_ALPHA_TO_COVERAGE;
 	}

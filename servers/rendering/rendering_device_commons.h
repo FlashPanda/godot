@@ -547,6 +547,8 @@ public:
 	/**** SHADER ****/
 	/****************/
 
+	// 着色器阶段，意味着在这些阶段中，管线是开放了这些阶段的。
+	// 也只有这些阶段才能有对应的着色器代码。
 	enum ShaderStage {
 		SHADER_STAGE_VERTEX,
 		SHADER_STAGE_FRAGMENT,
@@ -561,6 +563,7 @@ public:
 		SHADER_STAGE_COMPUTE_BIT = (1 << SHADER_STAGE_COMPUTE),
 	};
 
+	// 着色器阶段与对应的spirv代码
 	struct ShaderStageSPIRVData {
 		ShaderStage shader_stage = SHADER_STAGE_MAX;
 		Vector<uint8_t> spirv;
