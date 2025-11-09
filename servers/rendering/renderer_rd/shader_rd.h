@@ -38,6 +38,11 @@
 #include "core/templates/rid_owner.h"
 #include "servers/rendering_server.h"
 
+// 引擎内部的着色器构建与变体（variant）管理器
+// 它负责把“模板化的着色器源码 + 引擎生成的片段（uniform 块、全局宏、代码段、
+// 不可变采样器等）+ 运行期的变体开关（defines/group）”拼装成各个阶段（VS/FS/CS）
+// 的最终源码，并在需要时触发增量/按需编译，缓存结果，最终得到可交给底层
+// RenderingDevice（RD）创建的后端着色器/管线资源（用 RID 表示）
 class ShaderRD {
 public:
 	struct VariantDefine {

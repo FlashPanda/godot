@@ -87,6 +87,18 @@ bool sc_use_lighting() {
 // Higher sets: Sets that change format and layout very often
 // This is because changing a set for another with a different layout or format,
 // invalidates all the upper ones (as likely internal base offset changes)
+// vulkan对sets的顺序有下面的隐含逻辑：
+// 低编号的set：存放几乎不会变的资源，比如全局资源。
+// 高编号的set：存放经常会变的资源，比如实例数据
+// 因为vulkan在绑定descriptor sets时，内部会根据每个set的布局结构（layout）计算基址偏移（base offset）
+// 比如：
+// 		set0 layout A -> 起始偏移0
+//		set1 layout B -> 起始偏移64 bytes
+//		set2 layout C -> 起始偏移128 bytes
+// 当你重新绑定一个不同的layout的set1时，set的起始偏移就不一定还能对齐原来的结构了。
+// 所以vulkan就必须将所有更高的set（比如set2，set3）都标记为无效（invalidate）
+// 所以，当你改动了低编号的set，就得重新绑定所有高编号的
+// 如果只是改了高编号的，对其他低编号的就没有影响
 
 /* SET0: Globals */
 

@@ -3347,6 +3347,9 @@ String RenderingDeviceDriverVulkan::shader_get_binary_cache_key() {
 	return "Vulkan-SV" + uitos(ShaderBinary::VERSION);
 }
 
+/**
+ 虽然名字叫compile，实际上spirv已经是vulkan支持的代码了。所以这里只是把它重新组织。
+*/
 Vector<uint8_t> RenderingDeviceDriverVulkan::shader_compile_binary_from_spirv(VectorView<ShaderStageSPIRVData> p_spirv, const String &p_shader_name) {
 	ShaderReflection shader_refl;
 	if (_reflect_spirv(p_spirv, shader_refl) != OK) {

@@ -32,6 +32,9 @@
 
 #include "servers/rendering/rendering_server_globals.h"
 #include "servers/rendering/shader_types.h"
+#include "core/io/dir_access.h"
+#include "core/io/file_access.h"
+#include "core/config/project_settings.h"
 
 #define SL ShaderLanguage
 
@@ -1476,6 +1479,33 @@ ShaderLanguage::DataType ShaderCompiler::_get_global_shader_uniform_type(const S
 }
 
 Error ShaderCompiler::compile(RS::ShaderMode p_mode, const String &p_code, IdentifierActions *p_actions, const String &p_path, GeneratedCode &r_gen_code) {
+	if (0)
+	{
+		static int shader_debug_counter = 0;
+		String user_path = ProjectSettings::get_singleton()->globalize_path("user://");
+		String res_path = ProjectSettings::get_singleton()->globalize_path("res://");
+		
+		// 可选：创建目录（若 API 不同请适配）
+		Ref<DirAccess> da = DirAccess::create_for_path("res://shader_debug");
+		Error err = da->make_dir_recursive("res://shader_debug");
+
+		Array args;
+		args.push_back((int32_t)p_mode);
+		args.push_back(shader_debug_counter);
+		bool error = false;
+		String filename = String("res://shader_debug/shader_mode_%d_count%d.txt").sprintf(args, &error);
+		Ref<FileAccess> f = FileAccess::open(filename, FileAccess::WRITE);
+		if (f.is_valid()) {
+			f->store_string("Original Shader Code:\n");
+			f->store_string(p_code);
+			f->close(); // 可选，Ref 会在析构时关闭
+		}
+		else {
+			ERR_PRINT("Failed to open debug file: " + filename);
+		}
+		shader_debug_counter++;
+	}
+
 	SL::ShaderCompileInfo info;
 	info.functions = ShaderTypes::get_singleton()->get_functions(p_mode);
 	info.render_modes = ShaderTypes::get_singleton()->get_modes(p_mode);

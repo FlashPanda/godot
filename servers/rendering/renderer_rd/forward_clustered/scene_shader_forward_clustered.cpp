@@ -34,6 +34,9 @@
 #include "render_forward_clustered.h"
 #include "servers/rendering/renderer_rd/renderer_compositor_rd.h"
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
+#include "core/io/file_access.h"
+#include "core/os/time.h"
+#include "core/io/dir_access.h"
 
 using namespace RendererSceneRenderImplementation;
 
@@ -168,23 +171,62 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	uses_normal |= uses_normal_map;
 	uses_tangent |= uses_normal_map;
 
-#if 1
-	print_line("**compiling shader:");
-	print_line("**defines:\n");
+// #if 1
+// 	print_line("**compiling shader:");
+// 	print_line("**defines:\n");
+// 	for (int i = 0; i < gen_code.defines.size(); i++) {
+// 		print_line(gen_code.defines[i]);
+// 	}
+
+// 	HashMap<String, String>::Iterator el = gen_code.code.begin();
+// 	while (el) {
+// 		print_line("\n**code " + el->key + ":\n" + el->value);
+// 		++el;
+// 	}
+
+// 	print_line("\n**uniforms:\n" + gen_code.uniforms);
+// 	print_line("\n**vertex_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX]);
+// 	print_line("\n**fragment_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT]);
+
+// #endif
+
+#if 0
+{
+	String log;
+	log += "**compiling shader:\n";
+	log += "**defines:\n";
 	for (int i = 0; i < gen_code.defines.size(); i++) {
-		print_line(gen_code.defines[i]);
+		log += gen_code.defines[i] + "\n";
 	}
 
 	HashMap<String, String>::Iterator el = gen_code.code.begin();
 	while (el) {
-		print_line("\n**code " + el->key + ":\n" + el->value);
+		log += "\n**code " + el->key + ":\n" + el->value + "\n";
 		++el;
 	}
 
-	print_line("\n**uniforms:\n" + gen_code.uniforms);
-	print_line("\n**vertex_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX]);
-	print_line("\n**fragment_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT]);
+	log += "\n**uniforms:\n" + gen_code.uniforms + "\n";
+	log += "\n**vertex_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX] + "\n";
+	log += "\n**fragment_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT] + "\n";
+
+	// 输出到文件
+	String out_dir = "res://output_analysis/set_code/";
+	DirAccess::make_dir_recursive_absolute(out_dir);
+
+	String timestamp = Time::get_singleton()->get_datetime_string_from_system().replace(":", "-");
+	String filename = vformat("%sforward_clustered_%s.log", out_dir, timestamp);
+
+	Ref<FileAccess> file = FileAccess::open(filename, FileAccess::WRITE);
+	if (file.is_valid()) {
+		file->store_string(log);
+		file->close();
+		print_line(vformat("SceneShaderForwardClustered::ShaderData::set_code log written: %s", filename));
+	} else {
+		print_error(vformat("Failed to write SceneShaderForwardClustered::ShaderData::set_code log: %s", filename));
+	}
+}
 #endif
+
 	SceneShaderForwardClustered::singleton->shader.version_set_code(version, gen_code.code, gen_code.uniforms, gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX], gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT], gen_code.defines);
 
 	ubo_size = gen_code.uniform_total_size;
@@ -194,6 +236,7 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 	pipeline_hash_map.clear_pipelines();
 
 	// If any form of Alpha Antialiasing is enabled, set the blend mode to alpha to coverage.
+	// 如果当前材质/着色器启用了“Alpha 抗锯齿（Alpha Antialiasing）”，就自动把混合模式（blend_mode）切换为 BLEND_MODE_ALPHA_TO_COVERAGE。
 	if (alpha_antialiasing_mode != ALPHA_ANTIALIASING_OFF) {
 		blend_mode = BLEND_MODE_ALPHA_TO_COVERAGE;
 	}
@@ -526,6 +569,23 @@ SceneShaderForwardClustered::~SceneShaderForwardClustered() {
 void SceneShaderForwardClustered::init(const String p_defines) {
 	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 
+	// 将p_defines输出到文件用于调试
+	if (0)
+	{
+		String debug_file_path = "res://shader_defines_debug.txt";
+		Ref<FileAccess> file = FileAccess::open(debug_file_path, FileAccess::WRITE);
+		if (file.is_valid()) {
+			file->store_string("=== Shader Defines Debug Output ===\n");
+			file->store_string("Timestamp: " + Time::get_singleton()->get_datetime_string_from_system() + "\n");
+			file->store_string("p_defines content:\n");
+			file->store_string(p_defines);
+			file->store_string("\n=== End of Defines ===\n\n");
+			file->flush();
+			print_line("Shader defines written to: " + debug_file_path);
+		} else {
+			print_error("Failed to open debug file for shader defines output");
+		}
+	}
 	{
 		Vector<ShaderRD::VariantDefine> shader_versions;
 		for (uint32_t ubershader = 0; ubershader < 2; ubershader++) {
@@ -578,7 +638,43 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 		if (RendererCompositorRD::get_singleton()->is_xr_enabled()) {
 			shader.enable_group(SHADER_GROUP_MULTIVIEW);
 		}
+
+		// 输出shader_versions内容到文件用于调试
+		if (0)
+		{
+			String debug_file_path = "res://shader_versions_debug.txt";
+			Ref<FileAccess> file = FileAccess::open(debug_file_path, FileAccess::WRITE);
+			if (file.is_valid()) {
+				file->store_string("=== Shader Versions Debug Output ===\n");
+				file->store_string("Timestamp: " + Time::get_singleton()->get_datetime_string_from_system() + "\n");
+				file->store_string("Total shader_versions count: " + itos(shader_versions.size()) + "\n\n");
+
+				for (int idx = 0; idx < shader_versions.size(); idx++) {
+					const ShaderRD::VariantDefine& variant = shader_versions[idx];
+					file->store_string("--- Variant " + itos(idx) + " ---\n");
+					file->store_string("Group: " + itos(variant.group) + "\n");
+					file->store_string("Default Enabled: " + String(variant.default_enabled ? "true" : "false") + "\n");
+					file->store_string("Text Content:\n");
+					String text_content = String::utf8(variant.text.get_data());
+					if (text_content.is_empty()) {
+						file->store_string("(empty)\n");
+					}
+					else {
+						file->store_string(text_content + "\n");
+					}
+					file->store_string("\n");
+				}
+
+				file->store_string("=== End of Shader Versions ===\n");
+				file->flush();
+				print_line("Shader versions written to: " + debug_file_path);
+			}
+			else {
+				print_error("Failed to open debug file for shader versions output");
+			}
+		}
 	}
+
 
 	material_storage->shader_set_data_request_function(RendererRD::MaterialStorage::SHADER_TYPE_3D, _create_shader_funcs);
 	material_storage->material_set_data_request_function(RendererRD::MaterialStorage::SHADER_TYPE_3D, _create_material_funcs);
@@ -777,14 +873,16 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 
 		actions.check_multiview_samplers = RendererCompositorRD::get_singleton()->is_xr_enabled(); // Make sure we check sampling multiview textures.
 
+		// 编译器需要根据这些action初始化
 		compiler.initialize(actions);
 	}
 
 	{
 		//default material and shader
-		default_shader = material_storage->shader_allocate();
-		material_storage->shader_initialize(default_shader);
-		material_storage->shader_set_code(default_shader, R"(
+		// 默认材质与着色器
+		default_shader = material_storage->shader_allocate();		// 从材质存储中，分配一个着色器的ID
+		material_storage->shader_initialize(default_shader);		// 材质存储：初始化着色器
+		material_storage->shader_set_code(default_shader, R"(		
 // Default 3D material shader (Forward+).
 
 shader_type spatial;
@@ -798,22 +896,31 @@ void fragment() {
 	ROUGHNESS = 0.8;
 	METALLIC = 0.2;
 }
-)");
-		default_material = material_storage->material_allocate();
-		material_storage->material_initialize(default_material);
-		material_storage->material_set_shader(default_material, default_shader);
+)");																// 设置默认着色器的代码
+		default_material = material_storage->material_allocate();	// 从材质存储中，分配一个材质的ID
+		material_storage->material_initialize(default_material);	// 材质存储：初始化材质
+		material_storage->material_set_shader(default_material, default_shader);	// 材质存储：设置材质的着色器
 
+		// 从默认材质中获取材质数据，材质数据是这个RD的材质数据，是material storage里同名结构的子类 
 		MaterialData *md = static_cast<MaterialData *>(material_storage->material_get_data(default_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
-		default_shader_rd = md->shader_data->get_shader_variant(PIPELINE_VERSION_COLOR_PASS, 0, false);
-		default_shader_sdfgi_rd = md->shader_data->get_shader_variant(PIPELINE_VERSION_DEPTH_PASS_WITH_SDF, 0, false);
+		default_shader_rd = md->shader_data->get_shader_variant(PIPELINE_VERSION_COLOR_PASS, 0, false);		// 默认着色器的RID
+		default_shader_sdfgi_rd = md->shader_data->get_shader_variant(PIPELINE_VERSION_DEPTH_PASS_WITH_SDF, 0, false);	// 默认深度着色器的RID
 
-		default_material_shader_ptr = md->shader_data;
-		default_material_uniform_set = md->uniform_set;
+
+
+		default_material_shader_ptr = md->shader_data;		// 默认材质的着色器数据
+		default_material_uniform_set = md->uniform_set;		// 默认材质的uniform 集
 	}
 
+	/* Overdraw（过度绘制）调试视图” 用的专用材质与着色器 */
+	/*
+	 * 当你在编辑器里切到 Debug Draw → Overdraw（或渲染器进入对应调试模式）时，
+	 * 渲染器会用这一套统一的调试材质替换场景里所有物体的原材质，以可视化哪些区域
+	 * 被重复绘制了很多次（填充率/片元压力高）
+	*/
 	{
 		overdraw_material_shader = material_storage->shader_allocate();
-		material_storage->shader_initialize(overdraw_material_shader);
+		material_storage->shader_initialize(overdraw_material_shader);		// 初始化过度绘制着色器
 		// Use relatively low opacity so that more "layers" of overlapping objects can be distinguished.
 		material_storage->shader_set_code(overdraw_material_shader, R"(
 // 3D editor Overdraw debug draw mode shader (Forward+).
@@ -826,16 +933,31 @@ void fragment() {
 	ALBEDO = vec3(0.4, 0.8, 0.8);
 	ALPHA = 0.1;
 }
-)");
+)");	// 融合模式是增加，并且不启用雾，这种方式就意味着如果重叠的越多，那地方就越亮
 		overdraw_material = material_storage->material_allocate();
-		material_storage->material_initialize(overdraw_material);
+		material_storage->material_initialize(overdraw_material);	// 也就是说storage里控制着着色器的初始化，以及别的操作
 		material_storage->material_set_shader(overdraw_material, overdraw_material_shader);
 
+		// 获取这个类型的材质数据
 		MaterialData *md = static_cast<MaterialData *>(material_storage->material_get_data(overdraw_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
 		overdraw_material_shader_ptr = md->shader_data;
 		overdraw_material_uniform_set = md->uniform_set;
 	}
 
+	/* 「阴影级联（Cascaded Shadow Map，CSM）」调试模式 的专用调试材质。 */
+
+	/**
+	在 Forward+ 渲染器 中，平行光的阴影一般采用 Cascaded Shadow Maps（CSM） 技术，也叫 split shadows 或 shadow splits。
+	它的原理是把相机可见范围按距离分成几段（splits），为每一段生成一个单独的 shadow map，这样近处阴影清晰，远处阴影模糊但性能可控。
+
+	然而：
+		这些分割区间通常在运行时动态调整；
+
+		调试时需要看清楚“每个像素到底用了哪一个 split 的 shadow map”。
+
+	👉 这就是 render_mode debug_shadow_splits 的作用：
+	让引擎在渲染阴影时，以不同颜色或灰度标出不同的 split 区域，帮助开发者可视化 CSM 的分布情况。
+	*/
 	{
 		debug_shadow_splits_material_shader = material_storage->shader_allocate();
 		material_storage->shader_initialize(debug_shadow_splits_material_shader);
@@ -860,16 +982,18 @@ void fragment() {
 	}
 
 	{
-		default_vec4_xform_buffer = RD::get_singleton()->storage_buffer_create(256);
+		default_vec4_xform_buffer = RD::get_singleton()->storage_buffer_create(256);	// 创建一个storage buffer的RID
 		Vector<RD::Uniform> uniforms;
 		RD::Uniform u;
-		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		u.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;	// uniform类型是存储缓冲区
 		u.append_id(default_vec4_xform_buffer);
-		u.binding = 0;
+		u.binding = 0;		// 绑定位置是0
 		uniforms.push_back(u);
 
 		default_vec4_xform_uniform_set = RD::get_singleton()->uniform_set_create(uniforms, default_shader_rd, RenderForwardClustered::TRANSFORMS_UNIFORM_SET);
 	}
+
+	/* 默认阴影采样器 */
 	{
 		RD::SamplerState sampler;
 		sampler.mag_filter = RD::SAMPLER_FILTER_LINEAR;

@@ -37,12 +37,19 @@
 
 namespace RendererSceneRenderImplementation {
 
+/**
+	SceneShaderForwardClustered 是 Godot Forward+（Clustered）3D 渲染器的“场景着色器中枢”。
+	它把 Godot Shader 语言编译成后端可用的 GPU 着色器/管线，管理默认与调试材质，维护所有渲染通
+	道（深度、颜色等）的 Uber-shader 变体与 Pipeline 缓存，并向 MaterialStorage 提供本渲染器专
+	属的 ShaderData/MaterialData 实现，用于在实际渲染时快速绑定。
+*/
 class SceneShaderForwardClustered {
 private:
 	static SceneShaderForwardClustered *singleton;
 	static Mutex singleton_mutex;
 
 public:
+	// 着色器组的枚举：基础、高级、多视图、高级多视图
 	enum ShaderGroup {
 		SHADER_GROUP_BASE, // Always compiled at the beginning.
 		SHADER_GROUP_ADVANCED,
@@ -52,6 +59,8 @@ public:
 
 	// Not an enum because these values are constants that are processed as numbers
 	// to arrive at a unique version for a particular shader.
+	// 不是枚举，因为这些值是常量。
+	// 一个特定着色器的唯一版本的数字常量
 	struct ShaderVersion {
 		constexpr static uint16_t SHADER_VERSION_DEPTH_PASS = 0;
 		constexpr static uint16_t SHADER_VERSION_DEPTH_PASS_DP = 1;
@@ -65,6 +74,7 @@ public:
 		constexpr static uint16_t SHADER_VERSION_COLOR_PASS = 9;
 	};
 
+	// 颜色通道的标记，用来标记开启什么功能
 	enum ShaderColorPassFlags {
 		SHADER_COLOR_PASS_FLAG_UBERSHADER = 1 << 0,
 		SHADER_COLOR_PASS_FLAG_SEPARATE_SPECULAR = 1 << 1,
@@ -93,6 +103,8 @@ public:
 		PIPELINE_VERSION_MAX
 	};
 
+	// 这个和ShaderColorPassFlags的第一个对不上，为啥？因为是两个不同的抽象，只是有些名字相同，表示一致的功能。
+	// 而为啥只有这个color pass有这么多flags呢？因为颜色通道的变体很多
 	enum PipelineColorPassFlags {
 		PIPELINE_COLOR_PASS_FLAG_TRANSPARENT = 1 << 0, // Can't combine with SEPARATE_SPECULAR.
 		PIPELINE_COLOR_PASS_FLAG_SEPARATE_SPECULAR = 1 << 1, // Can't combine with TRANSPARENT.
@@ -103,6 +115,14 @@ public:
 		PIPELINE_COLOR_PASS_FLAG_COMBINATIONS = 1 << PIPELINE_COLOR_PASS_FLAG_OPTIONS,
 	};
 
+	// 在不重新编译整个着色器的情况下，通过“特化常量（specialization constants）”快速生成 GPU 端的不同 shader 变体。
+	/**
+	ShaderSpecialization 用于：
+		描述当前渲染管线的 shader 特化参数集；
+		在 pipeline 创建时填充到 Vulkan 的 VkSpecializationInfo；
+		从而控制 shader 行为（如是否启用软阴影、GI、贴图过滤模式、mipmap 开关、shadow 样本数等）；
+		避免因为参数变化而重新编译 shader。
+	*/
 	struct ShaderSpecialization {
 		union {
 			struct {
@@ -137,6 +157,7 @@ public:
 		uint32_t packed_2;
 	};
 
+	// Uber着色器常量，用两位来控制剔除模式
 	struct UbershaderConstants {
 		union {
 			struct {
@@ -173,16 +194,19 @@ public:
 			ALPHA_ANTIALIASING_ALPHA_TO_COVERAGE_AND_TO_ONE
 		};
 
+		/**
+		 * Pipeline缓存结构的键（key）结构，哈希表中唯一标识一个渲染管线的指纹 
+		 */
 		struct PipelineKey {
-			RD::VertexFormatID vertex_format_id;
-			RD::FramebufferFormatID framebuffer_format_id;
-			RD::PolygonCullMode cull_mode = RD::POLYGON_CULL_MAX;
-			RS::PrimitiveType primitive_type = RS::PRIMITIVE_MAX;
-			PipelineVersion version = PipelineVersion::PIPELINE_VERSION_MAX;
-			uint32_t color_pass_flags = 0;
-			ShaderSpecialization shader_specialization = {};
-			uint32_t wireframe = false;
-			uint32_t ubershader = false;
+			RD::VertexFormatID vertex_format_id;						// 顶点输入布局
+			RD::FramebufferFormatID framebuffer_format_id;				// 渲染目标的格式集合
+			RD::PolygonCullMode cull_mode = RD::POLYGON_CULL_MAX;		// 多边形剔除模式
+			RS::PrimitiveType primitive_type = RS::PRIMITIVE_MAX;		// 图元类型
+			PipelineVersion version = PipelineVersion::PIPELINE_VERSION_MAX;		// 管线版本标识
+			uint32_t color_pass_flags = 0;								// 颜色管线的标志位
+			ShaderSpecialization shader_specialization = {};			// shader特化常量集合
+			uint32_t wireframe = false;									// 是否启用线框模式
+			uint32_t ubershader = false;								// 是否启用Uber着色器
 
 			uint32_t hash() const {
 				uint32_t h = hash_murmur3_one_64(vertex_format_id);

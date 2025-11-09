@@ -2175,11 +2175,13 @@ void MaterialStorage::material_set_shader(RID p_material, RID p_shader) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
 
+	// 删除原有的数据
 	if (material->data) {
 		memdelete(material->data);
 		material->data = nullptr;
 	}
 
+	// 材质原有的着色器删除
 	if (material->shader) {
 		material->shader->owners.erase(material);
 		material->shader = nullptr;

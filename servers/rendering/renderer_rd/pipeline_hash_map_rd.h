@@ -92,6 +92,12 @@ public:
 	}
 
 	// Start compilation of a pipeline ahead of time in the background. Returns true if the compilation was started, false if it wasn't required. Source is only used for collecting statistics.
+	/*	
+	 * 在后台提前启动某个管线的编译。
+	 * 如果编译已被启动则返回 true，
+	 * 如果不需要（例如缓存中已存在或条件不满足）则返回 false。
+	 * 参数 source 仅用于收集统计信息。
+	*/
 	void compile_pipeline(const Key &p_key, uint32_t p_key_hash, RS::PipelineSource p_source) {
 		DEV_ASSERT((creation_object != nullptr) && (creation_function != nullptr) && "Creation object and function was not set before attempting to compile a pipeline.");
 
