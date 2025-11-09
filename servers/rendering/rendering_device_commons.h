@@ -1030,17 +1030,44 @@ public:
 		bool operator<(const ShaderSpecializationConstant &p_other) const { return constant_id < p_other.constant_id; }
 	};
 
-	// 着色器描述符
+	/*
+		它是 Godot 引擎 渲染设备抽象层（RenderingDevice） 用来描述一个着色器的完整布局信息的结构。
+		这些数据全部来自 SPIR-V 反射（reflection），用于告诉引擎“这个 shader 需要什么资源、有什么接口、是干嘛的”
+	*/
 	struct ShaderDescription {
-		uint64_t vertex_input_mask = 0;
-		uint32_t fragment_output_mask = 0;
-		bool is_compute = false;
-		uint32_t compute_local_size[3] = {};
-		uint32_t push_constant_size = 0;
+		uint64_t vertex_input_mask = 0;			// 标识顶点输入（vertex attributes）使用了哪些通道
+												// 在 Vulkan（以及 Godot 的 Mesh/ArrayMesh）中，顶点属性如
+												// 位置、法线、UV、颜色等都有固定的 slot 索引（例如 Godot 用
+												// ARRAY_VERTEX, ARRAY_NORMAL, ARRAY_TEX_UV 等）
+												// 创建 pipeline 时自动生成 VkVertexInputStateCreateInfo
+		uint32_t fragment_output_mask = 0;		// 标识片段着色器（fragment shader）输出了哪些颜色附件
+												// 在 Vulkan 中，fragment shader 可以输出到多个 color attachment：
+												// layout(location = 0) out vec4 color0;
+												// layout(location = 1) out vec4 color1;
+												// fragment_output_mask 的每一位代表一个输出 location：
+												// bit 0 → attachment 0
+												// bit 1 → attachment 1
+												// 生成 pipeline 时可自动设置 VkPipelineColorBlendAttachmentState 数组长度。
+		bool is_compute = false;				// 是计算着色器吗
+		uint32_t compute_local_size[3] = {};	// 描述计算着色器的工作组大小 (local_size_x, local_size_y, local_size_z)
+												// 对应：layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+		uint32_t push_constant_size = 0;		// 推送常量（Push Constant）在该 shader 中占用的字节数
 
-		Vector<Vector<ShaderUniform>> uniform_sets;
-		Vector<ShaderSpecializationConstant> specialization_constants;
-		Vector<ShaderStage> stages;
+		Vector<Vector<ShaderUniform>> uniform_sets;		// 存储所有 Descriptor Set 的详细 Uniform 信息
+														// 结构是二维数组：
+														// 外层索引 = set 号（例如 set 0, set 1, set 2 ...）
+														// 内层 Vector = 该 set 下的所有 ShaderUniform（每个 binding）
+														// 用于生成 Vulkan 的 VkDescriptorSetLayoutBinding[]；
+
+		/*
+		 * 特化常量和普通常量的区别在于：
+		 * 普通常量在编译器决定的，代码写死就不能更改了。
+		 * 特化常量是在管线内占据一个“常量”位置，可以通过方式去传入这个常量值
+		*/
+		Vector<ShaderSpecializationConstant> specialization_constants;	// 描述该 shader 里有哪些特化常量（Specialization Constants）
+																	   // 例如：layout(constant_id = 0) const int SAMPLE_COUNT = 4;
+
+		Vector<ShaderStage> stages;				// 存储 shader 各个阶段（vertex/fragment/compute...）的二进制代码与元数据
 	};
 
 protected:

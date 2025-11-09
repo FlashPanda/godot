@@ -3662,10 +3662,12 @@ template RID RenderingDevice::uniform_set_create(const Vector<RD::Uniform> &p_un
 
 template <typename Collection>
 RID RenderingDevice::uniform_set_create(const Collection &p_uniforms, RID p_shader, uint32_t p_shader_set, bool p_linear_pool) {
+	// 线程安全保护
 	_THREAD_SAFE_METHOD_
 
 	ERR_FAIL_COND_V(p_uniforms.is_empty(), RID());
 
+	// 获取真正的shader对象
 	Shader *shader = shader_owner.get_or_null(p_shader);
 	ERR_FAIL_NULL_V(shader, RID());
 

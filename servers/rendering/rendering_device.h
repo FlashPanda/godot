@@ -903,13 +903,23 @@ private:
 	// Additionally, hashes are created for every set
 	// to do quick validation and ensuring the user
 	// does not submit something invalid.
+	// 
+	// 在 Vulkan 中，着色器本质上就是预编译好的 SPIR-V 字节码块。
+	// 它们很可能要到创建管线时，才真正被编译为宿主平台的机器指令。
+	//
+	// 在提供这些着色器时，本实现会利用 glslang 的反射能力
+	// 来解析并缓存创建与使用描述符集（Vulkan 最让人头疼的部分）
+	// 所需的一切信息。
+	//
+	// 另外，会为每个描述符集生成哈希，用于快速校验，
+	// 确保用户提交的内容是合法的。
 
 	struct Shader : public ShaderDescription {
 		String name; // Used for debug.
-		RDD::ShaderID driver_id;
-		uint32_t layout_hash = 0;
-		BitField<RDD::PipelineStageBits> stage_bits;
-		Vector<uint32_t> set_formats;
+		RDD::ShaderID driver_id;	// RDD资源ID，可能是指向底层 Vulkan VkShaderModule 的抽象引用
+		uint32_t layout_hash = 0;	// 描述符布局的哈希值
+		BitField<RDD::PipelineStageBits> stage_bits;	// 着色器涉及到的管线阶段，一般是顶点、片段、计算着色器
+		Vector<uint32_t> set_formats;	// 每个描述符集的布局
 	};
 
 	String _shader_uniform_debug(RID p_shader, int p_set = -1);
