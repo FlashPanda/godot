@@ -33,6 +33,7 @@
 
 #include "core/object/class_db.h"
 
+// 专门用于管理和访问那些在 Shader 代码中通过 #include 引入的 内置文件（built-in include）
 class ShaderIncludeDB : public Object {
 	GDCLASS(ShaderIncludeDB, Object)
 

@@ -40,6 +40,12 @@
 #include "core/object/script_language.h"
 #include "scene/resources/shader_include.h"
 
+/**
+ *负责把 Shader 源码在正式解析/编译前，按 C/GLSL 风格的预处理规则做一轮处理（删注释、展开宏、
+ *处理 #include/#define/#if/#pragma/#error/#undef 等），并为编辑器提供代码补全、条件区
+ *域可视化等信息。
+ */
+
 class ShaderPreprocessor {
 public:
 	enum CompletionType {

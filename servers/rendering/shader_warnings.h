@@ -37,6 +37,7 @@
 #include "core/templates/hash_map.h"
 #include "core/variant/variant.h"
 
+// 统一表示、存储和传递着色器分析或编译过程中产生的各种警告。
 class ShaderWarning {
 public:
 	enum Code {

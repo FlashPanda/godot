@@ -34,6 +34,7 @@
 #include "servers/rendering_server.h"
 #include "shader_language.h"
 
+// 定义、存储并提供各种 Shader 类型（ShaderMode）下的可用函数与模式信息
 class ShaderTypes {
 	struct Type {
 		HashMap<StringName, ShaderLanguage::FunctionInfo> functions;
