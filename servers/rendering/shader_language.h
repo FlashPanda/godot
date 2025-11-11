@@ -1072,6 +1072,7 @@ private:
 	bool _lookup_next(Token &r_tk);
 	Token _peek();
 
+	// 所有节点的根节点
 	ShaderNode *shader = nullptr;
 
 	enum IdentifierType {

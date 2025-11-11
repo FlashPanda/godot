@@ -1608,6 +1608,7 @@ Error ShaderCompiler::compile(RS::ShaderMode p_mode, const String &p_code, Ident
 
 	shader = parser.get_shader();
 	function = nullptr;
+	// 这个地方将shader dump成r_gen_code返回出去
 	_dump_node_code(shader, 1, r_gen_code, *p_actions, actions, false);
 
 	return OK;
