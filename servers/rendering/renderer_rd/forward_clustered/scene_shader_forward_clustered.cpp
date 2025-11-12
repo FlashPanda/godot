@@ -434,6 +434,36 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
 	RID pipeline = RD::get_singleton()->render_pipeline_create(shader_rid, p_pipeline_key.framebuffer_format_id, p_pipeline_key.vertex_format_id, primitive_rd, raster_state, multisample_state, depth_stencil_state, blend_state, 0, 0, specialization_constants);
 	ERR_FAIL_COND(pipeline.is_null());
 
+	// 输出创建的管线
+#if 1  // 设置为 0 可以禁用输出
+	{
+		uint32_t pipeline_hash = p_pipeline_key.hash();
+		String log = vformat("Pipeline Hash: 0x%016X\n", pipeline_hash);
+		log += vformat("  Version: %d\n", p_pipeline_key.version);
+		log += vformat("  Vertex Format: %d\n", p_pipeline_key.vertex_format_id);
+		log += vformat("  Framebuffer Format: %d\n", p_pipeline_key.framebuffer_format_id);
+		log += vformat("  Cull Mode: %d\n", p_pipeline_key.cull_mode);
+		log += vformat("  Primitive Type: %d\n", p_pipeline_key.primitive_type);
+		log += vformat("  Color Pass Flags: 0x%X\n", p_pipeline_key.color_pass_flags);
+		log += vformat("  Wireframe: %s\n", p_pipeline_key.wireframe ? "true" : "false");
+		log += vformat("  Ubershader: %s\n", p_pipeline_key.ubershader ? "true" : "false");
+		log += "---\n";
+
+		// 可选：创建目录（若 API 不同请适配）
+		Ref<DirAccess> da = DirAccess::create_for_path("res://output_analysis");
+		String filename = "res://output_analysis/pipeline_key_hash.txt";
+
+		Ref<FileAccess> file = FileAccess::open(filename, FileAccess::READ_WRITE);
+		if (file.is_valid()) {
+			file->seek_end();
+			file->store_string(log);
+			file->close();
+		} else {
+			print_error(vformat("Failed to write pipeline hash to file: %s", filename));
+		}
+	}
+#endif
+
 	pipeline_hash_map.add_compiled_pipeline(p_pipeline_key.hash(), pipeline);
 }
 

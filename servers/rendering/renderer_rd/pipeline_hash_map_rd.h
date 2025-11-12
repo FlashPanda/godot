@@ -33,6 +33,9 @@
 
 #include "servers/rendering/rendering_device.h"
 #include "servers/rendering_server.h"
+#include "core/io/file_access.h"
+#include "core/os/time.h"
+#include "core/io/dir_access.h"
 
 #define PRINT_PIPELINE_COMPILATION_KEYS 0
 
@@ -136,6 +139,33 @@ public:
 		}
 
 		print_line("HASH:", p_key_hash, "SOURCE:", source_name);
+#endif
+
+#if 1  // 设置为 0 可以禁用输出
+		{
+			String log = vformat("=== Compile Pipeline Key ===\n");
+			log += vformat("Timestamp: %s\n", Time::get_singleton()->get_datetime_string_from_system());
+			log += vformat("Input Key Hash: 0x%016X\n", p_key_hash);
+			log += vformat("Pipeline Key Details:\n");
+			log += vformat(" p_key.hash(): 0x%016X\n", p_key.hash());
+			log += "\n";
+
+			String out_dir = "res://output_analysis/";
+			DirAccess::make_dir_recursive_absolute(out_dir);
+			String filename = "res://output_analysis/compile_pipeline_key.txt";
+
+			Ref<FileAccess> file = FileAccess::open(filename, FileAccess::READ_WRITE);
+			if (file.is_valid()) {
+				file->seek_end();
+				file->store_string(log);
+				file->close();
+			} else {
+				print_error(vformat("Failed to write compile pipeline key to file: %s", filename));
+			}
+
+			// 同时输出到控制台
+			print_line(vformat("Compile Pipeline Key Hash: 0x%016X", p_key_hash));
+		}
 #endif
 
 		// Queue a background compilation task.

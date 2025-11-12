@@ -22,6 +22,13 @@ from SCons import __version__ as scons_raw_version
 # an `editor.py` file at the root of the module creates a clash with the editor
 # folder when doing `import editor.template_builder`)
 
+# --- Force MSVC to English + UTF-8 output for all child processes --- #
+os.environ.setdefault("VSLANG", "1033")        # 1033 = English
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+os.environ.setdefault("LANG", "en_US.UTF-8")
+os.environ.setdefault("LC_ALL", "C")
+# -------------------------------------------------------------------- #
+
 
 def _helper_module(name, path):
     spec = spec_from_file_location(name, path)
@@ -125,7 +132,8 @@ elif os.name == "nt" and methods.get_cmdline_bool("use_mingw", False):
 # We let SCons build its default ENV as it includes OS-specific things which we don't
 # want to have to pull in manually.
 # Then we prepend PATH to make it take precedence, while preserving SCons' own entries.
-env = Environment(tools=custom_tools)
+# env = Environment(tools=custom_tools)
+env = Environment(tools=custom_tools, ENV=os.environ)
 env.PrependENVPath("PATH", os.getenv("PATH"))
 env.PrependENVPath("PKG_CONFIG_PATH", os.getenv("PKG_CONFIG_PATH"))
 if "TERM" in os.environ:  # Used for colored output.
@@ -614,6 +622,14 @@ if env["scu_build"]:
 # Must happen after the flags' definition, as configure is when most flags
 # are actually handled to change compile options, etc.
 detect.configure(env)
+
+# Ensure MSVC treats source and diagnostics as UTF-8
+if env.msvc:
+    env.AppendUnique(CCFLAGS=["/utf-8"])
+    env.AppendUnique(CXXFLAGS=["/utf-8"])
+    # 可选：不需要全路径可去掉 /FC 避免非 ASCII 路径导致的显示问题
+    # env['CCFLAGS'] = [flag for flag in env['CCFLAGS'] if flag != '/FC']
+
 
 print(f'Building for platform "{env["platform"]}", architecture "{env["arch"]}", target "{env["target"]}".')
 if env.dev_build:
