@@ -435,10 +435,11 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
 	ERR_FAIL_COND(pipeline.is_null());
 
 	// 输出创建的管线
-#if 1  // 设置为 0 可以禁用输出
+#if 0  // 设置为 0 可以禁用输出
 	{
 		uint32_t pipeline_hash = p_pipeline_key.hash();
 		String log = vformat("Pipeline Hash: 0x%016X\n", pipeline_hash);
+		log += vformat("  Path: %s\n", path);
 		log += vformat("  Version: %d\n", p_pipeline_key.version);
 		log += vformat("  Vertex Format: %d\n", p_pipeline_key.vertex_format_id);
 		log += vformat("  Framebuffer Format: %d\n", p_pipeline_key.framebuffer_format_id);
@@ -453,13 +454,21 @@ void SceneShaderForwardClustered::ShaderData::_create_pipeline(PipelineKey p_pip
 		Ref<DirAccess> da = DirAccess::create_for_path("res://output_analysis");
 		String filename = "res://output_analysis/pipeline_key_hash.txt";
 
+		// Read write有个问题，就是如果一开始没有这文件，它就打不开了。
 		Ref<FileAccess> file = FileAccess::open(filename, FileAccess::READ_WRITE);
 		if (file.is_valid()) {
 			file->seek_end();
 			file->store_string(log);
 			file->close();
 		} else {
-			print_error(vformat("Failed to write pipeline hash to file: %s", filename));
+			file = FileAccess::open(filename, FileAccess::WRITE);
+			if (file.is_valid()) {
+				file->seek_end();
+				file->store_string(log);
+				file->close();
+			} else {
+				print_error(vformat("Failed to write pipeline hash to file: %s", filename));
+			}
 		}
 	}
 #endif

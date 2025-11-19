@@ -144,6 +144,7 @@ public:
 #if 1  // 设置为 0 可以禁用输出
 		{
 			String log = vformat("=== Compile Pipeline Key ===\n");
+			log += vformat("Path: %s\n", creation_object->path);
 			log += vformat("Timestamp: %s\n", Time::get_singleton()->get_datetime_string_from_system());
 			log += vformat("Input Key Hash: 0x%016X\n", p_key_hash);
 			log += vformat("Pipeline Key Details:\n");
@@ -160,7 +161,14 @@ public:
 				file->store_string(log);
 				file->close();
 			} else {
-				print_error(vformat("Failed to write compile pipeline key to file: %s", filename));
+				file = FileAccess::open(filename, FileAccess::WRITE);
+				if (file.is_valid()) {
+					file->seek_end();
+					file->store_string(log);
+					file->close();
+				} else {
+					print_error(vformat("Failed to write pipeline hash to file: %s", filename));
+				}
 			}
 
 			// 同时输出到控制台

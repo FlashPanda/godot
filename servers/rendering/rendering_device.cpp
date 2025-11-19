@@ -1005,6 +1005,7 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 
 	// Transfer and validate view info.
 
+	// 驱动侧的纹理视图
 	RDD::TextureView tv;
 	if (p_view.format_override == DATA_FORMAT_MAX) {
 		tv.format = format.format;
@@ -1025,7 +1026,7 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 
 	Texture texture;
 	format.usage_bits |= forced_usage_bits;
-	texture.driver_id = driver->texture_create(format, tv);
+	texture.driver_id = driver->texture_create(format, tv);		// 创建纹理，驱动侧的纹理ID返回
 	ERR_FAIL_COND_V(!texture.driver_id, RID());
 	texture.type = format.texture_type;
 	texture.format = format.format;
@@ -1064,7 +1065,7 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 
 	texture_memory += driver->texture_get_allocation_size(texture.driver_id);
 
-	RID id = texture_owner.make_rid(texture);
+	RID id = texture_owner.make_rid(texture);	// 将纹理结构转换成RID
 #ifdef DEV_ENABLED
 	set_resource_name(id, "RID:" + itos(id.get_id()));
 #endif
@@ -1076,6 +1077,7 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 
 		if (texture.draw_tracker != nullptr) {
 			// Draw tracker can assume the texture will be in copy destination.
+			// 假定其用途是copy to
 			texture.draw_tracker->usage = RDG::RESOURCE_USAGE_COPY_TO;
 		}
 	}
