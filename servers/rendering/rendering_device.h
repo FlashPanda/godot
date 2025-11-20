@@ -663,10 +663,12 @@ private:
 
 	// This is a cache and it's never freed, it ensures
 	// IDs for a given format are always unique.
+	// 缓存并且永不删除。确保给定格式的ID永远都是唯一的。
 	RBMap<FramebufferFormatKey, FramebufferFormatID> framebuffer_format_cache;
 	struct FramebufferFormat {
 		const RBMap<FramebufferFormatKey, FramebufferFormatID>::Element *E;
 		RDD::RenderPassID render_pass; // Here for constructing shaders, never used, see section (7.2. Render Pass Compatibility from Vulkan spec).
+										// 这里来构建着色器，永不使用
 		Vector<TextureSamples> pass_samples;
 		uint32_t view_count = 1; // Number of views.
 	};

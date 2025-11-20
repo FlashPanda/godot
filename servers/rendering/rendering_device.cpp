@@ -1413,26 +1413,32 @@ uint32_t RenderingDevice::_texture_alignment(Texture *p_texture) const {
  * 再从 staging buffer 发命令复制进 GPU 纹理（某一层），顺便做 layout 转换和 barrier。
  */
 Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, const Vector<uint8_t> &p_data) {
+	// 这是godot对应的texture概念
 	Texture *texture = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(texture, ERR_INVALID_PARAMETER);
 
+	// 如果这个 Texture 本身是“别的纹理的 owner 的引用”（比如 alias / view），就跳到真正的 owner 上。
 	if (texture->owner != RID()) {
 		p_texture = texture->owner;
-		texture = texture_owner.get_or_null(texture->owner);
+		texture = texture_owner.get_or_null(texture->owner);	// owner能否有别的owner？
 		ERR_FAIL_NULL_V(texture, ERR_BUG); // This is a bug.
 	}
 
+	// 计算这个纹理实际有多少 layer（普通 2D 就是 1，array / 3D 的会大一些）
 	uint32_t layer_count = _texture_layer_count(texture);
 	ERR_FAIL_COND_V(p_layer >= layer_count, ERR_INVALID_PARAMETER);
 
+	// 根据纹理的 format / width / height / depth / mipmaps，算出 所有 mip 的总字节数（tight_mip_size），以及对齐后真实的 width/height（一般是压缩格式才会对齐）。
 	uint32_t width, height;
 	uint32_t tight_mip_size = get_image_format_required_size(texture->format, texture->width, texture->height, texture->depth, texture->mipmaps, &width, &height);
 	uint32_t required_size = tight_mip_size;
-	uint32_t required_align = _texture_alignment(texture);
+	uint32_t required_align = _texture_alignment(texture);		// 上传到 GPU staging buffer 时需要的对齐粒度（比如 256 bytes 对齐之类）
 
 	ERR_FAIL_COND_V_MSG(required_size != (uint32_t)p_data.size(), ERR_INVALID_PARAMETER,
 			"Required size for texture update (" + itos(required_size) + ") does not match data supplied size (" + itos(p_data.size()) + ").");
 
+	// 对压缩格式：拿到一个 block 有多大，比如 BC/ASTC 的 4×4 之类
+	// 对非压缩格式，block 一般是 1×1，但函数也统一走这里。
 	uint32_t block_w, block_h;
 	get_compressed_image_format_block_dimensions(texture->format, block_w, block_h);
 
