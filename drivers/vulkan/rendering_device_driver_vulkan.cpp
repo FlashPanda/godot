@@ -1658,28 +1658,36 @@ VkSampleCountFlagBits RenderingDeviceDriverVulkan::_ensure_supported_sample_coun
 }
 
 RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &p_format, const TextureView &p_view) {
+	// 初始化创建image的结构体
 	VkImageCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 
+	// 如果这块为你有“可共享的格式集合”（意味着同一块image可以用不同view format来看，比如SRGB/UNORM双视图）
 	if (p_format.shareable_formats.size()) {
-		create_info.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+		create_info.flags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;	// 加上个标记允许一个image被不同格式的view使用
 
+		// 如果设备支持扩展VK_KHR_image_format_list
 		if (enabled_device_extension_names.has(VK_KHR_IMAGE_FORMAT_LIST_EXTENSION_NAME)) {
+			// 在栈上分配一个vkFormat数组，用来存放允许的view格式列表
 			VkFormat *vk_allowed_formats = ALLOCA_ARRAY(VkFormat, p_format.shareable_formats.size());
+			// 把godot自己的枚举映射到Vulkan的vkFormat
 			for (int i = 0; i < p_format.shareable_formats.size(); i++) {
 				vk_allowed_formats[i] = RD_TO_VK_FORMAT[p_format.shareable_formats[i]];
 			}
 
+			// 创建ImageFormatList的结构体，用来设置有多少个格式，以及这些格式是什么
 			VkImageFormatListCreateInfoKHR *format_list_create_info = ALLOCA_SINGLE(VkImageFormatListCreateInfoKHR);
 			*format_list_create_info = {};
 			format_list_create_info->sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO_KHR;
 			format_list_create_info->viewFormatCount = p_format.shareable_formats.size();
 			format_list_create_info->pViewFormats = vk_allowed_formats;
 
+			// 挂载到扩展字段上
 			create_info.pNext = format_list_create_info;
 		}
 	}
 
+	// cube map或者cubemap数组，就用cube view来创建
 	if (p_format.texture_type == TEXTURE_TYPE_CUBE || p_format.texture_type == TEXTURE_TYPE_CUBE_ARRAY) {
 		create_info.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 	}
@@ -1687,64 +1695,74 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 		create_info.flags |= VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT;
 	}*/
 
-	create_info.imageType = RD_TEX_TYPE_TO_VK_IMG_TYPE[p_format.texture_type];
+	create_info.imageType = RD_TEX_TYPE_TO_VK_IMG_TYPE[p_format.texture_type];	// 图片类型
 
-	create_info.format = RD_TO_VK_FORMAT[p_format.format];
+	create_info.format = RD_TO_VK_FORMAT[p_format.format];	// 格式
 
-	create_info.extent.width = p_format.width;
-	create_info.extent.height = p_format.height;
-	create_info.extent.depth = p_format.depth;
+	create_info.extent.width = p_format.width;	// 宽
+	create_info.extent.height = p_format.height;	// 高
+	create_info.extent.depth = p_format.depth;	// 深度
 
 	create_info.mipLevels = p_format.mipmaps;
-	create_info.arrayLayers = p_format.array_layers;
+	create_info.arrayLayers = p_format.array_layers;	// array层数
 
-	create_info.samples = _ensure_supported_sample_count(p_format.samples);
+	create_info.samples = _ensure_supported_sample_count(p_format.samples);		// 转成vulkan支持的sample count
+	// 如果标记了TEXTURE_USAGE_CPU_READ_BIT，说明CPU需要读这块数据，使用VK_IMAGE_TILING_LINEAR方便CPU读取
+	// 如果不是，用VK_IMAGE_TILING_OPTIMAL更合适给GPU使用（压缩和tiled内存布局）
 	create_info.tiling = (p_format.usage_bits & TEXTURE_USAGE_CPU_READ_BIT) ? VK_IMAGE_TILING_LINEAR : VK_IMAGE_TILING_OPTIMAL;
 
 	// Usage.
+	// 下面这些就是把Godot的usage bit映射到vulkan的vkImageUsageFlags
 	if ((p_format.usage_bits & TEXTURE_USAGE_SAMPLING_BIT)) {
-		create_info.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+		create_info.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;		// 可以作为普通sampled texture使用
 	}
 	if ((p_format.usage_bits & TEXTURE_USAGE_STORAGE_BIT)) {
-		create_info.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+		create_info.usage |= VK_IMAGE_USAGE_STORAGE_BIT;		// 可以作为storage image使用
 	}
 	if ((p_format.usage_bits & TEXTURE_USAGE_COLOR_ATTACHMENT_BIT)) {
-		create_info.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		create_info.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;	// RT/color attachment
 	}
 	if ((p_format.usage_bits & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
-		create_info.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		create_info.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;	// 深度与模板的附件
 	}
 	if ((p_format.usage_bits & TEXTURE_USAGE_INPUT_ATTACHMENT_BIT)) {
-		create_info.usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+		create_info.usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;	// 子pass的输入附件
 	}
 	if ((p_format.usage_bits & TEXTURE_USAGE_VRS_ATTACHMENT_BIT)) {
-		create_info.usage |= VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+		create_info.usage |= VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;		// 可变着色速率
 	}
 	if ((p_format.usage_bits & TEXTURE_USAGE_CAN_UPDATE_BIT)) {
-		create_info.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+		create_info.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;	// 写权限
 	}
 	if ((p_format.usage_bits & TEXTURE_USAGE_CAN_COPY_FROM_BIT)) {
-		create_info.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+		create_info.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;	// 读权限
 	}
 	if ((p_format.usage_bits & TEXTURE_USAGE_CAN_COPY_TO_BIT)) {
-		create_info.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+		create_info.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;	// 写权限
 	}
 
-	create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;		// 只在一个query family中使用，性能最优
+	create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;		// 告诉驱动我们不关心原始内容，后续会通过barrier转到需要的layout
 
 	// Allocate memory.
+	// 分配内存
 
 	uint32_t width = 0, height = 0;
+	// 估算需要的字节数
 	uint32_t image_size = get_image_format_required_size(p_format.format, p_format.width, p_format.height, p_format.depth, p_format.mipmaps, &width, &height);
 
+	// 初始化vma的分配信息，创建信息
 	VmaAllocationCreateInfo alloc_create_info = {};
+	// 如果CPU需要读，就加上VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT，表示CPU需要读取
 	alloc_create_info.flags = (p_format.usage_bits & TEXTURE_USAGE_CPU_READ_BIT) ? VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT : 0;
 
+	// 如果这是一个 transient 纹理（例如，只用于一帧的附件）
 	if (p_format.usage_bits & TEXTURE_USAGE_TRANSIENT_BIT) {
 		uint32_t memory_type_index = 0;
-		VmaAllocationCreateInfo lazy_memory_requirements = alloc_create_info;
-		lazy_memory_requirements.usage = VMA_MEMORY_USAGE_GPU_LAZILY_ALLOCATED;
+		VmaAllocationCreateInfo lazy_memory_requirements = alloc_create_info;		// 复制一份创建信息，用来进行懒分配
+		lazy_memory_requirements.usage = VMA_MEMORY_USAGE_GPU_LAZILY_ALLOCATED;		// 用途变成懒分配
+
+		// 测试一下是否存在这种懒分配的内存类型
 		VkResult result = vmaFindMemoryTypeIndex(allocator, UINT32_MAX, &lazy_memory_requirements, &memory_type_index);
 		if (VK_SUCCESS == result) {
 			alloc_create_info = lazy_memory_requirements;
@@ -1753,14 +1771,16 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 			// If usage includes VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
 			// then bits other than VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
 			// and VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT must not be set.
+			// vulkan的限制，只能是这些用途
 			create_info.usage &= (VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
 		} else {
-			alloc_create_info.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+			alloc_create_info.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;	// 找不到lazy，退回device local
 		}
 	} else {
-		alloc_create_info.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+		alloc_create_info.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;	// 找不到lazy，退回device local
 	}
 
+	// 如果大小小于某个尺寸，走VMA的小块池
 	if (image_size <= SMALL_ALLOCATION_MAX_SIZE) {
 		uint32_t mem_type_index = 0;
 		vmaFindMemoryTypeIndexForImageInfo(allocator, &create_info, &alloc_create_info, &mem_type_index);
@@ -1769,55 +1789,74 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 
 	// Create.
 
-	VkImage vk_image = VK_NULL_HANDLE;
-	VmaAllocation allocation = nullptr;
-	VmaAllocationInfo alloc_info = {};
+	VkImage vk_image = VK_NULL_HANDLE;		// 图像的句柄
+	VmaAllocation allocation = nullptr;		// 内存的句柄
+	VmaAllocationInfo alloc_info = {};		// 内存的西悉尼
 
+	// 创建图像
 	VkResult err = vkCreateImage(vk_device, &create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE), &vk_image);
 	ERR_FAIL_COND_V_MSG(err, TextureID(), "vkCreateImage failed with error " + itos(err) + ".");
+	// 为图像分配存储
 	err = vmaAllocateMemoryForImage(allocator, vk_image, &alloc_create_info, &allocation, &alloc_info);
 	ERR_FAIL_COND_V_MSG(err, TextureID(), "Can't allocate memory for image, error: " + itos(err) + ".");
+	// 将内存映射到image
 	err = vmaBindImageMemory2(allocator, allocation, 0, vk_image, nullptr);
 	ERR_FAIL_COND_V_MSG(err, TextureID(), "Can't bind memory to image, error: " + itos(err) + ".");
 
 	// Create view.
 
+	// 图像视图创建信息
 	VkImageViewCreateInfo image_view_create_info = {};
 	image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	image_view_create_info.image = vk_image;
-	image_view_create_info.viewType = (VkImageViewType)p_format.texture_type;
-	image_view_create_info.format = RD_TO_VK_FORMAT[p_view.format];
+	image_view_create_info.image = vk_image;		// 相关的图像句柄
+	image_view_create_info.viewType = (VkImageViewType)p_format.texture_type;	// 视图类型
+	image_view_create_info.format = RD_TO_VK_FORMAT[p_view.format];		// view的格式
+	// 设置组件的 swizzle
+
+	/**
+		swizzle 在 Vulkan / Godot / GPU 图形里指的是：
+
+		把纹理的 R/G/B/A 通道“重新排列、重映射”到着色器看到的输出通道。
+
+		相当于给纹理通道做一个“通道重定向”，就像在 PS 里改图层通道一样，但这是 GPU 级别的操作。
+	 */
 	image_view_create_info.components.r = (VkComponentSwizzle)p_view.swizzle_r;
 	image_view_create_info.components.g = (VkComponentSwizzle)p_view.swizzle_g;
 	image_view_create_info.components.b = (VkComponentSwizzle)p_view.swizzle_b;
 	image_view_create_info.components.a = (VkComponentSwizzle)p_view.swizzle_a;
-	image_view_create_info.subresourceRange.levelCount = create_info.mipLevels;
-	image_view_create_info.subresourceRange.layerCount = create_info.arrayLayers;
+	image_view_create_info.subresourceRange.levelCount = create_info.mipLevels;		// mipmap数
+	image_view_create_info.subresourceRange.layerCount = create_info.arrayLayers;	// layer数
 	if ((p_format.usage_bits & TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
-		image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;	// 为什么没管stencil，我在输出stencil的时候碰到了老多问题
 	} else {
 		image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	}
 
+	// ASTC 的decode扩展
 	VkImageViewASTCDecodeModeEXT decode_mode;
+	// 如果设备支持 VK_EXT_astc_decode_mode 扩展，并且 view format 是 ASTC 系列格式
 	if (enabled_device_extension_names.has(VK_EXT_ASTC_DECODE_MODE_EXTENSION_NAME)) {
 		if (image_view_create_info.format >= VK_FORMAT_ASTC_4x4_UNORM_BLOCK && image_view_create_info.format <= VK_FORMAT_ASTC_12x12_SRGB_BLOCK) {
 			decode_mode.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_ASTC_DECODE_MODE_EXT;
 			decode_mode.pNext = nullptr;
-			decode_mode.decodeMode = VK_FORMAT_R8G8B8A8_UNORM;
+			decode_mode.decodeMode = VK_FORMAT_R8G8B8A8_UNORM;		// 告诉驱动 ASTC 解压到 RGBA8UNORM（这会影响采样结果和一些采样模式
 			image_view_create_info.pNext = &decode_mode;
 		}
 	}
 
+	// image view的句柄
 	VkImageView vk_image_view = VK_NULL_HANDLE;
+	// 创建image  view
 	err = vkCreateImageView(vk_device, &image_view_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE_VIEW), &vk_image_view);
 	if (err) {
+		// 出错的话就释放图像句柄，然后再释放内存
 		vkDestroyImage(vk_device, vk_image, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE));
 		vmaFreeMemory(allocator, allocation);
 		ERR_FAIL_COND_V_MSG(err, TextureID(), "vkCreateImageView failed with error " + itos(err) + ".");
 	}
 
 	// Bookkeep.
+	// godot的记账
 
 	TextureInfo *tex_info = VersatileResource::allocate<TextureInfo>(resources_allocator);
 	tex_info->vk_image = vk_image;

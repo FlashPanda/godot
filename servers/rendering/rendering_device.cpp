@@ -1407,6 +1407,11 @@ uint32_t RenderingDevice::_texture_alignment(Texture *p_texture) const {
 	return STEPIFY(alignment, driver->api_trait_get(RDD::API_TRAIT_TEXTURE_TRANSFER_ALIGNMENT));
 }
 
+/**
+ *
+ * 把你传进来的 p_data（CPU 上的一整块纹理字节数据），按 mip、按层、按对齐规则，拷到一个 staging buffer，
+ * 再从 staging buffer 发命令复制进 GPU 纹理（某一层），顺便做 layout 转换和 barrier。
+ */
 Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, const Vector<uint8_t> &p_data) {
 	Texture *texture = texture_owner.get_or_null(p_texture);
 	ERR_FAIL_NULL_V(texture, ERR_INVALID_PARAMETER);

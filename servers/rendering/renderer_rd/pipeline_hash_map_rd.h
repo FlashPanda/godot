@@ -141,7 +141,7 @@ public:
 		print_line("HASH:", p_key_hash, "SOURCE:", source_name);
 #endif
 
-#if 1  // 设置为 0 可以禁用输出
+#if 0  // 设置为 0 可以禁用输出
 		{
 			String log = vformat("=== Compile Pipeline Key ===\n");
 			log += vformat("Path: %s\n", creation_object->path);
