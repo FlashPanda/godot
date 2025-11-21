@@ -1442,38 +1442,48 @@ Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, cons
 	uint32_t block_w, block_h;
 	get_compressed_image_format_block_dimensions(texture->format, block_w, block_h);
 
-	uint32_t pixel_size = get_image_format_pixel_size(texture->format);
-	uint32_t pixel_rshift = get_compressed_image_format_pixel_rshift(texture->format);
-	uint32_t block_size = get_compressed_image_format_block_byte_size(texture->format);
+	uint32_t pixel_size = get_image_format_pixel_size(texture->format);		// 每个像素单元的字节大小
+	uint32_t pixel_rshift = get_compressed_image_format_pixel_rshift(texture->format);	// 针对压缩格式的一些换算
+	uint32_t block_size = get_compressed_image_format_block_byte_size(texture->format);		// 一个压缩块占多少字节
 
 	// The algorithm operates on two passes, one to figure out the total size the staging buffer will require to allocate and another one where the copy is actually performed.
-	uint32_t staging_worker_offset = 0;
-	uint32_t staging_local_offset = 0;
-	TransferWorker *transfer_worker = nullptr;
-	const uint8_t *read_ptr = p_data.ptr();
-	uint8_t *write_ptr = nullptr;
+	// 这个算法以双pass实现，一个pass算出staging缓冲需要的总大小，另一个获取能容纳这些数据的staging 缓冲，并按计算好的布局拷贝数据，发送copy指令
+	uint32_t staging_worker_offset = 0;		// 这个worker的staging buffer全局offset基准
+	uint32_t staging_local_offset = 0;		// 当前pass中在这个staging buffer内部的偏移（会加上对齐）
+	TransferWorker *transfer_worker = nullptr;		// 内部封装的传输工作
+	const uint8_t *read_ptr = p_data.ptr();		// 指向传入的CPU数据
+	uint8_t *write_ptr = nullptr;	// 指向staging buffer的CPU映射地址
+
+	// 根据驱动特性，决定复制时目标纹理的layout用什么，优先使用general，不行就用copy dst
 	const RDD::TextureLayout copy_dst_layout = driver->api_trait_get(RDD::API_TRAIT_USE_GENERAL_IN_COPY_QUEUES) ? RDD::TEXTURE_LAYOUT_GENERAL : RDD::TEXTURE_LAYOUT_COPY_DST_OPTIMAL;
 	for (uint32_t pass = 0; pass < 2; pass++) {
 		const bool copy_pass = (pass == 1);
 		if (copy_pass) {
+			// 拿到一个真正的transfer
+			// 函数里会根据第一遍算出的 staging_local_offset 和对齐、再加上其它 worker 状态，给你分配一个足够大的 staging buffer 段，并决定 staging_worker_offset
 			transfer_worker = _acquire_transfer_worker(staging_local_offset, required_align, staging_worker_offset);
-			texture->transfer_worker_index = transfer_worker->index;
+			texture->transfer_worker_index = transfer_worker->index;	// 记录这个纹理对象正在执行传输操作
 
 			{
+				// 线程安全的操作计数器自增，加锁时因为多个线程可能在用同一个worker
 				MutexLock lock(transfer_worker->operations_mutex);
 				texture->transfer_worker_operation = ++transfer_worker->operations_counter;
 			}
 
+			// 第二遍正式开始之前，把“局部 offset”重置为 0（因为第一遍我们只是累计大小，现在再从头开始按同样逻辑重走一遍）
 			staging_local_offset = 0;
 
+			// 把这个worker里的staging buffer映射到CPU能访问的内存
 			write_ptr = driver->buffer_map(transfer_worker->staging_buffer);
 			ERR_FAIL_NULL_V(write_ptr, ERR_CANT_CREATE);
 
+			// 如果底层driver支持/遵守pipeline barrier
 			if (driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
 				// Transition the texture to the optimal layout.
+				// 将layout转换成高效的版本，或者说优化版本
 				RDD::TextureBarrier tb;
 				tb.texture = texture->driver_id;
-				tb.dst_access = RDD::BARRIER_ACCESS_COPY_WRITE_BIT;
+				tb.dst_access = RDD::BARRIER_ACCESS_COPY_WRITE_BIT;	// 布局从undified到copy dst layout
 				tb.prev_layout = RDD::TEXTURE_LAYOUT_UNDEFINED;
 				tb.next_layout = copy_dst_layout;
 				tb.subresources.aspect = texture->barrier_aspect_flags;
@@ -1482,19 +1492,28 @@ Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, cons
 				tb.subresources.layer_count = 1;
 				driver->command_pipeline_barrier(transfer_worker->command_buffer, RDD::PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, RDD::PIPELINE_STAGE_COPY_BIT, {}, {}, tb);
 			}
+
+			// 到这里为止，第二遍时，纹理对应的 GPU image 已经处在“可写”的 layout 上了，我们也有一个可写入的 staging buffer 映射。
 		}
 
-		uint32_t mipmap_offset = 0;
-		uint32_t logic_width = texture->width;
+		uint32_t mipmap_offset = 0;	// 在p_data里当前mip开始的偏移
+		uint32_t logic_width = texture->width;	// mip的逻辑尺寸
 		uint32_t logic_height = texture->height;
+		// 遍历每个mipmap
 		for (uint32_t mm_i = 0; mm_i < texture->mipmaps; mm_i++) {
 			uint32_t depth = 0;
+			// 获取前mm_i + 1个mip的字节总量
 			uint32_t image_total = get_image_format_required_size(texture->format, texture->width, texture->height, texture->depth, mm_i + 1, &width, &height, &depth);
 
+			// 指向第 mm_i 级 mip 在 p_data 中的起始地址
 			const uint8_t *read_ptr_mipmap = read_ptr + mipmap_offset;
+			// 当前 mip 这一级的字节长度 = 总到此为止 - 上一级的累计偏移。
 			tight_mip_size = image_total - mipmap_offset;
 
+			// 针对3D纹理/array的情况，把这个mip切成depth layers（对2D一般depth = 1）
 			for (uint32_t z = 0; z < depth; z++) {
+				// 确保当前这块数据在staging buffer内部满足required align对齐
+				// 不对齐就偏移一些补齐
 				if (required_align > 0) {
 					uint32_t align_offset = staging_local_offset % required_align;
 					if (align_offset != 0) {
@@ -1502,13 +1521,15 @@ Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, cons
 					}
 				}
 
+				// 计算一行的字节跨度，在根据偏移调整。
 				uint32_t pitch = (width * pixel_size * block_w) >> pixel_rshift;
-				uint32_t pitch_step = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_DATA_ROW_PITCH_STEP);
-				pitch = STEPIFY(pitch, pitch_step);
-				uint32_t to_allocate = pitch * height;
-				to_allocate >>= pixel_rshift;
+				uint32_t pitch_step = driver->api_trait_get(RDD::API_TRAIT_TEXTURE_DATA_ROW_PITCH_STEP);	// 底层要求的最小步长
+				pitch = STEPIFY(pitch, pitch_step);	// 对齐到步长
+				uint32_t to_allocate = pitch * height;	// 这一层的总字节数
+				to_allocate >>= pixel_rshift;	// 然后再做压缩换算
 
 				if (copy_pass) {
+					// 计算mipmap的偏移
 					const uint8_t *read_ptr_mipmap_layer = read_ptr_mipmap + (tight_mip_size / depth) * z;
 					uint64_t staging_buffer_offset = staging_worker_offset + staging_local_offset;
 					uint8_t *write_ptr_mipmap_layer = write_ptr + staging_buffer_offset;
