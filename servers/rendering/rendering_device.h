@@ -186,7 +186,7 @@ private:
 	// See the comments in the code to understand better how it works.
 	// 本质上是三缓冲机制
 
-	// 暂存需要的操作
+	// 中转需要的操作
 	enum StagingRequiredAction {
 		STAGING_REQUIRED_ACTION_NONE,					// 不需要额外的操作
 		STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL,	// 在当前帧之前先等待所有 GPU 操作完成，并且刷新命令队列，
@@ -207,25 +207,27 @@ private:
 
 	*/
 
-	// 暂存缓冲的区块
+	// 中转缓冲的区块
 	struct StagingBufferBlock {
 		RDD::BufferID driver_id;		// 缓冲ID
 		uint64_t frame_used = 0;		// 使用这个区块的帧
 		uint32_t fill_amount = 0;		// 填充数量
 	};
 
+	// 中转缓冲区
 	struct StagingBuffers {
+		// 所有的中转区块
 		Vector<StagingBufferBlock> blocks;
-		int current = 0;
-		uint32_t block_size = 0;
-		uint64_t max_size = 0;
-		BitField<RDD::BufferUsageBits> usage_bits;
-		bool used = false;
+		int current = 0;	// 当前使用的区块
+		uint32_t block_size = 0;	// 中转区块数
+		uint64_t max_size = 0;		// 最大数量
+		BitField<RDD::BufferUsageBits> usage_bits;// 缓存的用途位
+		bool used = false;	// 是否被使用
 	};
 
-	// 暂存缓冲的分配
+	// 中转缓冲的分配
 	Error _staging_buffer_allocate(StagingBuffers &p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t &r_alloc_offset, uint32_t &r_alloc_size, StagingRequiredAction &r_required_action, bool p_can_segment = true);
-	// 暂存缓冲执行操作
+	// 中转缓冲执行操作
 	void _staging_buffer_execute_required_action(StagingBuffers &p_staging_buffers, StagingRequiredAction p_required_action);
 	// 插入缓冲区块
 	Error _insert_staging_block(StagingBuffers &p_staging_buffers);
@@ -1623,7 +1625,7 @@ private:
 
 	int frame = 0;
 	TightLocalVector<Frame> frames;
-	uint64_t frames_drawn = 0;
+	uint64_t frames_drawn = 0;	// 绘制完成的帧数
 
 	// Whenever logic/physics request a graphics operation (not just deleting a resource) that requires
 	// us to flush all graphics commands, we must set frames_pending_resources_for_processing = frames.size().

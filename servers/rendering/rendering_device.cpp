@@ -318,19 +318,23 @@ Error RenderingDevice::_insert_staging_block(StagingBuffers &p_staging_buffers) 
 
 Error RenderingDevice::_staging_buffer_allocate(StagingBuffers &p_staging_buffers, uint32_t p_amount, uint32_t p_required_align, uint32_t &r_alloc_offset, uint32_t &r_alloc_size, StagingRequiredAction &r_required_action, bool p_can_segment) {
 	// Determine a block to use.
+	// 决定要使用的一个区块
 
-	r_alloc_size = p_amount;
-	r_required_action = STAGING_REQUIRED_ACTION_NONE;
+	r_alloc_size = p_amount;	// 需要的尺寸大小
+	r_required_action = STAGING_REQUIRED_ACTION_NONE;	// 不需要额外操作
 
 	while (true) {
-		r_alloc_offset = 0;
+		r_alloc_offset = 0;	// 偏移量
 
 		// See if we can use current block.
-		if (p_staging_buffers.blocks[p_staging_buffers.current].frame_used == frames_drawn) {
+		// 确定是否可以用当前的block
+		if (p_staging_buffers.blocks[p_staging_buffers.current].frame_used == frames_drawn) {	// 如果这帧在使用这个缓冲
 			// We used this block this frame, let's see if there is still room.
+			// 我们可以使用这个区块了，看看还有没有空间余留
 
 			uint32_t write_from = p_staging_buffers.blocks[p_staging_buffers.current].fill_amount;
 
+			// 对齐偏移
 			{
 				uint32_t align_remainder = write_from % p_required_align;
 				if (align_remainder != 0) {
@@ -338,12 +342,15 @@ Error RenderingDevice::_staging_buffer_allocate(StagingBuffers &p_staging_buffer
 				}
 			}
 
+			// block当前剩余量
 			int32_t available_bytes = int32_t(p_staging_buffers.block_size) - int32_t(write_from);
 
 			if ((int32_t)p_amount < available_bytes) {
 				// All is good, we should be ok, all will fit.
+				// 需要的量小于剩余量，那么一切完美
 				r_alloc_offset = write_from;
 			} else if (p_can_segment && available_bytes >= (int32_t)p_required_align) {
+				// 如果可以分段，然后余量大于对齐量
 				// Ok all won't fit but at least we can fit a chunkie.
 				// All is good, update what needs to be written to.
 				r_alloc_offset = write_from;
@@ -352,13 +359,18 @@ Error RenderingDevice::_staging_buffer_allocate(StagingBuffers &p_staging_buffer
 			} else {
 				// Can't fit it into this buffer.
 				// Will need to try next buffer.
+				// 没法进行填充了，我们需要再找一个。再找一个的话就是重新进入那个判断循环
 
 				p_staging_buffers.current = (p_staging_buffers.current + 1) % p_staging_buffers.blocks.size();
 
 				// Before doing anything, though, let's check that we didn't manage to fill all blocks.
 				// Possible in a single frame.
+				// 不过，在做任何事情之前，我们先检查一下是否已经把所有的块都填满了。这在单帧内是有可能发生的
 				if (p_staging_buffers.blocks[p_staging_buffers.current].frame_used == frames_drawn) {
 					// Guess we did.. ok, let's see if we can insert a new block.
+					// 好吧，需要新插入一个区块了
+
+					// 总体暂存尺寸是否达到，如果没有就可以新插入一个
 					if ((uint64_t)p_staging_buffers.blocks.size() * p_staging_buffers.block_size < p_staging_buffers.max_size) {
 						// We can, so we are safe.
 						Error err = _insert_staging_block(p_staging_buffers);
@@ -366,16 +378,20 @@ Error RenderingDevice::_staging_buffer_allocate(StagingBuffers &p_staging_buffer
 							return err;
 						}
 						// Claim for this frame.
+						// 标记这个东西正在被这帧使用了
 						p_staging_buffers.blocks.write[p_staging_buffers.current].frame_used = frames_drawn;
 					} else {
 						// Ok, worst case scenario, all the staging buffers belong to this frame
 						// and this frame is not even done.
 						// If this is the main thread, it means the user is likely loading a lot of resources at once,.
 						// Otherwise, the thread should just be blocked until the next frame (currently unimplemented).
+						// 好了，现在碰到了一个最糟糕的情况，所有的中转block都已经被用了，那么如果这是主线程，就意味着用户在一次性加载大量的资源
+						// 否则，就只能等下一帧了。
 						r_required_action = STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL;
 					}
 
 				} else {
+					// 这个区块不是当前帧用的，没办法，等下一block试试。
 					// Not from current frame, so continue and try again.
 					continue;
 				}
@@ -383,23 +399,28 @@ Error RenderingDevice::_staging_buffer_allocate(StagingBuffers &p_staging_buffer
 
 		} else if (p_staging_buffers.blocks[p_staging_buffers.current].frame_used <= frames_drawn - frames.size()) {
 			// This is an old block, which was already processed, let's reuse.
+			// 这已经是一个老的区块，并且被使用过，我们要重用它
 			p_staging_buffers.blocks.write[p_staging_buffers.current].frame_used = frames_drawn;
 			p_staging_buffers.blocks.write[p_staging_buffers.current].fill_amount = 0;
 		} else {
 			// This block may still be in use, let's not touch it unless we have to, so.. can we create a new one?
+			// 这个区块正在被使用，我们最好别去动它，所以...我们再新建一个？
 			if ((uint64_t)p_staging_buffers.blocks.size() * p_staging_buffers.block_size < p_staging_buffers.max_size) {
 				// We are still allowed to create a new block, so let's do that and insert it for current pos.
+				// 我们就创建一个新的区块
 				Error err = _insert_staging_block(p_staging_buffers);
 				if (err) {
 					return err;
 				}
 				// Claim for this frame.
+				// 声明是这帧用的
 				p_staging_buffers.blocks.write[p_staging_buffers.current].frame_used = frames_drawn;
 			} else {
 				// Oops, we are out of room and we can't create more.
 				// Let's flush older frames.
 				// The logic here is that if a game is loading a lot of data from the main thread, it will need to be stalled anyway.
 				// If loading from a separate thread, we can block that thread until next frame when more room is made (not currently implemented, though).
+				// 同样是没有空间可以用了，，就只能阻塞等待
 				r_required_action = STAGING_REQUIRED_ACTION_STALL_PREVIOUS;
 			}
 		}
