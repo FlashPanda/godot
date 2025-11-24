@@ -1529,35 +1529,42 @@ Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, cons
 				to_allocate >>= pixel_rshift;	// 然后再做压缩换算
 
 				if (copy_pass) {
-					// 计算mipmap的偏移
+					// 算出此 z layer 在当前 mip 数据里的 offset
 					const uint8_t *read_ptr_mipmap_layer = read_ptr_mipmap + (tight_mip_size / depth) * z;
+					// worker的基准offset，+当前局部offset
 					uint64_t staging_buffer_offset = staging_worker_offset + staging_local_offset;
+					// 通过偏移得到相应的指针
 					uint8_t *write_ptr_mipmap_layer = write_ptr + staging_buffer_offset;
+					// 根据规则将数据拷贝进去
 					_copy_region_block_or_regular(read_ptr_mipmap_layer, write_ptr_mipmap_layer, 0, 0, width, width, height, block_w, block_h, pitch, pixel_size, block_size);
 
+					// 填充一个纹理拷贝区域的结构
 					RDD::BufferTextureCopyRegion copy_region;
-					copy_region.buffer_offset = staging_buffer_offset;
-					copy_region.texture_subresources.aspect = texture->read_aspect_flags;
+					copy_region.buffer_offset = staging_buffer_offset;	// 在staging buffer里这块区域的起始点
+					copy_region.texture_subresources.aspect = texture->read_aspect_flags;	//
 					copy_region.texture_subresources.mipmap = mm_i;
 					copy_region.texture_subresources.base_layer = p_layer;
 					copy_region.texture_subresources.layer_count = 1;
-					copy_region.texture_offset = Vector3i(0, 0, z);
-					copy_region.texture_region_size = Vector3i(logic_width, logic_height, 1);
+					copy_region.texture_offset = Vector3i(0, 0, z);	// 纹理到当前层
+					copy_region.texture_region_size = Vector3i(logic_width, logic_height, 1);	// 区域的尺寸大小
+					// 将拷贝命令录制进去
 					driver->command_copy_buffer_to_texture(transfer_worker->command_buffer, transfer_worker->staging_buffer, texture->driver_id, copy_dst_layout, copy_region);
 				}
 
-				staging_local_offset += to_allocate;
+				staging_local_offset += to_allocate;	// 然后是偏移区域
 			}
 
-			mipmap_offset = image_total;
+			mipmap_offset = image_total;	// 更新mipmap作为下一个计算起点
 			logic_width = MAX(1u, logic_width >> 1);
 			logic_height = MAX(1u, logic_height >> 1);
 		}
 
 		if (copy_pass) {
+			// 完成copy之后就先unmap
 			driver->buffer_unmap(transfer_worker->staging_buffer);
 
 			// If the texture does not have a tracker, it means it must be transitioned to the sampling state.
+			// 如果没有追踪器，说明它需要立刻被转换成采样状态，但是如果没有pipeline barrier的话也就不做了。
 			if (texture->draw_tracker == nullptr && driver->api_trait_get(RDD::API_TRAIT_HONORS_PIPELINE_BARRIERS)) {
 				RDD::TextureBarrier tb;
 				tb.texture = texture->driver_id;
@@ -1571,6 +1578,7 @@ Error RenderingDevice::_texture_initialize(RID p_texture, uint32_t p_layer, cons
 				transfer_worker->texture_barriers.push_back(tb);
 			}
 
+			// 释放这个worker
 			_release_transfer_worker(transfer_worker);
 		}
 	}
