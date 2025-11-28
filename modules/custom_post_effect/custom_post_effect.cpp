@@ -16,7 +16,7 @@ void CustomPostEffect::_bind_methods() {
 
  CustomPostEffect::CustomPostEffect() {
 	// 默认使用POST_TRANSPARENT:不影响透明物体之前的渲染
-	set("effect_callback_type", (int)CompositorEffect::COMPOSITOR_EFFECT_CALLBACK_TYPE_POST_TRANSPARENT);
+	set("effect_callback_type", (int)RS::COMPOSITOR_EFFECT_CALLBACK_TYPE_POST_TRANSPARENT);
 	set("access_resolved_color", true);
 	set("access_resolved_depth", false);
 
@@ -109,6 +109,6 @@ void CustomPostEffect::_render_callback(int p_effect_callback_type, const Render
 	RID color_texture = buffers_rd->get_internal_texture();
 
 	// 3. 用color texture创建framebuffer
-	RDTextureFormat tex_format = rd_device->texture_get_format(color_texture);
+	RD::TextureFormat tex_format = rd_device->texture_get_format(color_texture);
 	Vector2i size = buffers_rd->get_internal_size();
 }
