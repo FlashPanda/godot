@@ -12,15 +12,15 @@ class CustomPostEffect : public CompositorEffect {
 	GDCLASS(CustomPostEffect, CompositorEffect);
 
 	// RD 资源
-	RenderingDevice* rd_device = nullptr;
+	Ref<RenderingDevice> rd = nullptr;
 
 	RID shader_rid;
 	RID pipeline_rid;
 	RID sampler_rid;
 	RID uniform_set_rid;
 
-	float intensity = 1.0f;			// blur的强度
-
+private:
+	void _initialize_compute();
 protected:
 	static void _bind_methods();
 
@@ -29,12 +29,11 @@ protected:
 
 	void _ensure_resources(const RenderData* p_render_data);
 	void _free_resources();
-
+	void _notification(int p_what);
 public:
 	CustomPostEffect();
 	~CustomPostEffect();
-	void set_intensity(float p_intensity);
-	float get_intensity() const;
+
 };
 
 #endif // CUSTOM_POST_EFFECT_H
