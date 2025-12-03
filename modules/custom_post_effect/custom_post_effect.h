@@ -11,9 +11,6 @@
 class CustomPostEffect : public CompositorEffect {
 	GDCLASS(CustomPostEffect, CompositorEffect);
 
-	// RD 资源
-	Ref<RenderingDevice> rd = nullptr;
-
 	RID shader_rid;
 	RID pipeline_rid;
 	RID sampler_rid;

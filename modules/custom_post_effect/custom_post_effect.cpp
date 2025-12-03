@@ -15,13 +15,14 @@ void CustomPostEffect::_bind_methods() {
 	// - needs_motion_vectors
 	// - needs_normal_roughness
 	// - needs_separate_specular
+	// 和 GDScript 的虚函数同名，这样 Compositor 会在渲染线程里回调到我们。
+	ClassDB::bind_method(D_METHOD("_render_callback", "effect_callback_type", "render_data"),
+			&CustomPostEffect::_render_callback);
 }
 
  CustomPostEffect::CustomPostEffect() {
 	// 设置回调类型
 	set_effect_callback_type(EFFECT_CALLBACK_TYPE_POST_OPAQUE);
-
-	rd = RenderingServer::get_singleton()->get_rendering_device();
 
 	// 等价于GDScripts的 RenderingServer.call_on_render_thread(_initialize_compute)
 	RenderingServer* rs = RenderingServer::get_singleton();
@@ -32,34 +33,22 @@ void CustomPostEffect::_bind_methods() {
 	RenderingServer* rs = RenderingServer::get_singleton();
 	ERR_FAIL_NULL(rs);
 
-	rd = rs->get_rendering_device();
-	ERR_FAIL_COND_MSG(!rd.is_valid(), "Failed to get rendering device.");
-
 	// 加载GLSL资源，根据实际情况调整
 	Ref<RDShaderFile> shader_file = ResourceLoader::load("res://post_process_grayscale.glsl");
 	ERR_FAIL_COND_MSG(shader_file.is_null(), "Failed to load shader file");
 
 	Ref<RDShaderSPIRV> spirv = shader_file->get_spirv();
-	shader_rid = rd->shader_create_from_spirv(spirv->get_stages());
+	shader_rid = RD::get_singleton()->shader_create_from_spirv(spirv->get_stages());
 
 	if (shader_rid.is_valid()) {
-		pipeline_rid = rd->compute_pipeline_create(shader_rid);
+		pipeline_rid = RD::get_singleton()->compute_pipeline_create(shader_rid);
 	}
  }
 
  void CustomPostEffect::_notification(int p_what) {
 	if (p_what == NOTIFICATION_PREDELETE) {
 		if (shader_rid.is_valid()) {
-			if (rd.is_valid()) {
-				rd->free_rid(shader_rid);
-			}
-			else if (RenderingServer::get_singleton()) {
-				// 兜底，再拿一次RD
-				rd = RenderingServer::get_singleton()->get_rendering_device();
-				if (rd.is_valid()) {
-					rd->free_rid(shader_rid);
-				}
-			}
+			RD::get_singleton()->free(shader_rid);
 
 			shader_rid = RID();
 			pipeline_rid = RID();
@@ -72,38 +61,38 @@ CustomPostEffect::~CustomPostEffect() {
 }
 
 void CustomPostEffect::_free_resources() {
-	if (!rd) {
+	if (!RD::get_singleton()) {
 		return;
 	}
 
 	if (uniform_set_rid.is_valid()) {
-		rd->free(uniform_set_rid);
+		RD::get_singleton()->free(uniform_set_rid);
 		uniform_set_rid = RID();
 	}
 
 	if (pipeline_rid.is_valid()) {
-		rd->free(pipeline_rid);
+		RD::get_singleton()->free(pipeline_rid);
 		pipeline_rid = RID();
 	}
 
 	if (shader_rid.is_valid()) {
-		rd->free(shader_rid);
+		RD::get_singleton()->free(shader_rid);
 		shader_rid = RID();
 	}
 
 	if (sampler_rid.is_valid()) {
-		rd->free(sampler_rid);
+		RD::get_singleton()->free(sampler_rid);
 		sampler_rid = RID();
 	}
 }
 
 void CustomPostEffect::_ensure_resources(const RenderData *p_render_data) {
-	if (!rd) {
-		rd = RenderingServer::get_singleton()->get_rendering_device();
-	}
-	if (!rd) {
-		return;
-	}
+	// if (!rd) {
+	// 	rd = RenderingServer::get_singleton()->get_rendering_device();
+	// }
+	// if (!rd) {
+	// 	return;
+	// }
 
 	// 如果还没创建shader/pipeline，在这里做一次性初始化
 	if (!shader_rid.is_valid()) {
@@ -122,7 +111,7 @@ void CustomPostEffect::_ensure_resources(const RenderData *p_render_data) {
 }
 
 void CustomPostEffect::_render_callback(int p_effect_callback_type, const RenderData* p_render_data) {
-	if (!rd.is_valid() || !pipeline_rid.is_valid()) {
+	if (!RD::get_singleton() || !pipeline_rid.is_valid()) {
 		return;
 	}
 
@@ -131,11 +120,12 @@ void CustomPostEffect::_render_callback(int p_effect_callback_type, const Render
 	}
 
 	Ref<RenderSceneBuffers> rsb = p_render_data->get_render_scene_buffers();
-	if (rsb.is_null()) {
+	Ref<RenderSceneBuffersRD> rsb_rd = Ref<RenderSceneBuffersRD>(rsb);
+	if (rsb_rd.is_null()) {
 		return;
 	}
 
-	Vector2i size = rsb->get_internal_size();
+	Vector2i size = rsb_rd->get_internal_size();
 	if (size.x == 0 && size.y == 0) {
 		return;
 	}
@@ -152,30 +142,30 @@ void CustomPostEffect::_render_callback(int p_effect_callback_type, const Render
 		0.f
 	};
 
-	int32_t view_count = rsb->get_view_count();
+	int32_t view_count = rsb_rd->get_view_count();
 	for (int32_t i = 0; i < view_count; i++) {
-		RID input_image = rsb->get_color_layer(i);
 
-		Ref<RDUniform> uniform;
-		uniform.instantiate();
-		uniform->set_uniform_type(RenderingDevice::UNIFORM_TYPE_IMAGE);
-		uniform->set_binding(0);
-		uniform->add_id(input_image);
+		RID input_image = rsb_rd->get_internal_texture(i);
 
-		Array uniforms;
+		RenderingDevice::Uniform uniform;
+		uniform.uniform_type = RenderingDevice::UNIFORM_TYPE_IMAGE;
+		uniform.binding = 0;
+		uniform.append_id(input_image);
+
+		Vector<RenderingDevice::Uniform> uniforms;
 		uniforms.push_back(uniform);
 
-		RID uniform_set = UniformSetCacheRD::get_cache(shader_rid, 0, uniforms);
+		RID uniform_set = RD::get_singleton()->uniform_set_create(uniforms, shader_rid, 0);
 
-		RID compute_list = rd->compute_list_begin();
-		rd->compute_list_bind_compute_pipeline(compute_list, pipeline_rid);
-		rd->compute_list_bind_uniform_set(compute_list, uniform_set, 0);
-		rd->compute_list_set_push_constant(
+		RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+		RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, pipeline_rid);
+		RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set, 0);
+		RD::get_singleton()->compute_list_set_push_constant(
 			compute_list,
 			reinterpret_cast<const uint8_t* >(push_constant),
 			sizeof(push_constant)
 			);
-		rd->compute_list_dispatch(compute_list, x_groups, y_groups, z_groups);
-		rd->compute_list_end();
+		RD::get_singleton()->compute_list_dispatch(compute_list, x_groups, y_groups, z_groups);
+		RD::get_singleton()->compute_list_end();
 	}
 }
