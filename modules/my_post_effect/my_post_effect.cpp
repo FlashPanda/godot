@@ -1,9 +1,10 @@
-#include "custom_post_effect.h"
+#include "my_post_effect.h"
 
 #include "scene/resources/3d/fog_material.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
+#include "thirdparty/basis_universal/transcoder/basisu.h"
 
-void CustomPostEffect::_bind_methods() {
+void MyPostEffect::_bind_methods() {
 	// ClassDB::bind_method(D_METHOD("set_intensity", "intensity"), &CustomPostEffect::set_intensity);
 	// ClassDB::bind_method(D_METHOD("get_intensity"), &CustomPostEffect::get_intensity);
 	// ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "intensity"), "set_intensity", "get_intensity");
@@ -17,19 +18,23 @@ void CustomPostEffect::_bind_methods() {
 	// - needs_separate_specular
 	// 和 GDScript 的虚函数同名，这样 Compositor 会在渲染线程里回调到我们。
 	ClassDB::bind_method(D_METHOD("_render_callback", "effect_callback_type", "render_data"),
-			&CustomPostEffect::_render_callback);
+			&MyPostEffect::_render_callback);
 }
 
- CustomPostEffect::CustomPostEffect() {
+ MyPostEffect::MyPostEffect() {
+	//输出调试信息
+	print_line("11111111111111");
+
 	// 设置回调类型
 	set_effect_callback_type(EFFECT_CALLBACK_TYPE_POST_OPAQUE);
 
 	// 等价于GDScripts的 RenderingServer.call_on_render_thread(_initialize_compute)
 	RenderingServer* rs = RenderingServer::get_singleton();
 	ERR_FAIL_NULL(rs);
-	rs->call_on_render_thread(callable_mp(this, &CustomPostEffect::_initialize_compute));
+	rs->call_on_render_thread(callable_mp(this, &MyPostEffect::_initialize_compute));
 }
- void CustomPostEffect::_initialize_compute() {
+ void MyPostEffect::_initialize_compute() {
+	print_line("2222222222");
 	RenderingServer* rs = RenderingServer::get_singleton();
 	ERR_FAIL_NULL(rs);
 
@@ -45,8 +50,9 @@ void CustomPostEffect::_bind_methods() {
 	}
  }
 
- void CustomPostEffect::_notification(int p_what) {
+ void MyPostEffect::_notification(int p_what) {
 	if (p_what == NOTIFICATION_PREDELETE) {
+		print_line("3333333333333");
 		if (shader_rid.is_valid()) {
 			RD::get_singleton()->free(shader_rid);
 
@@ -56,11 +62,11 @@ void CustomPostEffect::_bind_methods() {
 	}
 }
 
-CustomPostEffect::~CustomPostEffect() {
+MyPostEffect::~MyPostEffect() {
 	_free_resources();
 }
 
-void CustomPostEffect::_free_resources() {
+void MyPostEffect::_free_resources() {
 	if (!RD::get_singleton()) {
 		return;
 	}
@@ -86,13 +92,14 @@ void CustomPostEffect::_free_resources() {
 	}
 }
 
-void CustomPostEffect::_ensure_resources(const RenderData *p_render_data) {
+void MyPostEffect::_ensure_resources(const RenderData *p_render_data) {
 	// if (!rd) {
 	// 	rd = RenderingServer::get_singleton()->get_rendering_device();
 	// }
 	// if (!rd) {
 	// 	return;
 	// }
+	print_line("44444444444444");
 
 	// 如果还没创建shader/pipeline，在这里做一次性初始化
 	if (!shader_rid.is_valid()) {
@@ -110,7 +117,8 @@ void CustomPostEffect::_ensure_resources(const RenderData *p_render_data) {
 	// uniform_set_rid可以在每帧/每分辨率变化的时候重新创建
 }
 
-void CustomPostEffect::_render_callback(int p_effect_callback_type, const RenderData* p_render_data) {
+void MyPostEffect::_render_callback(int p_effect_callback_type, const RenderData* p_render_data) {
+	print_line("55555555555555");
 	if (!RD::get_singleton() || !pipeline_rid.is_valid()) {
 		return;
 	}
