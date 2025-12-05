@@ -309,6 +309,7 @@ void RendererSceneRenderRD::_process_compositor_effects(RS::CompositorEffectCall
 	Vector<RID> re_rids = comp_storage->compositor_get_compositor_effects(p_render_data->compositor, p_callback_type, true);
 
 	for (RID rid : re_rids) {
+		// print_line("component effect rid = " + itos(rid.get_id()));
 		Array arr;
 		Callable callback = comp_storage->compositor_effect_get_callback(rid);
 
@@ -316,6 +317,11 @@ void RendererSceneRenderRD::_process_compositor_effects(RS::CompositorEffectCall
 		arr.push_back(p_render_data);
 
 		callback.callv(arr);
+
+		// if (callback.get_object()) {
+		// 	print_line("callable object class = " + callback.get_object()->get_class());
+		// 	print_line("callable object name = " + callback.get_object()->get_class_name());
+		// }
 	}
 }
 

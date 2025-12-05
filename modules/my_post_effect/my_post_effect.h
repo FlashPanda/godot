@@ -22,7 +22,9 @@ protected:
 	static void _bind_methods();
 
 	// 真正的回调（注意签名要和 CompositorEffect 里 GDVIRTUAL2 保持一致）
-	virtual void _render_callback(int p_effect_callback_type, const RenderData *p_render_data);
+	GDVIRTUAL2(_render_callback, int, const RenderData *)
+
+	virtual void _render_callback(int p_effect_callback_type, const RenderData* p_render_data);
 
 	void _ensure_resources(const RenderData* p_render_data);
 	void _free_resources();

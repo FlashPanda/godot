@@ -170,6 +170,7 @@ void RendererCompositorStorage::compositor_set_compositor_effects(RID p_composit
 
 	compositor->compositor_effects.clear();
 	for (const RID &effect : p_effects) {
+		print_line("set effect rid = " + itos(effect.get_id()));
 		if (is_compositor_effect(effect)) {
 			compositor->compositor_effects.push_back(effect);
 		}

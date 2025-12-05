@@ -17,8 +17,17 @@ void MyPostEffect::_bind_methods() {
 	// - needs_normal_roughness
 	// - needs_separate_specular
 	// 和 GDScript 的虚函数同名，这样 Compositor 会在渲染线程里回调到我们。
-	ClassDB::bind_method(D_METHOD("_render_callback", "effect_callback_type", "render_data"),
-			&MyPostEffect::_render_callback);
+	// ClassDB::bind_method(D_METHOD("_render_callback", "effect_callback_type", "render_data"),
+	// 		&MyPostEffect::_render_callback);
+
+	BIND_ENUM_CONSTANT(EFFECT_CALLBACK_TYPE_PRE_OPAQUE)
+	BIND_ENUM_CONSTANT(EFFECT_CALLBACK_TYPE_POST_OPAQUE)
+	BIND_ENUM_CONSTANT(EFFECT_CALLBACK_TYPE_POST_SKY)
+	BIND_ENUM_CONSTANT(EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT)
+	BIND_ENUM_CONSTANT(EFFECT_CALLBACK_TYPE_POST_TRANSPARENT)
+	BIND_ENUM_CONSTANT(EFFECT_CALLBACK_TYPE_MAX)
+
+	GDVIRTUAL_BIND(_render_callback, "effect_callback_type", "render_data");
 }
 
  MyPostEffect::MyPostEffect() {

@@ -230,6 +230,8 @@ void Compositor::set_compositor_effects(const TypedArray<CompositorEffect> &p_co
 		// Cast to proper ref, if our object isn't a CompositorEffect resource this will be an empty Ref.
 		Ref<CompositorEffect> compositor_effect = p_compositor_effects[i];
 
+		print_line("compositor effect name = " + *compositor_effect->_get_class_namev());
+
 		// We add the effect even if this is an empty Ref, this allows the UI to add new entries.
 		effects.push_back(compositor_effect);
 
