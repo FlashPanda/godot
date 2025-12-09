@@ -1795,6 +1795,9 @@ MultiMesh 将成百上千个相同网格实例打包成一个资源提交给渲�
 		VIEWPORT_DEBUG_DRAW_SCENE_LUMINANCE,			// 绘制自动曝光计算的场景亮度贴图（1×1 纹理）。
 		VIEWPORT_DEBUG_DRAW_SSAO,						// 绘制屏幕空间环境光遮蔽（SSAO）贴图，需在 WorldEnvironment.ssao_enabled 打开时生效。
 		VIEWPORT_DEBUG_DRAW_SSIL,						// 绘制屏幕空间间接光照（SSIL）贴图，需在 WorldEnvironment.ssil_enabled 打开时生效。
+		VIEWPORT_DEBUG_DRAW_GBUFFER_NORMAL,
+		VIEWPORT_DEBUG_DRAW_GBUFFER_DEPTH,
+		VIEWPORT_DEBUG_DRAW_GBUFFER_ROUGHNESS,
 		VIEWPORT_DEBUG_DRAW_PSSM_SPLITS,				// 为各级定向阴影切片着色（红、绿、蓝、黄），可视化级联范围。
 		VIEWPORT_DEBUG_DRAW_DECAL_ATLAS,				// 绘制贴花图集，显示所有 Decal 资源纹理。
 		VIEWPORT_DEBUG_DRAW_SDFGI,						// 绘制 SDFGI（Signed Distance Field GI）级联数据结构。

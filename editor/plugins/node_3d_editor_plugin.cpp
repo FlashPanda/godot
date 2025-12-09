@@ -3769,6 +3769,9 @@ void Node3DEditorViewport::_menu_option(int p_option) {
 		case VIEW_DISPLAY_DEBUG_SCENE_LUMINANCE:
 		case VIEW_DISPLAY_DEBUG_SSAO:
 		case VIEW_DISPLAY_DEBUG_SSIL:
+		case VIEW_DISPLAY_DEBUG_GBUFFER_NORMAL:
+		case VIEW_DISPLAY_DEBUG_GBUFFER_DEPTH:
+		case VIEW_DISPLAY_DEBUG_GBUFFER_ROUGHNESS:
 		case VIEW_DISPLAY_DEBUG_PSSM_SPLITS:
 		case VIEW_DISPLAY_DEBUG_DECAL_ATLAS:
 		case VIEW_DISPLAY_DEBUG_SDFGI:
@@ -3799,6 +3802,9 @@ void Node3DEditorViewport::_menu_option(int p_option) {
 				VIEW_DISPLAY_DEBUG_SSIL,
 				VIEW_DISPLAY_DEBUG_GI_BUFFER,
 				VIEW_DISPLAY_DEBUG_DISABLE_LOD,
+				VIEW_DISPLAY_DEBUG_GBUFFER_NORMAL,
+				VIEW_DISPLAY_DEBUG_GBUFFER_DEPTH,
+				VIEW_DISPLAY_DEBUG_GBUFFER_ROUGHNESS,
 				VIEW_DISPLAY_DEBUG_PSSM_SPLITS,
 				VIEW_DISPLAY_DEBUG_DECAL_ATLAS,
 				VIEW_DISPLAY_DEBUG_SDFGI,
@@ -3829,6 +3835,9 @@ void Node3DEditorViewport::_menu_option(int p_option) {
 				Viewport::DEBUG_DRAW_SSIL,
 				Viewport::DEBUG_DRAW_GI_BUFFER,
 				Viewport::DEBUG_DRAW_DISABLE_LOD,
+				Viewport::DEBUG_DRAW_GBUFFER_NORMAL,
+				Viewport::DEBUG_DRAW_GBUFFER_DEPTH,
+				Viewport::DEBUG_DRAW_GBUFFER_ROUGHNESS,
 				Viewport::DEBUG_DRAW_PSSM_SPLITS,
 				Viewport::DEBUG_DRAW_DECAL_ATLAS,
 				Viewport::DEBUG_DRAW_SDFGI,
@@ -3839,7 +3848,7 @@ void Node3DEditorViewport::_menu_option(int p_option) {
 				Viewport::DEBUG_DRAW_CLUSTER_REFLECTION_PROBES,
 				Viewport::DEBUG_DRAW_OCCLUDERS,
 				Viewport::DEBUG_DRAW_MOTION_VECTORS,
-				Viewport::DEBUG_DRAW_INTERNAL_BUFFER,
+				Viewport::DEBUG_DRAW_INTERNAL_BUFFER
 			};
 
 			for (int idx = 0; display_options[idx] != VIEW_MAX; idx++) {
@@ -5551,6 +5560,10 @@ Node3DEditorViewport::Node3DEditorViewport(Node3DEditor *p_spatial_editor, int p
 
 	display_submenu = memnew(PopupMenu);
 	display_submenu->set_hide_on_checkable_item_selection(false);
+	display_submenu->add_radio_check_item(TTR("GBuffer Normal"), VIEW_DISPLAY_DEBUG_GBUFFER_NORMAL);
+	display_submenu->add_radio_check_item(TTR("GBuffer Depth"), VIEW_DISPLAY_DEBUG_GBUFFER_DEPTH);
+	display_submenu->add_radio_check_item(TTR("GBuffer Roughness"), VIEW_DISPLAY_DEBUG_GBUFFER_ROUGHNESS);
+	display_submenu->add_separator();
 	display_submenu->add_radio_check_item(TTR("Directional Shadow Splits"), VIEW_DISPLAY_DEBUG_PSSM_SPLITS);
 	display_submenu->add_separator();
 	display_submenu->add_radio_check_item(TTR("Normal Buffer"), VIEW_DISPLAY_NORMAL_BUFFER);

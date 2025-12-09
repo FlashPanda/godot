@@ -157,9 +157,6 @@ Ref<CameraAttributes> WorldEnvironment::get_camera_attributes() const {
 }
 
 void WorldEnvironment::set_compositor(const Ref<Compositor> &p_compositor) {
-	if (p_compositor.is_valid()) {
-		print_line("Compositor class = " + *p_compositor->_get_class_namev());
-	}
 	if (compositor == p_compositor) {
 		return;
 	}

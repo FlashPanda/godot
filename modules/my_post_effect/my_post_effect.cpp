@@ -31,9 +31,6 @@ void MyPostEffect::_bind_methods() {
 }
 
  MyPostEffect::MyPostEffect() {
-	//输出调试信息
-	print_line("11111111111111");
-
 	// 设置回调类型
 	set_effect_callback_type(EFFECT_CALLBACK_TYPE_POST_OPAQUE);
 
@@ -43,25 +40,23 @@ void MyPostEffect::_bind_methods() {
 	rs->call_on_render_thread(callable_mp(this, &MyPostEffect::_initialize_compute));
 }
  void MyPostEffect::_initialize_compute() {
-	print_line("2222222222");
-	RenderingServer* rs = RenderingServer::get_singleton();
-	ERR_FAIL_NULL(rs);
-
-	// 加载GLSL资源，根据实际情况调整
-	Ref<RDShaderFile> shader_file = ResourceLoader::load("res://post_process_grayscale.glsl");
-	ERR_FAIL_COND_MSG(shader_file.is_null(), "Failed to load shader file");
-
-	Ref<RDShaderSPIRV> spirv = shader_file->get_spirv();
-	shader_rid = RD::get_singleton()->shader_create_from_spirv(spirv->get_stages());
-
-	if (shader_rid.is_valid()) {
-		pipeline_rid = RD::get_singleton()->compute_pipeline_create(shader_rid);
-	}
+	// RenderingServer* rs = RenderingServer::get_singleton();
+	// ERR_FAIL_NULL(rs);
+	//
+	// // 加载GLSL资源，根据实际情况调整
+	// Ref<RDShaderFile> shader_file = ResourceLoader::load("res://post_process_grayscale.glsl");
+	// ERR_FAIL_COND_MSG(shader_file.is_null(), "Failed to load shader file");
+	//
+	// Ref<RDShaderSPIRV> spirv = shader_file->get_spirv();
+	// shader_rid = RD::get_singleton()->shader_create_from_spirv(spirv->get_stages());
+	//
+	// if (shader_rid.is_valid()) {
+	// 	pipeline_rid = RD::get_singleton()->compute_pipeline_create(shader_rid);
+	// }
  }
 
  void MyPostEffect::_notification(int p_what) {
 	if (p_what == NOTIFICATION_PREDELETE) {
-		print_line("3333333333333");
 		if (shader_rid.is_valid()) {
 			RD::get_singleton()->free(shader_rid);
 
@@ -108,7 +103,6 @@ void MyPostEffect::_ensure_resources(const RenderData *p_render_data) {
 	// if (!rd) {
 	// 	return;
 	// }
-	print_line("44444444444444");
 
 	// 如果还没创建shader/pipeline，在这里做一次性初始化
 	if (!shader_rid.is_valid()) {

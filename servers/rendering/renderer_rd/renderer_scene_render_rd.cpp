@@ -823,6 +823,9 @@ bool RendererSceneRenderRD::_debug_draw_can_use_effects(RS::ViewportDebugDraw p_
 		case RS::VIEWPORT_DEBUG_DRAW_VOXEL_GI_LIGHTING:
 		case RS::VIEWPORT_DEBUG_DRAW_VOXEL_GI_EMISSION:
 		case RS::VIEWPORT_DEBUG_DRAW_SCENE_LUMINANCE:
+		case RS::VIEWPORT_DEBUG_DRAW_GBUFFER_NORMAL:
+		case RS::VIEWPORT_DEBUG_DRAW_DEPTH:
+		case RS::VIEWPORT_DEBUG_DRAW_ROUGHNESS:
 		case RS::VIEWPORT_DEBUG_DRAW_PSSM_SPLITS:
 		case RS::VIEWPORT_DEBUG_DRAW_SDFGI_PROBES:
 		case RS::VIEWPORT_DEBUG_DRAW_DISABLE_LOD:
@@ -928,6 +931,11 @@ void RendererSceneRenderRD::_render_buffers_debug_draw(const RenderDataRD *p_ren
 		Size2i resolution = rb->get_internal_size();
 
 		debug_effects->draw_motion_vectors(velocity, depth, dest_fb, p_render_data->scene_data->cam_projection, p_render_data->scene_data->cam_transform, p_render_data->scene_data->prev_cam_projection, p_render_data->scene_data->prev_cam_transform, resolution);
+	}
+
+	if (debug_draw == RS::VIEWPORT_DEBUG_DRAW_GBUFFER_NORMAL && _render_buffers_get_normal_texture(rb).is_valid()) {
+		Size2 rtsize = texture_storage->render_target_get_size(render_target);
+		copy_effects->copy_to_fb_rect(_render_buffers_get_normal_texture(rb), texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize), false, false, false, false, RID(), false, false, false, true);
 	}
 }
 
