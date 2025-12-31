@@ -940,7 +940,23 @@ void RendererSceneRenderRD::_render_buffers_debug_draw(const RenderDataRD *p_ren
 
 	if (debug_draw == RS::VIEWPORT_DEBUG_DRAW_GBUFFER_DEPTH && rb->get_depth_texture().is_valid()) {
 		Size2 rtsize = texture_storage->render_target_get_size(render_target);
-		copy_effects->copy_to_fb_rect(rb->get_depth_texture(), texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize));
+
+		static const StringName context_name = SNAME("render_buffers");
+		static const StringName texture_name = SNAME("depth_to_color_texture");
+
+		// Create our color buffer.
+		RID depth_to_color_texture_rid = rb->get_texture(context_name, texture_name);
+		if (depth_to_color_texture_rid.is_valid()) {
+		}
+		else {
+			depth_to_color_texture_rid = rb->create_texture(context_name, texture_name, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT);
+			if (!depth_to_color_texture_rid.is_valid())
+				return;
+		}
+
+		copy_effects->copy_depth_to_rect(rb->get_depth_texture(), depth_to_color_texture_rid, Rect2(Vector2(), rtsize), false);
+
+		copy_effects->copy_to_fb_rect(depth_to_color_texture_rid, texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize));
 	}
 }
 
