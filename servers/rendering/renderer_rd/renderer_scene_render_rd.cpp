@@ -944,17 +944,31 @@ void RendererSceneRenderRD::_render_buffers_debug_draw(const RenderDataRD *p_ren
 		static const StringName context_name = SNAME("render_buffers");
 		static const StringName texture_name = SNAME("depth_to_color_texture");
 
-		// Create our color buffer.
-		RID depth_to_color_texture_rid = rb->get_texture(context_name, texture_name);
-		if (depth_to_color_texture_rid.is_valid()) {
-		}
-		else {
-			depth_to_color_texture_rid = rb->create_texture(context_name, texture_name, RD::DATA_FORMAT_R16G16B16A16_SFLOAT, RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT);
-			if (!depth_to_color_texture_rid.is_valid())
-				return;
+		if (rb->has_texture(context_name, texture_name)) {
+			Vector2i old_sz = rb->get_texture_slice_size(context_name, texture_name, 0);
+			if (old_sz != rtsize) {
+				rb->clear_context(context_name); // 会释放该 context 下缓存
+			}
 		}
 
-		copy_effects->copy_depth_to_rect(rb->get_depth_texture(), depth_to_color_texture_rid, Rect2(Vector2(), rtsize), false);
+		// Create our color buffer.
+		RID depth_to_color_texture_rid = rb->create_texture(context_name,
+			texture_name,
+			RD::DATA_FORMAT_R16G16B16A16_SFLOAT,
+			RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT,
+			rb->get_texture_samples(),
+			Vector2i((int)rtsize.x, (int)rtsize.y),
+			1, 1, false, true);
+		if (!depth_to_color_texture_rid.is_valid())
+			return;
+
+		// ✅ 清成纯红（你也可以换成绿 Color(0,1,0,1)）
+		RenderingDevice *rd = RD::get_singleton();
+		rd->texture_clear(depth_to_color_texture_rid, Color(1, 1, 0, 1), 0, 1, 0, 1);
+
+		float camera_z_far = p_render_data->scene_data->cam_projection.get_z_far();
+		float camera_z_near = p_render_data->scene_data->cam_projection.get_z_near();
+		copy_effects->copy_depth_to_rect_and_linearize(rb->get_depth_texture(), depth_to_color_texture_rid, Rect2(Vector2(), rtsize), false, camera_z_near, camera_z_far);
 
 		copy_effects->copy_to_fb_rect(depth_to_color_texture_rid, texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize));
 	}

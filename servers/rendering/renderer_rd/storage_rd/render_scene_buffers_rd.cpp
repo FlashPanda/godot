@@ -396,7 +396,15 @@ RID RenderSceneBuffersRD::create_texture_view(const StringName &p_context, const
 RID RenderSceneBuffersRD::get_texture(const StringName &p_context, const StringName &p_texture_name) const {
 	NTKey key(p_context, p_texture_name);
 
-	ERR_FAIL_COND_V(!named_textures.has(key), RID());
+	// ERR_FAIL_COND_V(!named_textures.has(key), RID());
+
+	if (unlikely(!named_textures.has(key))) {
+		// 这里输出p_context和p_texture_name
+		_err_print_error(FUNCTION_STR, __FILE__, __LINE__,
+				 vformat("Condition \"!named_textures.has(key)\" is true. Context: \"%s\", Texture: \"%s\". Returning: RID()", p_context, p_texture_name));
+
+		return RID();
+	}
 
 	return named_textures[key].texture;
 }

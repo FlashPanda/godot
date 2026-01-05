@@ -85,7 +85,7 @@ public:
 
 	bool lightmap_bicubic_filter = false;
 
-	// 渲染方法里有一部分是为了剔除用的，但是感觉还有很多其它的东西。
+	// 这里像是统计信息
 	RenderingMethod::RenderInfo *render_info = nullptr;
 
 	/* Viewport data */
