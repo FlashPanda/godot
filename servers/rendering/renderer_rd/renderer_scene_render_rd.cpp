@@ -951,26 +951,38 @@ void RendererSceneRenderRD::_render_buffers_debug_draw(const RenderDataRD *p_ren
 			}
 		}
 
+		uint32_t usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT;
+		usage_bits |= RD::TEXTURE_USAGE_CAN_COPY_TO_BIT | RD::TEXTURE_USAGE_STORAGE_BIT;
+		usage_bits |= RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT; // set this as color attachment because we're copying data into it, it's not actually used as a depth buffer
+		usage_bits |= RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
+
 		// Create our color buffer.
 		RID depth_to_color_texture_rid = rb->create_texture(context_name,
 			texture_name,
-			RD::DATA_FORMAT_R16G16B16A16_SFLOAT,
-			RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_CAN_COPY_TO_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT,
+			RD::DATA_FORMAT_R32_SFLOAT,
+			usage_bits,
 			rb->get_texture_samples(),
 			Vector2i((int)rtsize.x, (int)rtsize.y),
 			1, 1, false, true);
 		if (!depth_to_color_texture_rid.is_valid())
 			return;
 
-		// ✅ 清成纯红（你也可以换成绿 Color(0,1,0,1)）
+		// ✅ 清成黄色
 		RenderingDevice *rd = RD::get_singleton();
-		rd->texture_clear(depth_to_color_texture_rid, Color(1, 1, 0, 1), 0, 1, 0, 1);
+		// 对于R32这种，只有r字段是有效的。
+		rd->texture_clear(depth_to_color_texture_rid, Color(0.5, 1, 0, 1), 0, 1, 0, 1);
 
 		float camera_z_far = p_render_data->scene_data->cam_projection.get_z_far();
 		float camera_z_near = p_render_data->scene_data->cam_projection.get_z_near();
-		copy_effects->copy_depth_to_rect_and_linearize(rb->get_depth_texture(), depth_to_color_texture_rid, Rect2(Vector2(), rtsize), false, camera_z_near, camera_z_far);
+		print_line("camera_z_near =  " + rtos(camera_z_near) + ", camera_z_far = " + rtos(camera_z_far) + "\n");
+		//copy_effects->copy_depth_to_rect_and_linearize(rb->get_depth_texture(), depth_to_color_texture_rid, Rect2(Vector2(), rtsize), false, camera_z_near, camera_z_far);
+		// 近处远处都是0，特别奇怪
+		copy_effects->copy_to_rect(rb->get_depth_texture(),depth_to_color_texture_rid, Rect2(Vector2(), rtsize));
 
-		copy_effects->copy_to_fb_rect(depth_to_color_texture_rid, texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize));
+		Vector<uint8_t> depth_data = rd->texture_get_data(depth_to_color_texture_rid, 0);
+		print_line("depth_data.size() = " + itos(depth_data.size()) + "\n");
+
+		// copy_effects->copy_to_fb_rect(depth_to_color_texture_rid, texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize));
 	}
 }
 

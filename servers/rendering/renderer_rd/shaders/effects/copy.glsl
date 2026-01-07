@@ -209,22 +209,24 @@ void main() {
 			uv.y = 1.0 - uv.y;
 		}
 		color = textureLod(source_color, uv, 0.0);
-
 	} else {
 		color = texelFetch(source_color, pos + params.section.xy, 0);
 
 		if (bool(params.flags & FLAG_FLIP_Y)) {
 			pos.y = params.section.w - pos.y - 1;
 		}
+
+
+        //color = vec4(color.r * 10.0, 0, 0, 0);
 	}
 
-	if (bool(params.flags & FLAG_FORCE_LUMINANCE)) {
-		color.rgb = vec3(max(max(color.r, color.g), color.b));
-	}
+    if (bool(params.flags & FLAG_FORCE_LUMINANCE)) {
+        color.rgb = vec3(max(max(color.r, color.g), color.b));
+    }
 
-	if (bool(params.flags & FLAG_ALPHA_TO_ONE)) {
-		color.a = 1.0;
-	}
+    if (bool(params.flags & FLAG_ALPHA_TO_ONE)) {
+        color.a = 1.0;
+    }
 
 	imageStore(dest_buffer, pos + params.target, color);
 
