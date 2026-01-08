@@ -974,13 +974,43 @@ void RendererSceneRenderRD::_render_buffers_debug_draw(const RenderDataRD *p_ren
 
 		float camera_z_far = p_render_data->scene_data->cam_projection.get_z_far();
 		float camera_z_near = p_render_data->scene_data->cam_projection.get_z_near();
-		print_line("camera_z_near =  " + rtos(camera_z_near) + ", camera_z_far = " + rtos(camera_z_far) + "\n");
-		//copy_effects->copy_depth_to_rect_and_linearize(rb->get_depth_texture(), depth_to_color_texture_rid, Rect2(Vector2(), rtsize), false, camera_z_near, camera_z_far);
-		// 近处远处都是0，特别奇怪
-		copy_effects->copy_to_rect(rb->get_depth_texture(),depth_to_color_texture_rid, Rect2(Vector2(), rtsize));
 
-		Vector<uint8_t> depth_data = rd->texture_get_data(depth_to_color_texture_rid, 0);
-		print_line("depth_data.size() = " + itos(depth_data.size()) + "\n");
+		copy_effects->copy_depth_to_rect_and_linearize(rb->get_depth_texture(), depth_to_color_texture_rid, Rect2(Vector2(), rtsize), false, camera_z_near, camera_z_far);
+		// 近处远处都是0，特别奇怪？
+		// 找到原因了，下面解答：
+		// godot中采用了reverse-Z、非线性、范围 0..1来表示深度，深度计算公式是：depth = near * (far - z) / (z * (far - near))
+		// 在计算的时候，因为深度是非线性的，所以它的值会有一个巨大的衰减，比如说，near=0.05，far=4000，当物体在1位置的地方，depth就是0.05，这已经
+		// 是一个看不到亮度的值了。
+		//copy_effects->copy_to_rect(rb->get_depth_texture(),depth_to_color_texture_rid, Rect2(Vector2(), rtsize));
+
+		static int count = 0;
+		if (count == 0) {
+			count = 1;
+			print_line("camera_z_near =  " + rtos(camera_z_near) + ", camera_z_far = " + rtos(camera_z_far) + "\n");
+			Vector<uint8_t> depth_data = rd->texture_get_data(depth_to_color_texture_rid, 0);
+			Ref<FileAccess> f = FileAccess::open("user://depth2.csv", FileAccess::WRITE);
+			ERR_FAIL_COND(f.is_null());
+
+			String out;
+			for (int i = 0; i < rtsize.y * rtsize.x; i++) {
+				float v;
+				memcpy(&v, depth_data.ptr() + i * 4, 4);
+
+				// 逗号分隔
+				if (i > 0) {
+					out += ",";
+				}
+
+				// 用 String::num 输出（可改小数位）
+				out += String::num(v, 6);
+			}
+
+			// 一次性写出（更快）
+			f->store_string(out);
+			f->close();
+
+			print_line("depth_data.size() = " + itos(depth_data.size()) + "\n");
+		}
 
 		// copy_effects->copy_to_fb_rect(depth_to_color_texture_rid, texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize));
 	}
