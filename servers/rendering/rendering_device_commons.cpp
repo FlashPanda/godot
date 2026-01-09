@@ -419,8 +419,7 @@ uint32_t RenderingDeviceCommons::get_image_format_pixel_size(DataFormat p_format
 		case DATA_FORMAT_D24_UNORM_S8_UINT:
 			return 4;
 		case DATA_FORMAT_D32_SFLOAT_S8_UINT:
-			//return 5; // ?
-			return 4;		// We can only get D32 here. If you wanna sttencil data, you need to use special bit to get.
+			return 5; // ?
 		case DATA_FORMAT_BC1_RGB_UNORM_BLOCK:
 		case DATA_FORMAT_BC1_RGB_SRGB_BLOCK:
 		case DATA_FORMAT_BC1_RGBA_UNORM_BLOCK:

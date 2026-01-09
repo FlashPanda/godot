@@ -271,7 +271,7 @@ void Projection::set_perspective(real_t p_fovy_degrees, real_t p_aspect, real_t 
 	columns[1][1] = cotangent;
 	columns[2][2] = -(p_z_far + p_z_near) / deltaZ;
 	columns[2][3] = -1;
-	columns[3][2] = -2 * p_z_near * p_z_far / deltaZ;
+	columns[3][2] = -2 * p_z_near * p_z_far / deltaZ;		// z值范围[-1, 1]
 	columns[3][3] = 0;
 }
 

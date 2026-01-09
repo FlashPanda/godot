@@ -938,7 +938,10 @@ void RendererSceneRenderRD::_render_buffers_debug_draw(const RenderDataRD *p_ren
 		copy_effects->copy_to_fb_rect(_render_buffers_get_normal_texture(rb), texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize), false, false, false, false, RID(), false, false, false, true);
 	}
 
+	// 无法输出，最关键的是D32S8这个数据的获取没有确切的vulkan说明。
+	// 所以这个是无效的，之所以保留，是为了后续在vulkan中的问题解决之后，看看有没有输出的可能。
 	if (debug_draw == RS::VIEWPORT_DEBUG_DRAW_GBUFFER_DEPTH && rb->get_depth_texture().is_valid()) {
+		return;
 		Size2 rtsize = texture_storage->render_target_get_size(render_target);
 
 		static const StringName context_name = SNAME("render_buffers");
@@ -983,12 +986,13 @@ void RendererSceneRenderRD::_render_buffers_debug_draw(const RenderDataRD *p_ren
 		// 是一个看不到亮度的值了。
 		//copy_effects->copy_to_rect(rb->get_depth_texture(),depth_to_color_texture_rid, Rect2(Vector2(), rtsize));
 
+		// 数据有问题，感觉就是depth是D32S8这种格式引起的。
 		static int count = 0;
 		if (count == 0) {
 			count = 1;
 			print_line("camera_z_near =  " + rtos(camera_z_near) + ", camera_z_far = " + rtos(camera_z_far) + "\n");
-			Vector<uint8_t> depth_data = rd->texture_get_data(depth_to_color_texture_rid, 0);
-			Ref<FileAccess> f = FileAccess::open("user://depth2.csv", FileAccess::WRITE);
+			Vector<uint8_t> depth_data = rd->depth_get_data(rb->get_depth_texture(), 0);
+			Ref<FileAccess> f = FileAccess::open("user://depth4.csv", FileAccess::WRITE);
 			ERR_FAIL_COND(f.is_null());
 
 			String out;
@@ -1009,7 +1013,7 @@ void RendererSceneRenderRD::_render_buffers_debug_draw(const RenderDataRD *p_ren
 			f->store_string(out);
 			f->close();
 
-			print_line("depth_data.size() = " + itos(depth_data.size()) + "\n");
+			print_line("rtsize.x = " + itos(rtsize.x) + ", rtsize. y = " + itos(rtsize.y) + ", depth_data.size() = " + itos(depth_data.size()) + "\n");
 		}
 
 		// copy_effects->copy_to_fb_rect(depth_to_color_texture_rid, texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize));
