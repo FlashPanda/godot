@@ -258,6 +258,16 @@ void main() {
 	imageStore(dest_buffer, pos + params.target, color);
 #endif // MODE_LINEARIZE_DEPTH_COPY
 
+#ifdef  MODE_GBUFFER_ROUGHNESS_COPY
+	vec4 color = texelFetch(source_color, pos + params.section.xy, 0);
+
+	if (bool(params.flags & FLAG_FLIP_Y)) {
+		pos.y = params.section.w - pos.y - 1;
+	}
+
+	imageStore(dest_buffer, pos + params.target, vec4(0.0, 0.0, color.a, 1.0));
+#endif // MODE_GBUFFER_ROUGHNESS_COPY
+
 #if defined(MODE_CUBEMAP_TO_PANORAMA) || defined(MODE_CUBEMAP_ARRAY_TO_PANORAMA)
 
 	const float PI = 3.14159265359;

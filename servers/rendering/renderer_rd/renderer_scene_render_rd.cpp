@@ -1018,6 +1018,36 @@ void RendererSceneRenderRD::_render_buffers_debug_draw(const RenderDataRD *p_ren
 
 		// copy_effects->copy_to_fb_rect(depth_to_color_texture_rid, texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize));
 	}
+
+	if (debug_draw == RS::VIEWPORT_DEBUG_DRAW_GBUFFER_ROUGHNESS && _render_buffers_get_normal_texture(rb).is_valid()) {
+		Size2 rtsize = texture_storage->render_target_get_size(render_target);
+		static const StringName context_name = SNAME("render_buffers");
+		static const StringName texture_name = SNAME("gbuffer_roughness_texture");
+
+		if (rb->has_texture(context_name, texture_name)) {
+			Vector2i old_sz = rb->get_texture_slice_size(context_name, texture_name, 0);
+			if (old_sz != rtsize) {
+				rb->clear_context(context_name); // 会释放该 context 下缓存
+			}
+		}
+
+		uint32_t usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT;
+		usage_bits |=  RD::TEXTURE_USAGE_STORAGE_BIT;
+
+		// Create our color buffer.
+		RID gbuffer_roughness_texture_rid = rb->create_texture(context_name,
+			texture_name,
+			RD::DATA_FORMAT_R16G16B16A16_SFLOAT,
+			usage_bits,
+			rb->get_texture_samples(),
+			Vector2i((int)rtsize.x, (int)rtsize.y),
+			1, 1, false, true);
+		if (!gbuffer_roughness_texture_rid.is_valid())
+			return;
+
+		copy_effects->copy_roughness_to_rect(_render_buffers_get_normal_texture(rb), gbuffer_roughness_texture_rid, Rect2(Vector2(), rtsize));
+		copy_effects->copy_to_fb_rect(gbuffer_roughness_texture_rid, texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize));
+	}
 }
 
 RID RendererSceneRenderRD::render_buffers_get_default_voxel_gi_buffer() {
