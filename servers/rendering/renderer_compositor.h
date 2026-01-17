@@ -109,11 +109,6 @@ public:
 	static RendererCompositor *get_singleton() { return singleton; }
 	RendererCompositor();
 	virtual ~RendererCompositor();
-
-// debug
-public:
-	virtual void output_rendertarget_to_image(RID render_target_id, String output_path) = 0;
-	virtual void output_shadow_atlas_to_image(RID shadow_atlas_id, String output_path) = 0;
 };
 
 #endif // RENDERER_COMPOSITOR_H

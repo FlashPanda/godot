@@ -142,12 +142,22 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 				scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_OFF;
 			}
 
-			// Verify MetalFX upscaling support.
-			if (
-					(scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL && !RD::get_singleton()->has_feature(RD::SUPPORTS_METALFX_TEMPORAL)) ||
-					(scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL && !RD::get_singleton()->has_feature(RD::SUPPORTS_METALFX_SPATIAL))) {
-				scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_BILINEAR;
-				WARN_PRINT_ONCE("MetalFX upscaling is not supported in the current renderer. Falling back to bilinear 3D resolution scaling.");
+			if (scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_TEMPORAL && !RD::get_singleton()->has_feature(RD::SUPPORTS_METALFX_TEMPORAL)) {
+				if (RD::get_singleton()->has_feature(RD::SUPPORTS_METALFX_SPATIAL)) {
+					// Prefer MetalFX spatial if it is supported, which will be much more efficient than FSR2,
+					// as the hardware already will struggle with FSR2.
+					scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL;
+					WARN_PRINT_ONCE("MetalFX temporal upscaling is not supported by the current renderer or hardware. Falling back to MetalFX Spatial scaling.");
+				} else {
+					scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_FSR2;
+					WARN_PRINT_ONCE("MetalFX upscaling is not supported by the current renderer or hardware. Falling back to FSR 2 scaling.");
+				}
+				scaling_type = RS::scaling_3d_mode_type(scaling_3d_mode);
+			}
+
+			if (scaling_3d_mode == RS::VIEWPORT_SCALING_3D_MODE_METALFX_SPATIAL && !RD::get_singleton()->has_feature(RD::SUPPORTS_METALFX_SPATIAL)) {
+				scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_FSR;
+				WARN_PRINT_ONCE("MetalFX spatial upscaling is not supported by the current renderer or hardware. Falling back to FSR scaling.");
 			}
 
 			RS::ViewportMSAA msaa_3d = p_viewport->msaa_3d;
@@ -157,11 +167,9 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 				double min_scale = (double)RD::get_singleton()->limit_get(RD::LIMIT_METALFX_TEMPORAL_SCALER_MIN_SCALE) / 1000'000.0;
 				double max_scale = (double)RD::get_singleton()->limit_get(RD::LIMIT_METALFX_TEMPORAL_SCALER_MAX_SCALE) / 1000'000.0;
 				if ((double)scaling_3d_scale < min_scale || (double)scaling_3d_scale > max_scale) {
-					scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_BILINEAR;
-					WARN_PRINT_ONCE(vformat("MetalFX temporal upscaling scale is outside limits; scale must be between %f and %f. Falling back to bilinear 3D resolution scaling.", min_scale, max_scale));
-				}
-
-				if (msaa_3d != RS::VIEWPORT_MSAA_DISABLED) {
+					scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_FSR2;
+					WARN_PRINT_ONCE(vformat("MetalFX temporal upscaling scale is outside limits; scale must be between %f and %f. Falling back to FSR 2 3D resolution scaling.", min_scale, max_scale));
+				} else if (msaa_3d != RS::VIEWPORT_MSAA_DISABLED) {
 					WARN_PRINT_ONCE("MetalFX temporal upscaling does not support 3D MSAA. Disabling 3D MSAA internally.");
 					msaa_3d = RS::VIEWPORT_MSAA_DISABLED;
 				}
@@ -171,7 +179,7 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 			bool use_taa = p_viewport->use_taa;
 
 			if (scaling_3d_is_not_bilinear && (scaling_3d_scale >= (1.0 + EPSILON))) {
-				// FSR is not designed for downsampling.
+				// FSR and MetalFX is not designed for downsampling.
 				// Fall back to bilinear scaling.
 				WARN_PRINT_ONCE("FSR 3D resolution scaling is not designed for downsampling. Falling back to bilinear 3D resolution scaling.");
 				scaling_3d_mode = RS::VIEWPORT_SCALING_3D_MODE_BILINEAR;
@@ -185,8 +193,8 @@ void RendererViewport::_configure_3d_render_buffers(Viewport *p_viewport) {
 			}
 
 			if (use_taa && (scaling_type == RS::VIEWPORT_SCALING_3D_TYPE_TEMPORAL)) {
-				// FSR2 can't be used with TAA.
-				// Turn it off and prefer using FSR2.
+				// Temporal upscalers can't be used with TAA.
+				// Turn it off and prefer using the temporal upscaler.
 				WARN_PRINT_ONCE("FSR 2 or MetalFX Temporal is not compatible with TAA. Disabling TAA internally.");
 				use_taa = false;
 			}
@@ -300,18 +308,8 @@ void RendererViewport::_draw_3d(Viewport *p_viewport) {
 
 	// 场景网格LOD阈值
 	float screen_mesh_lod_threshold = p_viewport->mesh_lod_threshold / float(p_viewport->size.width);
-	// 渲染相机
-	RSG::scene->render_camera(p_viewport->render_buffers,
-		p_viewport->camera,
-		p_viewport->scenario,
-		p_viewport->self,
-		p_viewport->internal_size,
-		p_viewport->jitter_phase_count,
-		screen_mesh_lod_threshold,
-		p_viewport->shadow_atlas,
-		xr_interface,
-		&p_viewport->render_info);
-	
+	RSG::scene->render_camera(p_viewport->render_buffers, p_viewport->camera, p_viewport->scenario, p_viewport->self, p_viewport->internal_size, p_viewport->jitter_phase_count, screen_mesh_lod_threshold, p_viewport->shadow_atlas, xr_interface, &p_viewport->render_info);
+
 	RENDER_TIMESTAMP("< Render 3D Scene");
 #endif // _3D_DISABLED
 }
@@ -396,13 +394,6 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 		_draw_3d(p_viewport);
 	}
 
-	// Debug
-	if (save_flag) {
-		save_current_view(p_viewport);
-		save_flag.store(false);
-	}
-
-	// 需要绘制2D
 	if (can_draw_2d) {
 		// 画布数据
 		RBMap<Viewport::CanvasKey, Viewport::CanvasData *> canvas_map;
@@ -603,16 +594,8 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 			while (light) {
 				RENDER_TIMESTAMP("Render PointLight2D Shadow");
 
-				// 更新光源在画布上的阴影
-				RSG::canvas_render->light_update_shadow(light->light_internal,	// 光源内部标识
-					shadow_count++,		// 自增阴影计数
-					light->xform_cache.affine_inverse(),	// 光源逆变换矩阵
-					light->item_shadow_mask,
-					light->radius_cache / 1000.0,
-					light->radius_cache * 1.1,
-					occluders,	// 遮挡器列表
-					light->rect_cache);		// 光源影响区域
-				light = light->shadows_next_ptr;	// 下一个光源
+				RSG::canvas_render->light_update_shadow(light->light_internal, shadow_count++, light->xform_cache.affine_inverse(), light->item_shadow_mask, light->radius_cache / 1000.0, light->radius_cache * 1.1, occluders, light->rect_cache);
+				light = light->shadows_next_ptr;
 			}
 
 			RENDER_TIMESTAMP("< Render PointLight2D Shadows");
@@ -720,15 +703,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 					}
 				}
 
-				// 调用底层渲染器更新方向光源阴影（核心渲染指令）
-				RSG::canvas_render->light_update_directional_shadow(
-					light->light_internal,		// 光源内部标识
-					shadow_count++,				// 自增阴影计数器
-					light->xform_cache,			// 光源变换矩阵
-					light->item_shadow_mask,	// 阴影遮罩位
-					cull_distance,				// 有效照射距离
-					clip_rect,					// 当前视口裁剪区域
-					occluders);					// 收集的遮挡器链表
+				RSG::canvas_render->light_update_directional_shadow(light->light_internal, shadow_count++, light->xform_cache, light->item_shadow_mask, cull_distance, clip_rect, occluders);
 
 				light = light->shadows_next_ptr;	// 遍历下一个光源
 			}
@@ -780,20 +755,7 @@ void RendererViewport::_draw_viewport(Viewport *p_viewport) {
 				ptr = ptr->filter_next_ptr;
 			}
 
-			// 绘制画布
-			RSG::canvas->render_canvas(
-				p_viewport->render_target,
-				canvas,
-				xform,
-				canvas_lights,
-				canvas_directional_lights,
-				clip_rect,
-				p_viewport->texture_filter,
-				p_viewport->texture_repeat,
-				p_viewport->snap_2d_transforms_to_pixel,
-				p_viewport->snap_2d_vertices_to_pixel,
-				p_viewport->canvas_cull_mask,
-				&p_viewport->render_info);
+			RSG::canvas->render_canvas(p_viewport->render_target, canvas, xform, canvas_lights, canvas_directional_lights, clip_rect, p_viewport->texture_filter, p_viewport->texture_repeat, p_viewport->snap_2d_transforms_to_pixel, p_viewport->snap_2d_vertices_to_pixel, p_viewport->canvas_cull_mask, &p_viewport->render_info);
 			if (RSG::canvas->was_sdf_used()) {
 				p_viewport->sdf_active = true;
 			}
@@ -985,6 +947,8 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 					viewport_set_force_motion_vectors(vp->self, false);
 				}
 
+				RSG::texture_storage->render_target_set_render_region(vp->render_target, xr_interface->get_render_region());
+
 				// render...
 				RSG::scene->set_debug_draw_mode(vp->debug_draw);
 
@@ -1042,19 +1006,16 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 					blit.dst_rect.size = vp->size;
 				}
 
-				// 获取要渲染到哪些区域
-				Vector<BlitToScreen> *blits = blit_to_screen_list.getptr(vp->viewport_to_screen);
-				if (blits == nullptr) {
-					blits = &blit_to_screen_list.insert(vp->viewport_to_screen, Vector<BlitToScreen>())->value;
-				}
-
-				// opengl3有不同的绘制路径
 				if (OS::get_singleton()->get_current_rendering_driver_name().begins_with("opengl3")) {
 					Vector<BlitToScreen> blit_to_screen_vec;
 					blit_to_screen_vec.push_back(blit);
 					RSG::rasterizer->blit_render_targets_to_screen(vp->viewport_to_screen, blit_to_screen_vec.ptr(), 1);
 					RSG::rasterizer->gl_end_frame(p_swap_buffers);
 				} else {
+					Vector<BlitToScreen> *blits = blit_to_screen_list.getptr(vp->viewport_to_screen);
+					if (blits == nullptr) {
+						blits = &blit_to_screen_list.insert(vp->viewport_to_screen, Vector<BlitToScreen>())->value;
+					}
 					blits->push_back(blit);
 				}
 			}
@@ -1824,28 +1785,4 @@ int RendererViewport::get_num_viewports_with_motion_vectors() const {
 
 RendererViewport::RendererViewport() {
 	occlusion_rays_per_thread = GLOBAL_GET("rendering/occlusion_culling/occlusion_rays_per_thread");
-}
-
-// 保存当前的视图
-void RendererViewport::save_current_view(Viewport* p_viewport) const {
-	// 纹理的格式要拿出来看看
-	RenderSceneBuffers *buffer_raw = p_viewport->render_buffers.ptr();
-	RenderSceneBuffersRD *rd_raw = Object::cast_to<RenderSceneBuffersRD>(buffer_raw);
-	if (rd_raw) {
-		RID color_texture = rd_raw->get_texture(RB_SCOPE_BUFFERS, RB_TEX_COLOR);
-		RD::TextureFormat texture_format = rd_raw->get_texture_format(RB_SCOPE_BUFFERS, RB_TEX_COLOR);
-		Size2i texture_size = rd_raw->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_COLOR, 0);
-		RD::get_singleton()->save_texture_to_file(color_texture, 0, texture_format, texture_size, "user://color_buffer.png");
-
-		RID depth_texture = rd_raw->get_texture(RB_SCOPE_BUFFERS, RB_TEX_DEPTH);
-		RD::TextureFormat depth_format = rd_raw->get_texture_format(RB_SCOPE_BUFFERS, RB_TEX_DEPTH);
-		Size2i depth_size = rd_raw->get_texture_slice_size(RB_SCOPE_BUFFERS, RB_TEX_DEPTH, 0);
-		RD::get_singleton()->save_texture_to_file(depth_texture, 0, depth_format, depth_size, "user://depth_buffer.png");
-	}
-}
-
-// 设置下一帧保存视图
-void RendererViewport::set_to_save_next_frame()
-{
-	save_flag.store(true);
 }

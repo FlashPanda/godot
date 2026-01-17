@@ -103,7 +103,7 @@ public:
 	static String _gen_unique_name_static(HashSet<String> &r_unique_names, const String &p_name);
 
 private:
-	void _build_parent_hierachy(Ref<GLTFState> p_state);
+	void _build_parent_hierarchy(Ref<GLTFState> p_state);
 	double _filter_number(double p_float);
 	void _round_min_max_components(Vector<double> &r_type_min, Vector<double> &r_type_max);
 	String _get_component_type_name(const GLTFAccessor::GLTFComponentType p_component_type);
@@ -274,11 +274,11 @@ private:
 	GLTFAccessorIndex _encode_accessor_as_xform(Ref<GLTFState> p_state,
 			const Vector<Transform3D> p_attribs,
 			const bool p_for_vertex);
-	Error _encode_buffer_view(Ref<GLTFState> p_state, const double *p_src,
-			const int p_count, const GLTFAccessor::GLTFAccessorType p_accessor_type,
+	Error _encode_accessor_into_buffer_view(Ref<GLTFState> p_state, const double *p_src,
+			const int64_t p_count, const GLTFAccessor::GLTFAccessorType p_accessor_type,
 			const GLTFAccessor::GLTFComponentType p_component_type, const bool p_normalized,
-			const int p_byte_offset, const bool p_for_vertex,
-			GLTFBufferViewIndex &r_accessor, const bool p_for_indices = false);
+			const int64_t p_byte_offset, const bool p_for_vertex,
+			GLTFBufferViewIndex &r_buffer_view, const bool p_for_indices = false);
 
 	Error _encode_accessors(Ref<GLTFState> p_state);
 	Error _encode_buffer_views(Ref<GLTFState> p_state);

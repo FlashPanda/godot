@@ -90,6 +90,7 @@ public:
 
 	/* Viewport data */
 	bool transparent_bg = false;
+	Rect2i render_region;
 
 	/* Shadow data */
 	// 阴影数据，这部分数据本身已经在渲染器里了，为什么还要在这里弄个指针？

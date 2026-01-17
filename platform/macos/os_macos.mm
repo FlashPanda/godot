@@ -142,13 +142,13 @@ void OS_MacOS::finalize() {
 
 	delete_main_loop();
 
-	if (joypad_macos) {
-		memdelete(joypad_macos);
+	if (joypad_apple) {
+		memdelete(joypad_apple);
 	}
 }
 
 void OS_MacOS::initialize_joypads() {
-	joypad_macos = memnew(JoypadMacOS());
+	joypad_apple = memnew(JoypadApple());
 }
 
 void OS_MacOS::set_main_loop(MainLoop *p_main_loop) {
@@ -544,23 +544,26 @@ Vector<String> OS_MacOS::get_system_font_path_for_text(const String &p_font_name
 	CTFontDescriptorRef font = CTFontDescriptorCreateWithAttributes(attributes);
 	if (font) {
 		CTFontRef family = CTFontCreateWithFontDescriptor(font, 0, nullptr);
-		CFStringRef string = CFStringCreateWithCString(kCFAllocatorDefault, p_text.utf8().get_data(), kCFStringEncodingUTF8);
-		CFRange range = CFRangeMake(0, CFStringGetLength(string));
-		CTFontRef fallback_family = CTFontCreateForString(family, string, range);
-		if (fallback_family) {
-			CTFontDescriptorRef fallback_font = CTFontCopyFontDescriptor(fallback_family);
-			if (fallback_font) {
-				CFURLRef url = (CFURLRef)CTFontDescriptorCopyAttribute(fallback_font, kCTFontURLAttribute);
-				if (url) {
-					NSString *font_path = [NSString stringWithString:[(__bridge NSURL *)url path]];
-					ret.push_back(String::utf8([font_path UTF8String]));
-					CFRelease(url);
+		if (family) {
+			CFStringRef string = CFStringCreateWithCString(kCFAllocatorDefault, p_text.utf8().get_data(), kCFStringEncodingUTF8);
+			CFRange range = CFRangeMake(0, CFStringGetLength(string));
+			CTFontRef fallback_family = CTFontCreateForString(family, string, range);
+			if (fallback_family) {
+				CTFontDescriptorRef fallback_font = CTFontCopyFontDescriptor(fallback_family);
+				if (fallback_font) {
+					CFURLRef url = (CFURLRef)CTFontDescriptorCopyAttribute(fallback_font, kCTFontURLAttribute);
+					if (url) {
+						NSString *font_path = [NSString stringWithString:[(__bridge NSURL *)url path]];
+						ret.push_back(String::utf8([font_path UTF8String]));
+						CFRelease(url);
+					}
+					CFRelease(fallback_font);
 				}
-				CFRelease(fallback_font);
+				CFRelease(fallback_family);
 			}
-			CFRelease(fallback_family);
+			CFRelease(string);
+			CFRelease(family);
 		}
-		CFRelease(string);
 		CFRelease(font);
 	}
 
@@ -834,7 +837,7 @@ void OS_MacOS::run() {
 				if (DisplayServer::get_singleton()) {
 					DisplayServer::get_singleton()->process_events(); // Get rid of pending events.
 				}
-				joypad_macos->start_processing();
+				joypad_apple->process_joypads();
 
 				if (Main::iteration()) {
 					quit = true;

@@ -101,7 +101,7 @@ public:
 	 * 如果不需要（例如缓存中已存在或条件不满足）则返回 false。
 	 * 参数 source 仅用于收集统计信息。
 	*/
-	void compile_pipeline(const Key &p_key, uint32_t p_key_hash, RS::PipelineSource p_source) {
+	void compile_pipeline(const Key &p_key, uint32_t p_key_hash, RS::PipelineSource p_source, bool p_high_priority) {
 		DEV_ASSERT((creation_object != nullptr) && (creation_function != nullptr) && "Creation object and function was not set before attempting to compile a pipeline.");
 
 		MutexLock local_lock(local_mutex);
@@ -177,7 +177,7 @@ public:
 #endif
 
 		// Queue a background compilation task.
-		WorkerThreadPool::TaskID task_id = WorkerThreadPool::get_singleton()->add_template_task(creation_object, creation_function, p_key, false, "PipelineCompilation");
+		WorkerThreadPool::TaskID task_id = WorkerThreadPool::get_singleton()->add_template_task(creation_object, creation_function, p_key, p_high_priority, "PipelineCompilation");
 		compilation_tasks.insert(p_key_hash, task_id);
 	}
 
@@ -210,7 +210,7 @@ public:
 
 		if (e == nullptr) {
 			// Request compilation. The method will ignore the request if it's already being compiled.
-			compile_pipeline(p_key, p_key_hash, p_source);
+			compile_pipeline(p_key, p_key_hash, p_source, p_wait_for_compilation);
 
 			if (p_wait_for_compilation) {
 				wait_for_pipeline(p_key_hash);

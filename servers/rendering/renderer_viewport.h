@@ -351,17 +351,6 @@ public:
 
 	RendererViewport();
 	virtual ~RendererViewport() {}
-
-// Debug
-public:
-	// 保存当前的视图
-	void save_current_view(Viewport* p_viewport) const;
-
-	// 设置下一帧保存视图
-	void set_to_save_next_frame();
-
-private:
-	std::atomic<bool> save_flag{false};
 };
 
 #endif // RENDERER_VIEWPORT_H

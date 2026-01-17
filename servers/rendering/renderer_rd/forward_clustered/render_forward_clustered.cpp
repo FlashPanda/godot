@@ -305,13 +305,7 @@ void RenderForwardClustered::update() {
 // 模板函数：根据渲染通道（p_pass_mode)和颜色通道标记(p_color_pass_flags)绘制一个元素区间
 // 本质上是一个收集参数，确定不要的模式之类的功能，真正的调用是一个函数实现的。
 template <RenderForwardClustered::PassMode p_pass_mode, uint32_t p_color_pass_flags>
-void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p_draw_list,
-	RenderingDevice::FramebufferFormatID p_framebuffer_Format,
-	RenderListParameters *p_params,
-	uint32_t p_from_element,
-	uint32_t p_to_element)
-{
-	// 取各类全局/单例式存储（网格与粒子）
+void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
 	// 本地缓存句柄（避免频繁拷贝/查询）
@@ -683,7 +677,11 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 			}
 
 			// 真正发起绘制（索引/非索引，由index_array是否有效决定），支持实例化
-			RD::get_singleton()->draw_list_draw(draw_list, index_array_rd.is_valid(), instance_count);
+			if (bool(surf->owner->base_flags & INSTANCE_DATA_FLAG_MULTIMESH_INDIRECT)) {
+				RD::get_singleton()->draw_list_draw_indirect(draw_list, index_array_rd.is_valid(), mesh_storage->_multimesh_get_command_buffer_rd_rid(surf->owner->data->base), surf->surface_index * sizeof(uint32_t) * mesh_storage->INDIRECT_MULTIMESH_COMMAND_STRIDE, 1, 0);
+			} else {
+				RD::get_singleton()->draw_list_draw(draw_list, index_array_rd.is_valid(), instance_count);
+			}
 		}
 
 		// 如果该元素需要重复（element_info.repeat），则跳过后续同组的重复项
@@ -697,67 +695,32 @@ void RenderForwardClustered::_render_list_template(RenderingDevice::DrawListID p
 	}
 }
 
-void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_list,
-	RenderingDevice::FramebufferFormatID p_framebuffer_Format,
-	RenderListParameters *p_params,
-	uint32_t p_from_element,
-	uint32_t p_to_element) {
+void RenderForwardClustered::_render_list(RenderingDevice::DrawListID p_draw_list, RenderingDevice::FramebufferFormatID p_framebuffer_Format, RenderListParameters *p_params, uint32_t p_from_element, uint32_t p_to_element) {
 	//use template for faster performance (pass mode comparisons are inlined)
 
 	switch (p_params->pass_mode) {
+#define VALID_FLAG_COMBINATION(f)                                                                                             \
+	case f: {                                                                                                                 \
+		_render_list_template<PASS_MODE_COLOR, f>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element); \
+	} break;
+
 		case PASS_MODE_COLOR: {
 			switch (p_params->color_pass_flags) {
-			case 0: {
-				_render_list_template<PASS_MODE_COLOR, 0>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
-			} break;
-
-			case COLOR_PASS_FLAG_TRANSPARENT: {
-				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_TRANSPARENT>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
-			} break;
-
-			case COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW: {
-				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
-			} break;
-
-			case COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MOTION_VECTORS: {
-				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MOTION_VECTORS>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
-			} break;
-
-			case COLOR_PASS_FLAG_SEPARATE_SPECULAR: {
-				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_SEPARATE_SPECULAR>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
-			} break;
-
-			case COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MULTIVIEW: {
-				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MULTIVIEW>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
-			} break;
-
-			case COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MOTION_VECTORS: {
-				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MOTION_VECTORS>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
-			} break;
-
-			case COLOR_PASS_FLAG_MULTIVIEW: {
-				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_MULTIVIEW>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
-			} break;
-
-			case COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS: {
-				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
-			} break;
-
-			case COLOR_PASS_FLAG_MOTION_VECTORS: {
-				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_MOTION_VECTORS>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
-			} break;
-
-			case COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS: {
-				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
-			} break;
-
-			case COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS: {
-				_render_list_template<PASS_MODE_COLOR, COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS>(p_draw_list, p_framebuffer_Format, p_params, p_from_element, p_to_element);
-			} break;
-
-			default: {
-				ERR_FAIL_MSG("Invalid color pass flag combination " + itos(p_params->color_pass_flags));
-			}
+				VALID_FLAG_COMBINATION(0);
+				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT);
+				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW);
+				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MOTION_VECTORS);
+				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_SEPARATE_SPECULAR);
+				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MULTIVIEW);
+				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MOTION_VECTORS);
+				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_MULTIVIEW);
+				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS);
+				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_MOTION_VECTORS);
+				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_SEPARATE_SPECULAR | COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS);
+				VALID_FLAG_COMBINATION(COLOR_PASS_FLAG_TRANSPARENT | COLOR_PASS_FLAG_MULTIVIEW | COLOR_PASS_FLAG_MOTION_VECTORS);
+				default: {
+					ERR_FAIL_MSG("Invalid color pass flag combination " + itos(p_params->color_pass_flags));
+				}
 			}
 
 		} break;
@@ -896,13 +859,7 @@ void RenderForwardClustered::_update_instance_data_buffer(RenderListType p_rende
 		RD::get_singleton()->buffer_update(scene_state.instance_buffer[p_render_list], 0, sizeof(SceneState::InstanceData) * scene_state.instance_data[p_render_list].size(), scene_state.instance_data[p_render_list].ptr());
 	}
 }
-
-void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list,
-int *p_render_info,
-uint32_t p_offset,
-int32_t p_max_elements,
-bool p_update_buffer)
-{
+void RenderForwardClustered::_fill_instance_data(RenderListType p_render_list, int *p_render_info, uint32_t p_offset, int32_t p_max_elements, bool p_update_buffer) {
 	RenderList *rl = &render_list[p_render_list];
 	// 如果触发了最大的，那么之后多出来的怎么办？
 	uint32_t element_total = p_max_elements >= 0 ? uint32_t(p_max_elements) : rl->elements.size();
@@ -986,12 +943,7 @@ bool p_update_buffer)
 		bool cant_repeat = instance_data.flags & INSTANCE_DATA_FLAG_MULTIMESH || inst->mesh_instance.is_valid();
 		//bool can_repeat_t = !(instance_data.flags & INSTANCE_DATA_FLAG_MULTIMESH) && !instance->mesh_instance.is_valid();
 
-		if (prev_surface != nullptr &&
-			!cant_repeat &&
-			prev_surface->sort.sort_key1 == surface->sort.sort_key1 &&
-			prev_surface->sort.sort_key2 == surface->sort.sort_key2 &&
-			inst->mirror == prev_surface->owner->mirror &&
-			repeats < RenderElementInfo::MAX_REPEATS) {
+		if (prev_surface != nullptr && !cant_repeat && prev_surface->sort.sort_key1 == surface->sort.sort_key1 && prev_surface->sort.sort_key2 == surface->sort.sort_key2 && inst->mirror == prev_surface->owner->mirror && repeats < RenderElementInfo::MAX_REPEATS) {
 			//this element is the same as the previous one, count repeats to draw it using instancing
 			// 这个元素和之前的是一样的，所以可以重复绘制，判断相同的标准是
 			// 前一个surface指针有
@@ -1043,15 +995,7 @@ _FORCE_INLINE_ static uint32_t _indices_to_primitives(RS::PrimitiveType p_primit
 	static const uint32_t subtractor[RS::PRIMITIVE_MAX] = { 0, 0, 1, 0, 1 };
 	return (p_indices - subtractor[p_primitive]) / divisor[p_primitive];
 }
-void RenderForwardClustered::_fill_render_list(RenderListType p_render_list,
-	const RenderDataRD *p_render_data,
-	PassMode p_pass_mode,
-	bool p_using_sdfgi,
-	bool p_using_opaque_gi,
-	bool p_using_motion_pass,
-	bool p_append)
-{
-	// 网格存储数据
+void RenderForwardClustered::_fill_render_list(RenderListType p_render_list, const RenderDataRD *p_render_data, PassMode p_pass_mode, bool p_using_sdfgi, bool p_using_opaque_gi, bool p_using_motion_pass, bool p_append) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	uint64_t frame = RSG::rasterizer->get_frame_number();	// 帧数
 
@@ -2396,7 +2340,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// 构造渲染列表参数，针对不透明对象的深度传递渲染
 		RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, depth_pass_mode, 0, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
 		// 使用渲染列表执行深度pass绘制
-		_render_list_with_draw_list(&render_list_params, depth_framebuffer, RD::DrawFlags(needs_pre_resolve ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_ALL), depth_pass_clear, 0.0f);
+		_render_list_with_draw_list(&render_list_params, depth_framebuffer, RD::DrawFlags(needs_pre_resolve ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_ALL), depth_pass_clear, 0.0f, 0u, p_render_data->render_region);
 
 		RD::get_singleton()->draw_command_end_label();
 
@@ -2504,28 +2448,10 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			// 通道模式
 			// 标志
 			// 统一变量集等
-			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(),
-				render_list[RENDER_LIST_OPAQUE].element_info.ptr(),
-				render_list[RENDER_LIST_OPAQUE].elements.size(),
-				reverse_cull,
-				PASS_MODE_COLOR,
-				opaque_color_pass_flags,
-				rb_data.is_null(),
-				p_render_data->directional_light_soft_shadows,
-				rp_uniform_set,
-				get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_WIREFRAME,
-				Vector2(),
-				p_render_data->scene_data->lod_distance_multiplier,
-				p_render_data->scene_data->screen_mesh_lod_threshold,
-				p_render_data->scene_data->view_count,
-				0,
-				base_specialization);
+			RenderListParameters render_list_params(render_list[RENDER_LIST_OPAQUE].elements.ptr(), render_list[RENDER_LIST_OPAQUE].element_info.ptr(), render_list[RENDER_LIST_OPAQUE].elements.size(), reverse_cull, PASS_MODE_COLOR, opaque_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
 			// 执行不透明物体渲染，同时根据条件选择清除颜色和深度缓冲区的方式
-			_render_list_with_draw_list(&render_list_params,
-				opaque_framebuffer,
-				RD::DrawFlags(load_color ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_COLOR_ALL) | (depth_pre_pass ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_DEPTH),
-				c,
-				0.0f);
+			_render_list_with_draw_list(&render_list_params, opaque_framebuffer, RD::DrawFlags(load_color ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_COLOR_ALL) | (depth_pre_pass ? RD::DRAW_DEFAULT_ALL : RD::DRAW_CLEAR_DEPTH), c, 0.0f, 0u, p_render_data->render_region);
+
 
 			// 绘制自定义pass
 			//RenderListParameters custom_pass_params(
@@ -2651,7 +2577,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 
 		RD::get_singleton()->draw_command_begin_label("Draw Sky");
 		// 开始在仅颜色帧缓冲区上绘制天空
-		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(color_only_framebuffer);
+		RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(color_only_framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 1.0f, 0u, p_render_data->render_region);
 
 		// 使用天空对象的绘制方法，来进行实际的绘制操作。
 		// 传入的参数是：
@@ -2826,7 +2752,7 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 		// 构造用于透明物体渲染的参数结构体
 		RenderListParameters render_list_params(render_list[RENDER_LIST_ALPHA].elements.ptr(), render_list[RENDER_LIST_ALPHA].element_info.ptr(), render_list[RENDER_LIST_ALPHA].elements.size(), reverse_cull, PASS_MODE_COLOR, transparent_color_pass_flags, rb_data.is_null(), p_render_data->directional_light_soft_shadows, rp_uniform_set, get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_WIREFRAME, Vector2(), p_render_data->scene_data->lod_distance_multiplier, p_render_data->scene_data->screen_mesh_lod_threshold, p_render_data->scene_data->view_count, 0, base_specialization);
 		// 执行透明物体渲染，将结果输出到alpha帧缓存
-		_render_list_with_draw_list(&render_list_params, alpha_framebuffer);
+		_render_list_with_draw_list(&render_list_params, alpha_framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 0.0f, 0u, p_render_data->render_region);
 	}
 
 	RD::get_singleton()->draw_command_end_label();
@@ -3353,7 +3279,7 @@ void RenderForwardClustered::_render_particle_collider_heightfield(RID p_fb, con
 	{
 		//regular forward for now
 		RenderListParameters render_list_params(render_list[RENDER_LIST_SECONDARY].elements.ptr(), render_list[RENDER_LIST_SECONDARY].element_info.ptr(), render_list[RENDER_LIST_SECONDARY].elements.size(), false, pass_mode, 0, true, false, rp_uniform_set);
-		_render_list_with_draw_list(&render_list_params, p_fb);
+		_render_list_with_draw_list(&render_list_params, p_fb, RD::DRAW_CLEAR_ALL);
 	}
 	RD::get_singleton()->draw_command_end_label();
 }
@@ -4255,6 +4181,14 @@ RID RenderForwardClustered::_setup_sdfgi_render_pass_uniform_set(RID p_albedo_te
 		uniforms.push_back(u);
 	}
 
+	if (scene_shader.default_shader_sdfgi_rd.is_null()) {
+		// The variant for SDF from the default material should only be retrieved when SDFGI is required.
+		ERR_FAIL_NULL_V(scene_shader.default_material_shader_ptr, RID());
+		scene_shader.enable_advanced_shader_group();
+		scene_shader.default_shader_sdfgi_rd = scene_shader.default_material_shader_ptr->get_shader_variant(SceneShaderForwardClustered::PIPELINE_VERSION_DEPTH_PASS_WITH_SDF, 0, false);
+		ERR_FAIL_COND_V(scene_shader.default_shader_sdfgi_rd.is_null(), RID());
+	}
+
 	return UniformSetCacheRD::get_singleton()->get_cache_vec(scene_shader.default_shader_sdfgi_rd, RENDER_PASS_UNIFORM_SET, uniforms);
 }
 
@@ -4433,14 +4367,7 @@ void RenderForwardClustered::_update_global_pipeline_data_requirements_from_ligh
 }
 
 // 实例是往渲染器里添加的。
-void RenderForwardClustered::_geometry_instance_add_surface_with_material(
-	GeometryInstanceForwardClustered *ginstance,
-	uint32_t p_surface,
-	SceneShaderForwardClustered::MaterialData *p_material,
-	uint32_t p_material_id,
-	uint32_t p_shader_id,
-	RID p_mesh)
-{
+void RenderForwardClustered::_geometry_instance_add_surface_with_material(GeometryInstanceForwardClustered *ginstance, uint32_t p_surface, SceneShaderForwardClustered::MaterialData *p_material, uint32_t p_material_id, uint32_t p_shader_id, RID p_mesh) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	uint32_t flags = 0;	// 一些着色标记
 
@@ -4601,12 +4528,7 @@ void RenderForwardClustered::_geometry_instance_add_surface_with_material(
 #endif
 }
 
-void RenderForwardClustered::_geometry_instance_add_surface_with_material_chain(GeometryInstanceForwardClustered *ginstance,
-uint32_t p_surface,		// 表面索引
-SceneShaderForwardClustered::MaterialData *p_material,	// 材质数据
-RID p_mat_src,	// 材质的RID
-RID p_mesh)			// 网格的RID
-{
+void RenderForwardClustered::_geometry_instance_add_surface_with_material_chain(GeometryInstanceForwardClustered *ginstance, uint32_t p_surface, SceneShaderForwardClustered::MaterialData *p_material, RID p_mat_src, RID p_mesh) {
 	SceneShaderForwardClustered::MaterialData *material = p_material;
 	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 
@@ -4626,11 +4548,7 @@ RID p_mesh)			// 网格的RID
 	}
 }
 
-void RenderForwardClustered::_geometry_instance_add_surface(GeometryInstanceForwardClustered *ginstance,
-	uint32_t p_surface,		// 表面索引
-	RID p_material,			// 材质RID
-	RID p_mesh)				// 网格RID
-{
+void RenderForwardClustered::_geometry_instance_add_surface(GeometryInstanceForwardClustered *ginstance, uint32_t p_surface, RID p_material, RID p_mesh) {
 	RendererRD::MaterialStorage *material_storage = RendererRD::MaterialStorage::get_singleton();
 	RID m_src;
 
@@ -4678,9 +4596,7 @@ void RenderForwardClustered::_geometry_instance_add_surface(GeometryInstanceForw
 	}
 }
 
-// 几何实例数据更新
-void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p_geometry_instance)
-{
+void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p_geometry_instance) {
 	RendererRD::MeshStorage *mesh_storage = RendererRD::MeshStorage::get_singleton();
 	RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
 	GeometryInstanceForwardClustered *ginstance = static_cast<GeometryInstanceForwardClustered *>(p_geometry_instance);
@@ -4788,6 +4704,9 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 		}
 		if (mesh_storage->multimesh_uses_custom_data(ginstance->data->base)) {
 			ginstance->base_flags |= INSTANCE_DATA_FLAG_MULTIMESH_HAS_CUSTOM_DATA;
+		}
+		if (mesh_storage->multimesh_uses_indirect(ginstance->data->base)) {
+			ginstance->base_flags |= INSTANCE_DATA_FLAG_MULTIMESH_INDIRECT;
 		}
 
 		ginstance->transforms_uniform_set = mesh_storage->multimesh_get_3d_uniform_set(ginstance->data->base, scene_shader.default_shader_rd, TRANSFORMS_UNIFORM_SET);
@@ -4996,7 +4915,7 @@ void RenderForwardClustered::_mesh_compile_pipeline_for_surface(SceneShaderForwa
 	r_pipeline_key.vertex_format_id = mesh_storage->mesh_surface_get_vertex_format(p_mesh_surface, input_mask, p_instanced_surface, pipeline_motion_vectors);
 	r_pipeline_key.ubershader = p_ubershader;
 
-	p_shader->pipeline_hash_map.compile_pipeline(r_pipeline_key, r_pipeline_key.hash(), p_source);
+	p_shader->pipeline_hash_map.compile_pipeline(r_pipeline_key, r_pipeline_key.hash(), p_source, p_ubershader);
 
 	if (r_pipeline_pairs != nullptr) {
 		r_pipeline_pairs->push_back({ p_shader, r_pipeline_key });
@@ -5501,6 +5420,7 @@ RenderForwardClustered::RenderForwardClustered() {
 	}
 
 	_update_shader_quality_settings();
+	_update_global_pipeline_data_requirements_from_project();
 
 	resolve_effects = memnew(RendererRD::Resolve());
 	taa = memnew(RendererRD::TAA);

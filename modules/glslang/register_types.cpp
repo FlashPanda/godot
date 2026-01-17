@@ -37,44 +37,9 @@
 #include <glslang/Public/ShaderLang.h>
 #include <glslang/SPIRV/GlslangToSpv.h>
 
-#include "core/io/file_access.h"
-#include "core/io/dir_access.h"
-#include "core/os/time.h"
-
 static Vector<uint8_t> _compile_shader_glsl(RenderingDevice::ShaderStage p_stage, const String &p_source_code, RenderingDevice::ShaderLanguage p_language, String *r_error, const RenderingDevice *p_render_device) {
 	const RDD::Capabilities &capabilities = p_render_device->get_device_capabilities();
 	Vector<uint8_t> ret;
-	// 输出_p_source_code
-	if (0) 
-	{
-		// 创建输出目录（如果不存在）
-		String output_dir = "res://compile_glsl/";
-		DirAccess::make_dir_recursive_absolute(output_dir);
-		
-		// 生成文件名（包含时间戳和着色器阶段）
-		String stage_name;
-		switch (p_stage) {
-			case RenderingDevice::SHADER_STAGE_VERTEX: stage_name = "vertex"; break;
-			case RenderingDevice::SHADER_STAGE_FRAGMENT: stage_name = "fragment"; break;
-			case RenderingDevice::SHADER_STAGE_TESSELATION_CONTROL: stage_name = "tess_control"; break;
-			case RenderingDevice::SHADER_STAGE_TESSELATION_EVALUATION: stage_name = "tess_eval"; break;
-			case RenderingDevice::SHADER_STAGE_COMPUTE: stage_name = "compute"; break;
-			default: stage_name = "unknown"; break;
-		}
-		
-		String timestamp = Time::get_singleton()->get_datetime_string_from_system().replace(":", "-");
-		String filename = vformat("%sshader_%s_%s.glsl.txt", output_dir, stage_name, timestamp);
-		
-		// 写入文件
-		Ref<FileAccess> file = FileAccess::open(filename, FileAccess::WRITE);
-		if (file.is_valid()) {
-			file->store_string(p_source_code);
-			file->close();
-			print_line(vformat("Shader source saved to: %s", filename));
-		} else {
-			print_error(vformat("Failed to save shader source to: %s", filename));
-		}
-	}
 
 	ERR_FAIL_COND_V(p_language == RenderingDevice::SHADER_LANGUAGE_HLSL, ret);
 

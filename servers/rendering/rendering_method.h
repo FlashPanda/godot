@@ -369,9 +369,6 @@ public:
 	virtual void tick() = 0;
 	virtual void pre_draw(bool p_will_draw) = 0;
 
-	/* Debug */
-	virtual void save_current_view() = 0;
-
 	RenderingMethod();
 	virtual ~RenderingMethod();
 };

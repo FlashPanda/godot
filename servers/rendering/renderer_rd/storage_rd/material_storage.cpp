@@ -344,7 +344,7 @@ static void _fill_std140_variant_ubo_value(ShaderLanguage::DataType type, int p_
 	}
 }
 
-_FORCE_INLINE_ static void _fill_std140_ubo_value(ShaderLanguage::DataType type, const Vector<ShaderLanguage::Scalar> &value, uint8_t *data) {
+_FORCE_INLINE_ static void _fill_std140_ubo_value(ShaderLanguage::DataType type, const Vector<ShaderLanguage::Scalar> &value, uint8_t *data, bool p_use_linear_color) {
 	switch (type) {
 		case ShaderLanguage::TYPE_BOOL: {
 			uint32_t *gui = (uint32_t *)data;
@@ -441,18 +441,28 @@ _FORCE_INLINE_ static void _fill_std140_ubo_value(ShaderLanguage::DataType type,
 
 		} break;
 		case ShaderLanguage::TYPE_VEC3: {
+			Color c = Color(value[0].real, value[1].real, value[2].real);
+			if (p_use_linear_color) {
+				c = c.srgb_to_linear();
+			}
+
 			float *gui = reinterpret_cast<float *>(data);
 
 			for (int i = 0; i < 3; i++) {
-				gui[i] = value[i].real;
+				gui[i] = c.components[i];
 			}
 
 		} break;
 		case ShaderLanguage::TYPE_VEC4: {
+			Color c = Color(value[0].real, value[1].real, value[2].real, value[3].real);
+			if (p_use_linear_color) {
+				c = c.srgb_to_linear();
+			}
+
 			float *gui = reinterpret_cast<float *>(data);
 
 			for (int i = 0; i < 4; i++) {
-				gui[i] = value[i].real;
+				gui[i] = c.components[i];
 			}
 		} break;
 		case ShaderLanguage::TYPE_MAT2: {
@@ -569,6 +579,9 @@ Variant MaterialStorage::ShaderData::get_default_parameter(const StringName &p_p
 	if (uniforms.has(p_parameter)) {
 		ShaderLanguage::ShaderNode::Uniform uniform = uniforms[p_parameter];
 		Vector<ShaderLanguage::Scalar> default_value = uniform.default_value;
+		if (default_value.is_empty()) {
+			return ShaderLanguage::get_default_datatype_value(uniform.type, uniform.array_size, uniform.hint);
+		}
 		return ShaderLanguage::constant_value_to_variant(default_value, uniform.type, uniform.array_size, uniform.hint);
 	}
 	return Variant();
@@ -786,7 +799,7 @@ void MaterialStorage::MaterialData::update_uniform_buffer(const HashMap<StringNa
 
 		} else if (E.value.default_value.size()) {
 			//default value
-			_fill_std140_ubo_value(E.value.type, E.value.default_value, data);
+			_fill_std140_ubo_value(E.value.type, E.value.default_value, data, E.value.hint == ShaderLanguage::ShaderNode::Uniform::HINT_SOURCE_COLOR && p_use_linear_color);
 			//value=E.value.default_value;
 		} else {
 			//zero because it was not provided
@@ -2175,13 +2188,11 @@ void MaterialStorage::material_set_shader(RID p_material, RID p_shader) {
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
 
-	// 删除原有的数据
 	if (material->data) {
 		memdelete(material->data);
 		material->data = nullptr;
 	}
 
-	// 材质原有的着色器删除
 	if (material->shader) {
 		material->shader->owners.erase(material);
 		material->shader = nullptr;
@@ -2225,9 +2236,7 @@ MaterialStorage::ShaderData *MaterialStorage::material_get_shader_data(RID p_mat
 	return nullptr;
 }
 
-// 这个材质存储是Render方面的。
 void MaterialStorage::material_set_param(RID p_material, const StringName &p_param, const Variant &p_value) {
-	// 这个material是data层面的
 	Material *material = material_owner.get_or_null(p_material);
 	ERR_FAIL_NULL(material);
 

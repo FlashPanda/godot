@@ -515,8 +515,7 @@ Error RenderingDevice::buffer_copy(RID p_src_buffer, RID p_dst_buffer, uint32_t 
 	return OK;
 }
 
-Error RenderingDevice::buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p_size, const void *p_data)
-{
+Error RenderingDevice::buffer_update(RID p_buffer, uint32_t p_offset, uint32_t p_size, const void *p_data) {
 	ERR_RENDER_THREAD_GUARD_V(ERR_UNAVAILABLE);
 
 	copy_bytes_count += p_size;
@@ -769,7 +768,6 @@ Error RenderingDevice::buffer_get_data_async(RID p_buffer, const Callable &p_cal
 	_check_transfer_worker_buffer(buffer);
 
 	BufferGetDataRequest get_data_request;
-	uint32_t flushed_copies = 0;
 	get_data_request.callback = p_callback;
 	get_data_request.frame_local_index = frames[frame].download_buffer_copy_regions.size();
 	get_data_request.size = p_size;
@@ -786,21 +784,25 @@ Error RenderingDevice::buffer_get_data_async(RID p_buffer, const Callable &p_cal
 			return err;
 		}
 
-		if ((get_data_request.frame_local_count > 0) && required_action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL) {
+		const bool flush_frames = (get_data_request.frame_local_count > 0) && required_action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL;
+		if (flush_frames) {
 			if (_buffer_make_mutable(buffer, p_buffer)) {
 				// The buffer must be mutable to be used as a copy source.
 				draw_graph.add_synchronization();
 			}
 
-			for (uint32_t i = flushed_copies; i < get_data_request.frame_local_count; i++) {
+			for (uint32_t i = 0; i < get_data_request.frame_local_count; i++) {
 				uint32_t local_index = get_data_request.frame_local_index + i;
 				draw_graph.add_buffer_get_data(buffer->driver_id, buffer->draw_tracker, frames[frame].download_buffer_staging_buffers[local_index], frames[frame].download_buffer_copy_regions[local_index]);
 			}
-
-			flushed_copies = get_data_request.frame_local_count;
 		}
 
 		_staging_buffer_execute_required_action(download_staging_buffers, required_action);
+
+		if (flush_frames) {
+			get_data_request.frame_local_count = 0;
+			get_data_request.frame_local_index = frames[frame].download_buffer_copy_regions.size();
+		}
 
 		RDD::BufferCopyRegion region;
 		region.src_offset = submit_from + p_offset;
@@ -823,7 +825,7 @@ Error RenderingDevice::buffer_get_data_async(RID p_buffer, const Callable &p_cal
 			draw_graph.add_synchronization();
 		}
 
-		for (uint32_t i = flushed_copies; i < get_data_request.frame_local_count; i++) {
+		for (uint32_t i = 0; i < get_data_request.frame_local_count; i++) {
 			uint32_t local_index = get_data_request.frame_local_index + i;
 			draw_graph.add_buffer_get_data(buffer->driver_id, buffer->draw_tracker, frames[frame].download_buffer_staging_buffers[local_index], frames[frame].download_buffer_copy_regions[local_index]);
 		}
@@ -834,7 +836,17 @@ Error RenderingDevice::buffer_get_data_async(RID p_buffer, const Callable &p_cal
 	return OK;
 }
 
-RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, const Vector<uint8_t> &p_data, BitField<StorageBufferUsage> p_usage) {
+uint64_t RenderingDevice::buffer_get_device_address(RID p_buffer) {
+	ERR_RENDER_THREAD_GUARD_V(0);
+
+	Buffer *buffer = _get_buffer_from_owner(p_buffer);
+	ERR_FAIL_NULL_V_MSG(buffer, 0, "Buffer argument is not a valid buffer of any type.");
+	ERR_FAIL_COND_V_MSG(!buffer->usage.has_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT), 0, "Buffer was not created with device address flag.");
+
+	return driver->buffer_get_device_address(buffer->driver_id);
+}
+
+RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, const Vector<uint8_t> &p_data, BitField<StorageBufferUsage> p_usage, BitField<BufferCreationBits> p_creation_bits) {
 	ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != p_size_bytes, RID());
 
 	Buffer buffer;
@@ -842,6 +854,14 @@ RID RenderingDevice::storage_buffer_create(uint32_t p_size_bytes, const Vector<u
 	buffer.usage = (RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT | RDD::BUFFER_USAGE_STORAGE_BIT);
 	if (p_usage.has_flag(STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT)) {
 		buffer.usage.set_flag(RDD::BUFFER_USAGE_INDIRECT_BIT);
+	}
+	if (p_creation_bits.has_flag(BUFFER_CREATION_DEVICE_ADDRESS_BIT)) {
+#ifdef DEBUG_ENABLED
+		ERR_FAIL_COND_V_MSG(!has_feature(SUPPORTS_BUFFER_DEVICE_ADDRESS), RID(),
+				"The GPU doesn't support buffer address flag.");
+#endif
+
+		buffer.usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
 	}
 	buffer.driver_id = driver->buffer_create(buffer.size, buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_GPU);
 	ERR_FAIL_COND_V(!buffer.driver_id, RID());
@@ -939,6 +959,8 @@ RID RenderingDevice::texture_create(const TextureFormat &p_format, const Texture
 				"Number of layers must be equal or greater than 1 for arrays and cubemaps.");
 		ERR_FAIL_COND_V_MSG((format.texture_type == TEXTURE_TYPE_CUBE_ARRAY || format.texture_type == TEXTURE_TYPE_CUBE) && (format.array_layers % 6) != 0, RID(),
 				"Cubemap and cubemap array textures must provide a layer number that is multiple of 6");
+		ERR_FAIL_COND_V_MSG(((format.texture_type == TEXTURE_TYPE_CUBE_ARRAY || format.texture_type == TEXTURE_TYPE_CUBE)) && (format.width != format.height), RID(),
+				"Cubemap and cubemap array textures must have equal width and height.");
 		ERR_FAIL_COND_V_MSG(format.array_layers > driver->limit_get(LIMIT_MAX_TEXTURE_ARRAY_LAYERS), RID(), "Number of layers exceeds device maximum.");
 	} else {
 		format.array_layers = 1;
@@ -2093,7 +2115,6 @@ Vector<uint8_t> RenderingDevice::texture_get_data(RID p_texture, uint32_t p_laye
 			uint32_t tight_row_pitch = tight_mip_size / ((height / block_h) * depth);
 
 			// Copy row-by-row to erase padding due to alignments.
-			// 逐行复制，移除因为对齐而存在的padding
 			const uint8_t *rp = read_ptr;
 			uint8_t *wp = write_ptr;
 			for (uint32_t row = h * d / block_h; row != 0; row--) {
@@ -2415,7 +2436,6 @@ Error RenderingDevice::texture_get_data_async(RID p_texture, uint32_t p_layer, c
 	uint32_t block_write_offset;
 	uint32_t block_write_amount;
 	StagingRequiredAction required_action;
-	uint32_t flushed_copies = 0;
 	for (uint32_t i = 0; i < tex->mipmaps; i++) {
 		uint32_t image_total = get_image_format_required_size(tex->format, tex->width, tex->height, tex->depth, i + 1, &w, &h, &d);
 		uint32_t tight_mip_size = image_total - mipmap_offset;
@@ -2436,16 +2456,20 @@ Error RenderingDevice::texture_get_data_async(RID p_texture, uint32_t p_layer, c
 					Error err = _staging_buffer_allocate(download_staging_buffers, to_allocate, required_align, block_write_offset, block_write_amount, required_action, false);
 					ERR_FAIL_COND_V(err, ERR_CANT_CREATE);
 
-					if ((get_data_request.frame_local_count > 0) && required_action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL) {
-						for (uint32_t j = flushed_copies; j < get_data_request.frame_local_count; j++) {
+					const bool flush_frames = (get_data_request.frame_local_count > 0) && required_action == STAGING_REQUIRED_ACTION_FLUSH_AND_STALL_ALL;
+					if (flush_frames) {
+						for (uint32_t j = 0; j < get_data_request.frame_local_count; j++) {
 							uint32_t local_index = get_data_request.frame_local_index + j;
 							draw_graph.add_texture_get_data(tex->driver_id, tex->draw_tracker, frames[frame].download_texture_staging_buffers[local_index], frames[frame].download_buffer_texture_copy_regions[local_index]);
 						}
-
-						flushed_copies = get_data_request.frame_local_count;
 					}
 
 					_staging_buffer_execute_required_action(download_staging_buffers, required_action);
+
+					if (flush_frames) {
+						get_data_request.frame_local_count = 0;
+						get_data_request.frame_local_index = frames[frame].download_buffer_texture_copy_regions.size();
+					}
 
 					RDD::BufferTextureCopyRegion copy_region;
 					copy_region.buffer_offset = block_write_offset;
@@ -2471,12 +2495,11 @@ Error RenderingDevice::texture_get_data_async(RID p_texture, uint32_t p_layer, c
 	}
 
 	if (get_data_request.frame_local_count > 0) {
-		for (uint32_t i = flushed_copies; i < get_data_request.frame_local_count; i++) {
+		for (uint32_t i = 0; i < get_data_request.frame_local_count; i++) {
 			uint32_t local_index = get_data_request.frame_local_index + i;
 			draw_graph.add_texture_get_data(tex->driver_id, tex->draw_tracker, frames[frame].download_texture_staging_buffers[local_index], frames[frame].download_buffer_texture_copy_regions[local_index]);
 		}
 
-		flushed_copies = get_data_request.frame_local_count;
 		frames[frame].download_texture_get_data_requests.push_back(get_data_request);
 	}
 
@@ -3295,20 +3318,23 @@ bool RenderingDevice::sampler_is_format_supported_for_filter(DataFormat p_format
 /**** VERTEX BUFFER ****/
 /***********************/
 
-RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, const Vector<uint8_t> &p_data, bool p_use_as_storage) {
+RID RenderingDevice::vertex_buffer_create(uint32_t p_size_bytes, const Vector<uint8_t> &p_data, BitField<BufferCreationBits> p_creation_bits) {
 	ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != p_size_bytes, RID());
 
 	Buffer buffer;
 	buffer.size = p_size_bytes;
 	buffer.usage = RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT | RDD::BUFFER_USAGE_VERTEX_BIT;
-	if (p_use_as_storage) {
+	if (p_creation_bits.has_flag(BUFFER_CREATION_AS_STORAGE_BIT)) {
 		buffer.usage.set_flag(RDD::BUFFER_USAGE_STORAGE_BIT);
+	}
+	if (p_creation_bits.has_flag(BUFFER_CREATION_DEVICE_ADDRESS_BIT)) {
+		buffer.usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
 	}
 	buffer.driver_id = driver->buffer_create(buffer.size, buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_GPU);
 	ERR_FAIL_COND_V(!buffer.driver_id, RID());
 
 	// Vertex buffers are assumed to be immutable unless they don't have initial data or they've been marked for storage explicitly.
-	if (p_data.is_empty() || p_use_as_storage) {
+	if (p_data.is_empty() || p_creation_bits.has_flag(BUFFER_CREATION_AS_STORAGE_BIT)) {
 		buffer.draw_tracker = RDG::resource_tracker_create();
 		buffer.draw_tracker->buffer_driver_id = buffer.driver_id;
 	}
@@ -3434,7 +3460,7 @@ RID RenderingDevice::vertex_array_create(uint32_t p_vertex_count, VertexFormatID
 	return id;
 }
 
-RID RenderingDevice::index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, const Vector<uint8_t> &p_data, bool p_use_restart_indices) {
+RID RenderingDevice::index_buffer_create(uint32_t p_index_count, IndexBufferFormat p_format, const Vector<uint8_t> &p_data, bool p_use_restart_indices, BitField<BufferCreationBits> p_creation_bits) {
 	ERR_FAIL_COND_V(p_index_count == 0, RID());
 
 	IndexBuffer index_buffer;
@@ -3473,6 +3499,9 @@ RID RenderingDevice::index_buffer_create(uint32_t p_index_count, IndexBufferForm
 #endif
 	index_buffer.size = size_bytes;
 	index_buffer.usage = (RDD::BUFFER_USAGE_TRANSFER_FROM_BIT | RDD::BUFFER_USAGE_TRANSFER_TO_BIT | RDD::BUFFER_USAGE_INDEX_BIT);
+	if (p_creation_bits.has_flag(BUFFER_CREATION_DEVICE_ADDRESS_BIT)) {
+		index_buffer.usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
+	}
 	index_buffer.driver_id = driver->buffer_create(index_buffer.size, index_buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_GPU);
 	ERR_FAIL_COND_V(!index_buffer.driver_id, RID());
 
@@ -3681,12 +3710,15 @@ uint64_t RenderingDevice::shader_get_vertex_input_attribute_mask(RID p_shader) {
 /**** UNIFORMS ****/
 /******************/
 
-RID RenderingDevice::uniform_buffer_create(uint32_t p_size_bytes, const Vector<uint8_t> &p_data) {
+RID RenderingDevice::uniform_buffer_create(uint32_t p_size_bytes, const Vector<uint8_t> &p_data, BitField<BufferCreationBits> p_creation_bits) {
 	ERR_FAIL_COND_V(p_data.size() && (uint32_t)p_data.size() != p_size_bytes, RID());
 
 	Buffer buffer;
 	buffer.size = p_size_bytes;
 	buffer.usage = (RDD::BUFFER_USAGE_TRANSFER_TO_BIT | RDD::BUFFER_USAGE_UNIFORM_BIT);
+	if (p_creation_bits.has_flag(BUFFER_CREATION_DEVICE_ADDRESS_BIT)) {
+		buffer.usage.set_flag(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT);
+	}
 	buffer.driver_id = driver->buffer_create(buffer.size, buffer.usage, RDD::MEMORY_ALLOCATION_TYPE_GPU);
 	ERR_FAIL_COND_V(!buffer.driver_id, RID());
 
@@ -4589,7 +4621,6 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin_for_screen(DisplayS
 	return int64_t(ID_TYPE_DRAW_LIST) << ID_BASE_SHIFT;
 }
 
-
 // 启动一个新的Draw List（一次渲染列表/记录序列），返回一个ID
 // 参数：
 // - p_framebuffer：目标帧缓冲 RID（包含颜色/深度贴图）
@@ -4598,15 +4629,7 @@ RenderingDevice::DrawListID RenderingDevice::draw_list_begin_for_screen(DisplayS
 // - p_clear_depth_value / p_clear_stencil_value：清除深度/模板用的值
 // - p_region：在帧缓冲内使用的自定义矩形区域（视口/剪裁），可以只对这个区域进行操作
 // - p_breadcrumb：面包屑/诊断标记，用于调试跟踪
-RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer,
-	BitField<DrawFlags> p_draw_flags,
-	const Vector<Color> &p_clear_color_values,
-	float p_clear_depth_value,
-	uint32_t p_clear_stencil_value,
-	const Rect2 &p_region,
-	uint32_t p_breadcrumb)
-{
-	// 确保在渲染线程中调用
+RenderingDevice::DrawListID RenderingDevice::draw_list_begin(RID p_framebuffer, BitField<DrawFlags> p_draw_flags, const Vector<Color> &p_clear_color_values, float p_clear_depth_value, uint32_t p_clear_stencil_value, const Rect2 &p_region, uint32_t p_breadcrumb) {
 	ERR_RENDER_THREAD_GUARD_V(INVALID_ID);
 
 	// 防止嵌套/并发：一次只能有一个活动的 draw_list。
@@ -7796,11 +7819,11 @@ void RenderingDevice::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("sampler_create", "state"), &RenderingDevice::_sampler_create);
 	ClassDB::bind_method(D_METHOD("sampler_is_format_supported_for_filter", "format", "sampler_filter"), &RenderingDevice::sampler_is_format_supported_for_filter);
 
-	ClassDB::bind_method(D_METHOD("vertex_buffer_create", "size_bytes", "data", "use_as_storage"), &RenderingDevice::vertex_buffer_create, DEFVAL(Vector<uint8_t>()), DEFVAL(false));
+	ClassDB::bind_method(D_METHOD("vertex_buffer_create", "size_bytes", "data", "creation_bits"), &RenderingDevice::vertex_buffer_create, DEFVAL(Vector<uint8_t>()), DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("vertex_format_create", "vertex_descriptions"), &RenderingDevice::_vertex_format_create);
 	ClassDB::bind_method(D_METHOD("vertex_array_create", "vertex_count", "vertex_format", "src_buffers", "offsets"), &RenderingDevice::_vertex_array_create, DEFVAL(Vector<int64_t>()));
 
-	ClassDB::bind_method(D_METHOD("index_buffer_create", "size_indices", "format", "data", "use_restart_indices"), &RenderingDevice::index_buffer_create, DEFVAL(Vector<uint8_t>()), DEFVAL(false));
+	ClassDB::bind_method(D_METHOD("index_buffer_create", "size_indices", "format", "data", "use_restart_indices", "creation_bits"), &RenderingDevice::index_buffer_create, DEFVAL(Vector<uint8_t>()), DEFVAL(false), DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("index_array_create", "index_buffer", "index_offset", "index_count"), &RenderingDevice::index_array_create);
 
 	ClassDB::bind_method(D_METHOD("shader_compile_spirv_from_source", "shader_source", "allow_cache"), &RenderingDevice::_shader_compile_spirv_from_source, DEFVAL(true));
@@ -7811,8 +7834,8 @@ void RenderingDevice::_bind_methods() {
 
 	ClassDB::bind_method(D_METHOD("shader_get_vertex_input_attribute_mask", "shader"), &RenderingDevice::shader_get_vertex_input_attribute_mask);
 
-	ClassDB::bind_method(D_METHOD("uniform_buffer_create", "size_bytes", "data"), &RenderingDevice::uniform_buffer_create, DEFVAL(Vector<uint8_t>()));
-	ClassDB::bind_method(D_METHOD("storage_buffer_create", "size_bytes", "data", "usage"), &RenderingDevice::storage_buffer_create, DEFVAL(Vector<uint8_t>()), DEFVAL(0));
+	ClassDB::bind_method(D_METHOD("uniform_buffer_create", "size_bytes", "data", "creation_bits"), &RenderingDevice::uniform_buffer_create, DEFVAL(Vector<uint8_t>()), DEFVAL(0));
+	ClassDB::bind_method(D_METHOD("storage_buffer_create", "size_bytes", "data", "usage", "creation_bits"), &RenderingDevice::storage_buffer_create, DEFVAL(Vector<uint8_t>()), DEFVAL(0), DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("texture_buffer_create", "size_bytes", "format", "data"), &RenderingDevice::texture_buffer_create, DEFVAL(Vector<uint8_t>()));
 
 	ClassDB::bind_method(D_METHOD("uniform_set_create", "uniforms", "shader", "shader_set"), &RenderingDevice::_uniform_set_create);
@@ -7823,6 +7846,7 @@ void RenderingDevice::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("buffer_clear", "buffer", "offset", "size_bytes"), &RenderingDevice::buffer_clear);
 	ClassDB::bind_method(D_METHOD("buffer_get_data", "buffer", "offset_bytes", "size_bytes"), &RenderingDevice::buffer_get_data, DEFVAL(0), DEFVAL(0));
 	ClassDB::bind_method(D_METHOD("buffer_get_data_async", "buffer", "callback", "offset_bytes", "size_bytes"), &RenderingDevice::buffer_get_data_async, DEFVAL(0), DEFVAL(0));
+	ClassDB::bind_method(D_METHOD("buffer_get_device_address", "buffer"), &RenderingDevice::buffer_get_device_address);
 
 	ClassDB::bind_method(D_METHOD("render_pipeline_create", "shader", "framebuffer_format", "vertex_format", "primitive", "rasterization_state", "multisample_state", "stencil_state", "color_blend_state", "dynamic_state_flags", "for_render_pass", "specialization_constants"), &RenderingDevice::_render_pipeline_create, DEFVAL(0), DEFVAL(0), DEFVAL(TypedArray<RDPipelineSpecializationConstant>()));
 	ClassDB::bind_method(D_METHOD("render_pipeline_is_valid", "render_pipeline"), &RenderingDevice::render_pipeline_is_valid);
@@ -7879,6 +7903,7 @@ void RenderingDevice::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_captured_timestamp_cpu_time", "index"), &RenderingDevice::get_captured_timestamp_cpu_time);
 	ClassDB::bind_method(D_METHOD("get_captured_timestamp_name", "index"), &RenderingDevice::get_captured_timestamp_name);
 
+	ClassDB::bind_method(D_METHOD("has_feature", "feature"), &RenderingDevice::has_feature);
 	ClassDB::bind_method(D_METHOD("limit_get", "limit"), &RenderingDevice::limit_get);
 	ClassDB::bind_method(D_METHOD("get_frame_delay"), &RenderingDevice::get_frame_delay);
 	ClassDB::bind_method(D_METHOD("submit"), &RenderingDevice::submit);
@@ -8175,6 +8200,20 @@ void RenderingDevice::_bind_methods() {
 	BIND_ENUM_CONSTANT(DATA_FORMAT_G16_B16_R16_3PLANE_422_UNORM);
 	BIND_ENUM_CONSTANT(DATA_FORMAT_G16_B16R16_2PLANE_422_UNORM);
 	BIND_ENUM_CONSTANT(DATA_FORMAT_G16_B16_R16_3PLANE_444_UNORM);
+	BIND_ENUM_CONSTANT(DATA_FORMAT_ASTC_4x4_SFLOAT_BLOCK);
+	BIND_ENUM_CONSTANT(DATA_FORMAT_ASTC_5x4_SFLOAT_BLOCK);
+	BIND_ENUM_CONSTANT(DATA_FORMAT_ASTC_5x5_SFLOAT_BLOCK);
+	BIND_ENUM_CONSTANT(DATA_FORMAT_ASTC_6x5_SFLOAT_BLOCK);
+	BIND_ENUM_CONSTANT(DATA_FORMAT_ASTC_6x6_SFLOAT_BLOCK);
+	BIND_ENUM_CONSTANT(DATA_FORMAT_ASTC_8x5_SFLOAT_BLOCK);
+	BIND_ENUM_CONSTANT(DATA_FORMAT_ASTC_8x6_SFLOAT_BLOCK);
+	BIND_ENUM_CONSTANT(DATA_FORMAT_ASTC_8x8_SFLOAT_BLOCK);
+	BIND_ENUM_CONSTANT(DATA_FORMAT_ASTC_10x5_SFLOAT_BLOCK);
+	BIND_ENUM_CONSTANT(DATA_FORMAT_ASTC_10x6_SFLOAT_BLOCK);
+	BIND_ENUM_CONSTANT(DATA_FORMAT_ASTC_10x8_SFLOAT_BLOCK);
+	BIND_ENUM_CONSTANT(DATA_FORMAT_ASTC_10x10_SFLOAT_BLOCK);
+	BIND_ENUM_CONSTANT(DATA_FORMAT_ASTC_12x10_SFLOAT_BLOCK);
+	BIND_ENUM_CONSTANT(DATA_FORMAT_ASTC_12x12_SFLOAT_BLOCK);
 	BIND_ENUM_CONSTANT(DATA_FORMAT_MAX);
 
 #ifndef DISABLE_DEPRECATED
@@ -8253,6 +8292,9 @@ void RenderingDevice::_bind_methods() {
 	BIND_ENUM_CONSTANT(INDEX_BUFFER_FORMAT_UINT32);
 
 	BIND_BITFIELD_FLAG(STORAGE_BUFFER_USAGE_DISPATCH_INDIRECT);
+
+	BIND_BITFIELD_FLAG(BUFFER_CREATION_DEVICE_ADDRESS_BIT);
+	BIND_BITFIELD_FLAG(BUFFER_CREATION_AS_STORAGE_BIT);
 
 	BIND_ENUM_CONSTANT(UNIFORM_TYPE_SAMPLER); //for sampling only (sampler GLSL type)
 	BIND_ENUM_CONSTANT(UNIFORM_TYPE_SAMPLER_WITH_TEXTURE); // for sampling only); but includes a texture); (samplerXX GLSL type)); first a sampler then a texture
@@ -8396,6 +8438,8 @@ void RenderingDevice::_bind_methods() {
 	BIND_ENUM_CONSTANT(PIPELINE_SPECIALIZATION_CONSTANT_TYPE_BOOL);
 	BIND_ENUM_CONSTANT(PIPELINE_SPECIALIZATION_CONSTANT_TYPE_INT);
 	BIND_ENUM_CONSTANT(PIPELINE_SPECIALIZATION_CONSTANT_TYPE_FLOAT);
+
+	BIND_ENUM_CONSTANT(SUPPORTS_BUFFER_DEVICE_ADDRESS);
 
 	BIND_ENUM_CONSTANT(LIMIT_MAX_BOUND_UNIFORM_SETS);
 	BIND_ENUM_CONSTANT(LIMIT_MAX_FRAMEBUFFER_COLOR_ATTACHMENTS);
@@ -8802,339 +8846,3 @@ static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_STORAGE_IMAGE_READ_
 static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_ATTACHMENT_COLOR_READ_WRITE, RDG::RESOURCE_USAGE_ATTACHMENT_COLOR_READ_WRITE));
 static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE, RDG::RESOURCE_USAGE_ATTACHMENT_DEPTH_STENCIL_READ_WRITE));
 static_assert(ENUM_MEMBERS_EQUAL(RD::CALLBACK_RESOURCE_USAGE_MAX, RDG::RESOURCE_USAGE_MAX));
-
-void RenderingDevice::save_texture_to_file(RID p_texture, uint32_t p_layer, const TextureFormat &p_format, Size2i p_size, String p_path) {
-	if (p_size.x == 0 || p_size.y == 0) {
-		OS::get_singleton()->print("p_size.x == 0 || p_size.y == 0\n");
-		return;
-	}
-
-	OS::get_singleton()->print("p_size = (%d, %d)\n", p_size.x, p_size.y); // 添加换行符以更好地格式化
-	
-	switch (p_format.format) {
-	case DATA_FORMAT_R16G16B16_SFLOAT:
-	case DATA_FORMAT_R16G16B16A16_SFLOAT:
-	{
-		PackedByteArray data_raw = texture_get_data(p_texture, p_layer);
-		if (data_raw.size() == 0)
-		{
-			OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
-			return;
-		}
-
-		OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
-
-		// 从GPU中获取的数据会有以后最后的对齐位置，所以data_raw是8字节对齐
-		const uint16_t *half_ptr = reinterpret_cast<const uint16_t *>(&data_raw[0]);
-
-		size_t pixel_count = p_size.x * p_size.y;
-		Ref<Image> img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
-		for (size_t i = 0; i < pixel_count; ++i) {
-			// 取半精度值
-			uint16_t hR = half_ptr[i * 4 + 0];
-			uint16_t hG = half_ptr[i * 4 + 1];
-			uint16_t hB = half_ptr[i * 4 + 2];
-			// 半精度转 float （Godot 提供的工具函数）
-			float fR = Math::half_to_float(hR);
-			float fG = Math::half_to_float(hG);
-			float fB = Math::half_to_float(hB);
-			// clamp 到 [0,1] 并写入 Image
-			Color c = Color(CLAMP(fR, 0.0f, 1.0f),
-					CLAMP(fG, 0.0f, 1.0f),
-					CLAMP(fB, 0.0f, 1.0f));
-			int x = int(i % p_size.x);
-			int y = int(i / p_size.x);
-			img->set_pixel(x, y, c);
-		}
-		img->save_png(p_path);
-		CharString u8 = p_path.utf8();
-		OS::get_singleton()->print("Save file to {%s} success!\n", u8.get_data());
-	}
-	break;
-	case DATA_FORMAT_D32_SFLOAT_S8_UINT:
-	{
-		// 这里事实上只会有4字节的深度值出来，模板值不会有。
-		PackedByteArray data_raw = texture_get_data(p_texture, p_layer);
-		if (data_raw.size() == 0)
-		{
-			OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
-			return;
-		}
-
-		OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
-
-		const size_t w = p_size.x, h = p_size.y;
-		const size_t n = w * h;
-		const size_t total = data_raw.size();
-
-		Ref<Image> img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
-		Ref<Image> stencil_img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
-
-		auto put_pixel = [&](size_t i, float d, uint8_t st) {
-			// 可选：把深度可视化成 0~1（必要时反转或夹紧）
-			float v = Math::is_finite(d) ? CLAMP(d, 0.0f, 1.0f) : 0.0f;
-			int x = int(i % w);
-			int y = int(i / w);
-			if (v > 0.f)
-				img->set_pixel(x, y, Color(0.f, 1.f, 0.f, 1.0f));
-			else
-				img->set_pixel(x, y, Color(0.f, 0.f, 0.f, 1.0f));
-
-			float s = st / 255.0f;
-			stencil_img->set_pixel(x, y, Color(s, s, s, 1.0f));
-		};
-
-		if (total == n * 5) {
-			// 逐像素交错：4 字节深度 + 1 字节模板
-			// [d0, d1, d2, d3, S]
-			for (size_t i = 0; i < n; ++i) {
-				size_t base = i * 4;
-				float d;
-				std::memcpy(&d, &data_raw[base + 0], 4);
-				uint8_t st = data_raw[n * 4 + i];
-				put_pixel(i, d, st);
-			}
-		}
-
-		img->save_png(p_path);
-		stencil_img->save_png("user://stencil.png");
-
-		//if (1) {
-		//	PackedByteArray data_raw = stencil_get_data(p_texture, p_layer);
-		//	if (data_raw.size() == 0)
-		//	{
-		//		OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
-		//		return;
-		//	}
-
-		//	const size_t w = p_size.x, h = p_size.y;
-		//	const size_t n = w * h;
-		//	const size_t total = data_raw.size();
-
-		//	Ref<Image> img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
-
-		//	if (true) {
-		//		int line = -1;
-		//		// 模板：只有1个字节的数据。
-		//		for (size_t i = 0; i < n; ++i) {
-		//			uint8_t v0 = data_raw[i];
-		//			//uint8_t v1 = data_raw[i * 4 + 1];
-		//			//uint8_t v2 = data_raw[i * 4 + 2];
-		//			//uint8_t v3 = data_raw[i * 4 + 3];
-		//			//float v = Math::is_finite(ptr[i]) ? CLAMP(ptr[i], 0.0f, 1.0f) : 0.0f;
-		//			int x = int(i % w);
-		//			int y = int(i / w);
-		//			//img->set_pixel(x, y, Color(v0 / 255.f, v1 / 255.f, v2 / 255.f, 1.0f));
-		//			img->set_pixel(x, y, Color(v0 / 255.f, 0, 0, 1.0f));
-
-		//			//if (v > 0.f) {
-		//			//	if (line == y || line == -1) {
-		//			//		String log = vformat("%f,", ptr[i]);
-		//			//		RSG::write_log_to_file(log, false, false);
-		//			//	}
-		//			//	else {
-		//			//		line = y;
-		//			//		String log = vformat("%f", ptr[i]);
-		//			//		RSG::write_log_to_file(log, false, true);
-		//			//	}
-		//			//}
-
-		//			//v *= 1000.f;
-		//			//if (v > 0.1f)
-		//			//	img->set_pixel(x, y, Color(1.f, 0, 0, 1.0f));
-		//			//else
-		//			//	img->set_pixel(x, y, Color(0.f, 0.f, 0.f, 1.f));
-		//			//img->set_pixel(x, y, Color(v0 / 255.f, 0, 0, 1.0f));
-		//			//img1->set_pixel(x, y, Color(0, v1 / 255.f, 0, 1.0f));
-		//			//img2->set_pixel(x, y, Color(0, 0, v2 / 255.f, 1.0f));
-		//			//img3->set_pixel(x, y, Color(0, 0, v3 / 255.f, 1.0f));
-
-		//			//float s = Math::is_finite(ptr[i])? CLAMP(ptr[i + n], 0.0f, 1.0f) : 0.0f;
-		//			//uint8_t v4 = data_raw[i * 4 + 4];
-		//			//uint8_t v5 = data_raw[i * 4 + 5];
-		//			//uint8_t v6 = data_raw[i * 4 + 6];
-		//			//uint8_t v7 = data_raw[i * 4 + 7];
-		//			//stencil_img->set_pixel(x, y, Color(v4 / 255.f, v5 / 255.f, v6 / 255.f, 1.0f));
-		//		}
-
-		//	}
-
-		//	img->save_png(p_path);
-		//	//stencil_img->save_png("user://stencil.png");
-		//	//img1->save_png("user://img1.png");
-		//	//img2->save_png("user://img2.png");
-		//	//img3->save_png("user://img3.png");
-
-		//	CharString u8 = p_path.utf8();
-		//	OS::get_singleton()->print("Save file to {%s} success!\n", u8.get_data());
-		//	//OS::get_singleton()->print("Save stencil to {user://stencil.png} success!\n");
-		//}
-		//else {
-		//PackedByteArray data_raw = depth_get_data(p_texture, p_layer);
-		//if (data_raw.size() == 0)
-		//{
-		//	OS::get_singleton()->print("data_raw.size() = %d\n", data_raw.size());
-		//	return;
-		//}
-
-		//const size_t w = p_size.x, h = p_size.y;
-		//const size_t n = w * h;
-		//const size_t total = data_raw.size();
-
-		//Ref<Image> img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
-		////Ref<Image> stencil_img = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
-		////Ref<Image> img1 = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
-		////Ref<Image> img2 = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
-		////Ref<Image> img3 = Image::create_empty(p_size.x, p_size.y, false, Image::FORMAT_RGBA8);
-
-		//auto put_pixel = [&](size_t i, float d, uint8_t st) {
-		//	// 可选：把深度可视化成 0~1（必要时反转或夹紧）
-		//	float v = Math::is_finite(d) ? CLAMP(d, 0.0f, 1.0f) : 0.0f;
-		//	int x = int(i % w);
-		//	int y = int(i / w);
-		//	img->set_pixel(x, y, Color(v, v, v, 1.0f));
-
-		//	float s = st / 255.0f;
-		//	//stencil_img->set_pixel(x, y, Color(s, s, s, 1.0f));
-		//};
-
-		//// —— 探测内存顺序：DS(Depth 后 Stencil) 还是 SD(Stencil 在前 Depth 在后)
-		////auto score_stencil = [&](bool assume_SD)->size_t {
-		////	size_t hit = 0, sample = MIN<size_t>(n, 50000);
-		////	for (size_t i = 0; i < sample; ++i) {
-		////		size_t base = i * 5;
-		////		uint8_t st = assume_SD ? data_raw[base + 0] : data_raw[base + 4];
-		////		if (st == 0 || st == 255) ++hit;  // 常见模板值
-		////	}
-		////	return hit;
-		////};
-		////bool use_SD = score_stencil(true) > score_stencil(false); // 命中多者更像模板
-		//if (true){//total == n * 8) {
-		//	// 测试用，先输出深度值看看
-		//	const float* ptr = reinterpret_cast<const float *>(&data_raw[0]);
-
-		//	int line = -1;
-		//	for (size_t i = 0; i < n; ++i) {
-		//		//uint8_t v0 = data_raw[i * 4 + 0];
-		//		//uint8_t v1 = data_raw[i * 4 + 1];
-		//		//uint8_t v2 = data_raw[i * 4 + 2];
-		//		//uint8_t v3 = data_raw[i * 4 + 3];
-		//		float v = Math::is_finite(ptr[i]) ? CLAMP(ptr[i], 0.0f, 1.0f) : 0.0f;
-		//		int x = int(i % w);
-		//		int y = int(i / w);
-
-		//		if (v > 0.f) {
-		//			if (line == y || line == -1) {
-		//				String log = vformat("%f,", ptr[i]);
-		//				RSG::write_log_to_file(log, false, false);
-		//			}
-		//			else{
-		//				line = y;
-		//				String log = vformat("%f", ptr[i]);
-		//				RSG::write_log_to_file(log, false, true);
-		//			}
-		//		}
-
-		//		v *= 1000.f;
-		//		if (v > 0.1f)
-		//			img->set_pixel(x, y, Color(1.f, 0, 0, 1.0f));
-		//		else
-		//			img->set_pixel(x, y, Color(0.f, 0.f, 0.f, 1.f));
-		//		//img->set_pixel(x, y, Color(v0 / 255.f, 0, 0, 1.0f));
-		//		//img1->set_pixel(x, y, Color(0, v1 / 255.f, 0, 1.0f));
-		//		//img2->set_pixel(x, y, Color(0, 0, v2 / 255.f, 1.0f));
-		//		//img3->set_pixel(x, y, Color(0, 0, v3 / 255.f, 1.0f));
-
-		//		//float s = Math::is_finite(ptr[i])? CLAMP(ptr[i + n], 0.0f, 1.0f) : 0.0f;
-		//		//uint8_t v4 = data_raw[i * 4 + 4];
-		//		//uint8_t v5 = data_raw[i * 4 + 5];
-		//		//uint8_t v6 = data_raw[i * 4 + 6];
-		//		//uint8_t v7 = data_raw[i * 4 + 7];
-		//		//stencil_img->set_pixel(x, y, Color(v4 / 255.f, v5 / 255.f, v6 / 255.f, 1.0f));
-		//	}
-
-		//}
-		//else if (total == n * 5) {
-		//	//if (use_SD) {
-		//		// 逐像素交错：1字节模板+4字节深度
-		//		// [S, d0, d1, d2, d3]
-		//		for (size_t i = 0; i < n; ++i) {
-		//			size_t base = i * 5;
-		//			uint8_t st = data_raw[base + 0];
-		//			float d; std::memcpy(&d, &data_raw[base + 1], 4);
-		//			put_pixel(i, d, st);
-		//		}
-		//	//}
-		//	//else {
-		//	//	// 逐像素交错：4 字节深度 + 1 字节模板
-		//	//	// [d0, d1, d2, d3, S]
-		//	//	for (size_t i = 0; i < n; ++i) {
-		//	//		size_t base = i * 5;
-		//	//		float d;
-		//	//		std::memcpy(&d, &data_raw[base + 0], 4);
-		//	//		uint8_t st = data_raw[base + 4];
-		//	//		put_pixel(i, d, st);
-		//	//	}
-		//	//}
-		//} else if (total == n * 8) {
-		//	// 逐像素 8 字节对齐：4 字节深度 + 1 字节模板 + 3 字节填充
-		//	for (size_t i = 0; i < n; ++i) {
-		//		size_t base = i * 8;
-		//		float d;
-		//		std::memcpy(&d, &data_raw[base + 0], 4);
-		//		uint8_t st = data_raw[base + 4];
-		//		put_pixel(i, d, st);
-		//	}
-		//} else if (total == n * 4 + n) {
-		//	// 平面分离：先所有深度，再所有模板（少见，但做个兜底）
-		//	size_t st_off = n * 4;
-		//	for (size_t i = 0; i < n; ++i) {
-		//		float d;
-		//		std::memcpy(&d, &data_raw[i * 4], 4);
-		//		uint8_t st = data_raw[st_off + i];
-		//		put_pixel(i, d, st);
-		//	}
-		//} else {
-		//	// 非常规：可能存在逐行对齐（row pitch）。推断每行步长并按交错读取。
-		//	size_t row_stride = total / h; // 约分得到每行字节数
-		//	bool interleaved5 = row_stride >= w * 5; // 简单判定
-		//	bool interleaved8 = row_stride >= w * 8;
-
-		//	if (interleaved5 || interleaved8) {
-		//		size_t px = interleaved8 ? 8 : 5;
-		//		for (size_t y = 0; y < h; ++y) {
-		//			size_t row_base = y * row_stride;
-		//			for (size_t x = 0; x < w; ++x) {
-		//				size_t base = row_base + x * px;
-		//				float d;
-		//				std::memcpy(&d, &data_raw[base + 0], 4);
-		//				uint8_t st = data_raw[base + 4];
-		//				put_pixel(y * w + x, d, st);
-		//			}
-		//		}
-		//	} else {
-		//		OS::get_singleton()->print("Unexpected DS layout: bytes=%zu\n", total);
-		//	}
-		//}
-
-		//img->save_png(p_path);
-		////stencil_img->save_png("user://stencil.png");
-		////img1->save_png("user://img1.png");
-		////img2->save_png("user://img2.png");
-		////img3->save_png("user://img3.png");
-
-		//CharString u8 = p_path.utf8();
-		//OS::get_singleton()->print("Save file to {%s} success!\n", u8.get_data());
-		////OS::get_singleton()->print("Save stencil to {user://stencil.png} success!\n");
-		//
-		//}
-
-	}
-	break;
-	default :
-	{
-		OS::get_singleton()->print("p_format.format = %d, save failed!\n", p_format.format);
-	}
-	break;
-	}
-}

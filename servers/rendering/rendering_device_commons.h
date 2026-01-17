@@ -270,6 +270,20 @@ public:
 		DATA_FORMAT_G16_B16_R16_3PLANE_422_UNORM,
 		DATA_FORMAT_G16_B16R16_2PLANE_422_UNORM,
 		DATA_FORMAT_G16_B16_R16_3PLANE_444_UNORM,
+		DATA_FORMAT_ASTC_4x4_SFLOAT_BLOCK, // HDR variant.
+		DATA_FORMAT_ASTC_5x4_SFLOAT_BLOCK, // HDR variant.
+		DATA_FORMAT_ASTC_5x5_SFLOAT_BLOCK, // HDR variant.
+		DATA_FORMAT_ASTC_6x5_SFLOAT_BLOCK, // HDR variant.
+		DATA_FORMAT_ASTC_6x6_SFLOAT_BLOCK, // HDR variant.
+		DATA_FORMAT_ASTC_8x5_SFLOAT_BLOCK, // HDR variant.
+		DATA_FORMAT_ASTC_8x6_SFLOAT_BLOCK, // HDR variant.
+		DATA_FORMAT_ASTC_8x8_SFLOAT_BLOCK, // HDR variant.
+		DATA_FORMAT_ASTC_10x5_SFLOAT_BLOCK, // HDR variant.
+		DATA_FORMAT_ASTC_10x6_SFLOAT_BLOCK, // HDR variant.
+		DATA_FORMAT_ASTC_10x8_SFLOAT_BLOCK, // HDR variant.
+		DATA_FORMAT_ASTC_10x10_SFLOAT_BLOCK, // HDR variant.
+		DATA_FORMAT_ASTC_12x10_SFLOAT_BLOCK, // HDR variant.
+		DATA_FORMAT_ASTC_12x12_SFLOAT_BLOCK, // HDR variant.
 		DATA_FORMAT_MAX,
 	};
 
@@ -919,6 +933,7 @@ public:
 		LIMIT_VRS_MAX_FRAGMENT_HEIGHT,
 		LIMIT_METALFX_TEMPORAL_SCALER_MIN_SCALE,
 		LIMIT_METALFX_TEMPORAL_SCALER_MAX_SCALE,
+		LIMIT_MAX_SHADER_VARYINGS,
 	};
 
 	// 功能，或者特性
@@ -931,6 +946,7 @@ public:
 		// If not supported, a fragment shader with only side effects (i.e., writes  to buffers, but doesn't output to attachments), may be optimized down to no-op by the GPU driver.
 		// 若不被支持，仅具有副作用（例如写入缓冲区但不输出到附件）的片段着色器可能会被 GPU 驱动优化为无操作（no-op）
 		SUPPORTS_FRAGMENT_SHADER_WITH_ONLY_SIDE_EFFECTS,
+		SUPPORTS_BUFFER_DEVICE_ADDRESS,
 	};
 
 	//  GPU 子组（Subgroup）操作的功能标志位

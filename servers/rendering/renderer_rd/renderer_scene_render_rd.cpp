@@ -309,7 +309,6 @@ void RendererSceneRenderRD::_process_compositor_effects(RS::CompositorEffectCall
 	Vector<RID> re_rids = comp_storage->compositor_get_compositor_effects(p_render_data->compositor, p_callback_type, true);
 
 	for (RID rid : re_rids) {
-		// print_line("component effect rid = " + itos(rid.get_id()));
 		Array arr;
 		Callable callback = comp_storage->compositor_effect_get_callback(rid);
 
@@ -317,11 +316,6 @@ void RendererSceneRenderRD::_process_compositor_effects(RS::CompositorEffectCall
 		arr.push_back(p_render_data);
 
 		callback.callv(arr);
-
-		// if (callback.get_object()) {
-		// 	print_line("callable object class = " + callback.get_object()->get_class());
-		// 	print_line("callable object name = " + callback.get_object()->get_class_name());
-		// }
 	}
 }
 
@@ -1252,33 +1246,7 @@ void RendererSceneRenderRD::_post_prepass_render(RenderDataRD *p_render_data, bo
 	}
 }
 
-void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render_buffers,	// 各个渲染缓冲区
-	const CameraData *p_camera_data,	// 当前帧相机数据
-	const CameraData *p_prev_camera_data,	// 上一帧相机数据
-	const PagedArray<RenderGeometryInstance *> &p_instances,	// 几何实例的数组
-	const PagedArray<RID> &p_lights,	// 光源
-	const PagedArray<RID> &p_reflection_probes,	// 反射探针
-	const PagedArray<RID> &p_voxel_gi_instances,	// 体素GI实例
-	const PagedArray<RID> &p_decals,	// 贴花
-	const PagedArray<RID> &p_lightmaps,	// 光照贴图
-	const PagedArray<RID> &p_fog_volumes,	// 雾效体积
-	RID p_environment,	// 环境资源
-	RID p_camera_attributes,	// 相机属性
-	RID p_compositor,	// 合成器
-	RID p_shadow_atlas,		// 阴影图集
-	RID p_occluder_debug_tex,	// 遮挡调试纹理
-	RID p_reflection_atlas,	// 反射图集
-	RID p_reflection_probe,	// 当前渲染的反射探针
-	int p_reflection_probe_pass,	// 反射探针的渲染通道
-	float p_screen_mesh_lod_threshold,		// 屏幕网格LOD阈值
-	const RenderShadowData *p_render_shadows,	// 阴影数据数组
-	int p_render_shadow_count,	// 阴影数据的数量。
-	const RenderSDFGIData *p_render_sdfgi_regions,	// SDFGI数据数组
-	int p_render_sdfgi_region_count,	// SDFGI数据数量
-	const RenderSDFGIUpdateData *p_sdfgi_update_data,	// SDFGI更新数据
-	RenderingMethod::RenderInfo *r_render_info)	// 输出渲染信息
-{
-	// 获取光源存储单例
+void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render_buffers, const CameraData *p_camera_data, const CameraData *p_prev_camera_data, const PagedArray<RenderGeometryInstance *> &p_instances, const PagedArray<RID> &p_lights, const PagedArray<RID> &p_reflection_probes, const PagedArray<RID> &p_voxel_gi_instances, const PagedArray<RID> &p_decals, const PagedArray<RID> &p_lightmaps, const PagedArray<RID> &p_fog_volumes, RID p_environment, RID p_camera_attributes, RID p_compositor, RID p_shadow_atlas, RID p_occluder_debug_tex, RID p_reflection_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, const RenderShadowData *p_render_shadows, int p_render_shadow_count, const RenderSDFGIData *p_render_sdfgi_regions, int p_render_sdfgi_region_count, const RenderSDFGIUpdateData *p_sdfgi_update_data, RenderingMethod::RenderInfo *r_render_info) {
 	RendererRD::LightStorage *light_storage = RendererRD::LightStorage::get_singleton();
 	// 获取纹理存储单例
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
@@ -1398,6 +1366,7 @@ void RendererSceneRenderRD::render_scene(const Ref<RenderSceneBuffers> &p_render
 		// 判断是否透明背景（非反射探针且渲染目标支持透明）
 		if (p_render_buffers.is_valid() && p_reflection_probe.is_null()) {
 			render_data.transparent_bg = texture_storage->render_target_get_transparent(rb->get_render_target());
+			render_data.render_region = texture_storage->render_target_get_render_region(rb->get_render_target());
 		}
 	}
 

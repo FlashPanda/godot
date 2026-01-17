@@ -276,6 +276,20 @@ static const VkFormat RD_TO_VK_FORMAT[RDD::DATA_FORMAT_MAX] = {
 	VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM,
 	VK_FORMAT_G16_B16R16_2PLANE_422_UNORM,
 	VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM,
+	VK_FORMAT_ASTC_4x4_SFLOAT_BLOCK,
+	VK_FORMAT_ASTC_5x4_SFLOAT_BLOCK,
+	VK_FORMAT_ASTC_5x5_SFLOAT_BLOCK,
+	VK_FORMAT_ASTC_6x5_SFLOAT_BLOCK,
+	VK_FORMAT_ASTC_6x6_SFLOAT_BLOCK,
+	VK_FORMAT_ASTC_8x5_SFLOAT_BLOCK,
+	VK_FORMAT_ASTC_8x6_SFLOAT_BLOCK,
+	VK_FORMAT_ASTC_8x8_SFLOAT_BLOCK,
+	VK_FORMAT_ASTC_10x5_SFLOAT_BLOCK,
+	VK_FORMAT_ASTC_10x6_SFLOAT_BLOCK,
+	VK_FORMAT_ASTC_10x8_SFLOAT_BLOCK,
+	VK_FORMAT_ASTC_10x10_SFLOAT_BLOCK,
+	VK_FORMAT_ASTC_12x10_SFLOAT_BLOCK,
+	VK_FORMAT_ASTC_12x12_SFLOAT_BLOCK,
 };
 
 static VkImageLayout RD_TO_VK_LAYOUT[RDD::TEXTURE_LAYOUT_MAX] = {
@@ -513,6 +527,8 @@ Error RenderingDeviceDriverVulkan::_initialize_device_extensions() {
 	_register_requested_device_extension(VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME, false);
 	_register_requested_device_extension(VK_EXT_ASTC_DECODE_MODE_EXTENSION_NAME, false);
+	_register_requested_device_extension(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, false);
+	_register_requested_device_extension(VK_EXT_TEXTURE_COMPRESSION_ASTC_HDR_EXTENSION_NAME, false);
 
 	if (Engine::get_singleton()->is_generate_spirv_debug_info_enabled()) {
 		_register_requested_device_extension(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME, true);
@@ -730,6 +746,7 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 		void *next_features = nullptr;
 		VkPhysicalDeviceVulkan12Features device_features_vk_1_2 = {};
 		VkPhysicalDeviceShaderFloat16Int8FeaturesKHR shader_features = {};
+		VkPhysicalDeviceBufferDeviceAddressFeaturesKHR buffer_device_address_features = {};
 		VkPhysicalDeviceFragmentShadingRateFeaturesKHR vrs_features = {};
 		VkPhysicalDevice16BitStorageFeaturesKHR storage_feature = {};
 		VkPhysicalDeviceMultiviewFeatures multiview_features = {};
@@ -740,10 +757,17 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 			device_features_vk_1_2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
 			device_features_vk_1_2.pNext = next_features;
 			next_features = &device_features_vk_1_2;
-		} else if (enabled_device_extension_names.has(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME)) {
-			shader_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR;
-			shader_features.pNext = next_features;
-			next_features = &shader_features;
+		} else {
+			if (enabled_device_extension_names.has(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME)) {
+				shader_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR;
+				shader_features.pNext = next_features;
+				next_features = &shader_features;
+			}
+			if (enabled_device_extension_names.has(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)) {
+				buffer_device_address_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR;
+				buffer_device_address_features.pNext = next_features;
+				next_features = &buffer_device_address_features;
+			}
 		}
 
 		if (enabled_device_extension_names.has(VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME)) {
@@ -783,10 +807,16 @@ Error RenderingDeviceDriverVulkan::_check_device_capabilities() {
 				shader_capabilities.shader_float16_is_supported = device_features_vk_1_2.shaderFloat16;
 				shader_capabilities.shader_int8_is_supported = device_features_vk_1_2.shaderInt8;
 			}
+			if (enabled_device_extension_names.has(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)) {
+				buffer_device_address_support = device_features_vk_1_2.bufferDeviceAddress;
+			}
 		} else {
 			if (enabled_device_extension_names.has(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME)) {
 				shader_capabilities.shader_float16_is_supported = shader_features.shaderFloat16;
 				shader_capabilities.shader_int8_is_supported = shader_features.shaderInt8;
+			}
+			if (enabled_device_extension_names.has(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)) {
+				buffer_device_address_support = buffer_device_address_features.bufferDeviceAddress;
 			}
 		}
 
@@ -971,6 +1001,14 @@ Error RenderingDeviceDriverVulkan::_initialize_device(const LocalVector<VkDevice
 	shader_features.shaderInt8 = shader_capabilities.shader_int8_is_supported;
 	create_info_next = &shader_features;
 
+	VkPhysicalDeviceBufferDeviceAddressFeaturesKHR buffer_device_address_features = {};
+	if (buffer_device_address_support) {
+		buffer_device_address_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR;
+		buffer_device_address_features.pNext = create_info_next;
+		buffer_device_address_features.bufferDeviceAddress = buffer_device_address_support;
+		create_info_next = &buffer_device_address_features;
+	}
+
 	VkPhysicalDeviceFragmentShadingRateFeaturesKHR vrs_features = {};
 	if (vrs_capabilities.pipeline_vrs_supported || vrs_capabilities.primitive_vrs_supported || vrs_capabilities.attachment_vrs_supported) {
 		vrs_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR;
@@ -1111,6 +1149,9 @@ Error RenderingDeviceDriverVulkan::_initialize_allocator() {
 	const bool use_1_3_features = physical_device_properties.apiVersion >= VK_API_VERSION_1_3;
 	if (use_1_3_features) {
 		allocator_info.flags |= VMA_ALLOCATOR_CREATE_KHR_MAINTENANCE5_BIT;
+	}
+	if (buffer_device_address_support) {
+		allocator_info.flags |= VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 	}
 	VkResult err = vmaCreateAllocator(&allocator_info, &allocator);
 	ERR_FAIL_COND_V_MSG(err, ERR_CANT_CREATE, "vmaCreateAllocator failed with error " + itos(err) + ".");
@@ -1490,6 +1531,7 @@ static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_STORAGE_BIT, VK_BUFFER_USAGE_
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_INDEX_BIT, VK_BUFFER_USAGE_INDEX_BUFFER_BIT));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_VERTEX_BIT, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT));
 static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_INDIRECT_BIT, VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT));
+static_assert(ENUM_MEMBERS_EQUAL(RDD::BUFFER_USAGE_DEVICE_ADDRESS_BIT, VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT));
 
 RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitField<BufferUsageBits> p_usage, MemoryAllocationType p_allocation_type) {
 	VkBufferCreateInfo create_info = {};
@@ -1497,6 +1539,9 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 	create_info.size = p_size;
 	create_info.usage = p_usage;
 	create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+	VmaMemoryUsage vma_usage = VMA_MEMORY_USAGE_UNKNOWN;
+	uint32_t vma_flags_to_remove = 0;
 
 	VmaAllocationCreateInfo alloc_create_info = {};
 	switch (p_allocation_type) {
@@ -1506,14 +1551,24 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 			if (is_src && !is_dst) {
 				// Looks like a staging buffer: CPU maps, writes sequentially, then GPU copies to VRAM.
 				alloc_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+				alloc_create_info.preferredFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+				vma_flags_to_remove |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 			}
 			if (is_dst && !is_src) {
 				// Looks like a readback buffer: GPU copies from VRAM, then CPU maps and reads.
 				alloc_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;
+				alloc_create_info.preferredFlags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+				vma_flags_to_remove |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
 			}
+			vma_usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
 			alloc_create_info.requiredFlags = (VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 		} break;
 		case MEMORY_ALLOCATION_TYPE_GPU: {
+			vma_usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+			if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
+				// We must set it right now or else vmaFindMemoryTypeIndexForBufferInfo will use wrong parameters.
+				alloc_create_info.usage = vma_usage;
+			}
 			alloc_create_info.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 			if (p_size <= SMALL_ALLOCATION_MAX_SIZE) {
 				uint32_t mem_type_index = 0;
@@ -1527,12 +1582,19 @@ RDD::BufferID RenderingDeviceDriverVulkan::buffer_create(uint64_t p_size, BitFie
 	VmaAllocation allocation = nullptr;
 	VmaAllocationInfo alloc_info = {};
 
-	VkResult err = vkCreateBuffer(vk_device, &create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER), &vk_buffer);
-	ERR_FAIL_COND_V_MSG(err, BufferID(), "Can't create buffer of size: " + itos(p_size) + ", error " + itos(err) + ".");
-	err = vmaAllocateMemoryForBuffer(allocator, vk_buffer, &alloc_create_info, &allocation, &alloc_info);
-	ERR_FAIL_COND_V_MSG(err, BufferID(), "Can't allocate memory for buffer of size: " + itos(p_size) + ", error " + itos(err) + ".");
-	err = vmaBindBufferMemory2(allocator, allocation, 0, vk_buffer, nullptr);
-	ERR_FAIL_COND_V_MSG(err, BufferID(), "Can't bind memory to buffer of size: " + itos(p_size) + ", error " + itos(err) + ".");
+	if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
+		alloc_create_info.preferredFlags &= ~vma_flags_to_remove;
+		alloc_create_info.usage = vma_usage;
+		VkResult err = vmaCreateBuffer(allocator, &create_info, &alloc_create_info, &vk_buffer, &allocation, &alloc_info);
+		ERR_FAIL_COND_V_MSG(err, BufferID(), "Can't create buffer of size: " + itos(p_size) + ", error " + itos(err) + ".");
+	} else {
+		VkResult err = vkCreateBuffer(vk_device, &create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER), &vk_buffer);
+		ERR_FAIL_COND_V_MSG(err, BufferID(), "Can't create buffer of size: " + itos(p_size) + ", error " + itos(err) + ".");
+		err = vmaAllocateMemoryForBuffer(allocator, vk_buffer, &alloc_create_info, &allocation, &alloc_info);
+		ERR_FAIL_COND_V_MSG(err, BufferID(), "Can't allocate memory for buffer of size: " + itos(p_size) + ", error " + itos(err) + ".");
+		err = vmaBindBufferMemory2(allocator, allocation, 0, vk_buffer, nullptr);
+		ERR_FAIL_COND_V_MSG(err, BufferID(), "Can't bind memory to buffer of size: " + itos(p_size) + ", error " + itos(err) + ".");
+	}
 
 	// Bookkeep.
 	BufferInfo *buf_info = VersatileResource::allocate<BufferInfo>(resources_allocator);
@@ -1567,8 +1629,12 @@ void RenderingDeviceDriverVulkan::buffer_free(BufferID p_buffer) {
 		vkDestroyBufferView(vk_device, buf_info->vk_view, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER_VIEW));
 	}
 
-	vkDestroyBuffer(vk_device, buf_info->vk_buffer, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER));
-	vmaFreeMemory(allocator, buf_info->allocation.handle);
+	if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
+		vmaDestroyBuffer(allocator, buf_info->vk_buffer, buf_info->allocation.handle);
+	} else {
+		vkDestroyBuffer(vk_device, buf_info->vk_buffer, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER));
+		vmaFreeMemory(allocator, buf_info->allocation.handle);
+	}
 
 	VersatileResource::free(resources_allocator, buf_info);
 }
@@ -1589,6 +1655,15 @@ uint8_t *RenderingDeviceDriverVulkan::buffer_map(BufferID p_buffer) {
 void RenderingDeviceDriverVulkan::buffer_unmap(BufferID p_buffer) {
 	const BufferInfo *buf_info = (const BufferInfo *)p_buffer.id;
 	vmaUnmapMemory(allocator, buf_info->allocation.handle);
+}
+
+uint64_t RenderingDeviceDriverVulkan::buffer_get_device_address(BufferID p_buffer) {
+	const BufferInfo *buf_info = (const BufferInfo *)p_buffer.id;
+	VkBufferDeviceAddressInfo address_info = {};
+	address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+	address_info.pNext = nullptr;
+	address_info.buffer = buf_info->vk_buffer;
+	return vkGetBufferDeviceAddress(vk_device, &address_info);
 }
 
 /*****************/
@@ -1793,15 +1868,20 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 	VmaAllocation allocation = nullptr;		// 内存的句柄
 	VmaAllocationInfo alloc_info = {};		// 内存的西悉尼
 
-	// 创建图像
-	VkResult err = vkCreateImage(vk_device, &create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE), &vk_image);
-	ERR_FAIL_COND_V_MSG(err, TextureID(), "vkCreateImage failed with error " + itos(err) + ".");
-	// 为图像分配存储
-	err = vmaAllocateMemoryForImage(allocator, vk_image, &alloc_create_info, &allocation, &alloc_info);
-	ERR_FAIL_COND_V_MSG(err, TextureID(), "Can't allocate memory for image, error: " + itos(err) + ".");
-	// 将内存映射到image
-	err = vmaBindImageMemory2(allocator, allocation, 0, vk_image, nullptr);
-	ERR_FAIL_COND_V_MSG(err, TextureID(), "Can't bind memory to image, error: " + itos(err) + ".");
+	if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
+		alloc_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+		VkResult err = vmaCreateImage(allocator, &create_info, &alloc_create_info, &vk_image, &allocation, &alloc_info);
+		ERR_FAIL_COND_V_MSG(err, TextureID(), "vmaCreateImage failed with error " + itos(err) + ".");
+	} else {
+		VkResult err = vkCreateImage(vk_device, &create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE), &vk_image);
+		ERR_FAIL_COND_V_MSG(err, TextureID(), "vkCreateImage failed with error " + itos(err) + ".");
+		// 为图像分配存储
+		err = vmaAllocateMemoryForImage(allocator, vk_image, &alloc_create_info, &allocation, &alloc_info);
+		ERR_FAIL_COND_V_MSG(err, TextureID(), "Can't allocate memory for image, error: " + itos(err) + ".");
+		// 将内存映射到image
+		err = vmaBindImageMemory2(allocator, allocation, 0, vk_image, nullptr);
+		ERR_FAIL_COND_V_MSG(err, TextureID(), "Can't bind memory to image, error: " + itos(err) + ".");
+	}
 
 	// Create view.
 
@@ -1847,11 +1927,15 @@ RDD::TextureID RenderingDeviceDriverVulkan::texture_create(const TextureFormat &
 	// image view的句柄
 	VkImageView vk_image_view = VK_NULL_HANDLE;
 	// 创建image  view
-	err = vkCreateImageView(vk_device, &image_view_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE_VIEW), &vk_image_view);
+	VkResult err = vkCreateImageView(vk_device, &image_view_create_info, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE_VIEW), &vk_image_view);
 	if (err) {
-		// 出错的话就释放图像句柄，然后再释放内存
-		vkDestroyImage(vk_device, vk_image, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE));
-		vmaFreeMemory(allocator, allocation);
+		if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
+			vmaDestroyImage(allocator, vk_image, allocation);
+		} else {
+			vkDestroyImage(vk_device, vk_image, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE));
+			vmaFreeMemory(allocator, allocation);
+		}
+
 		ERR_FAIL_COND_V_MSG(err, TextureID(), "vkCreateImageView failed with error " + itos(err) + ".");
 	}
 
@@ -2027,8 +2111,12 @@ void RenderingDeviceDriverVulkan::texture_free(TextureID p_texture) {
 	TextureInfo *tex_info = (TextureInfo *)p_texture.id;
 	vkDestroyImageView(vk_device, tex_info->vk_view, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_IMAGE_VIEW));
 	if (tex_info->allocation.handle) {
-		vkDestroyImage(vk_device, tex_info->vk_image, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER));
-		vmaFreeMemory(allocator, tex_info->allocation.handle);
+		if (!Engine::get_singleton()->is_extra_gpu_memory_tracking_enabled()) {
+			vmaDestroyImage(allocator, tex_info->vk_view_create_info.image, tex_info->allocation.handle);
+		} else {
+			vkDestroyImage(vk_device, tex_info->vk_image, VKC::get_allocation_callbacks(VK_OBJECT_TYPE_BUFFER));
+			vmaFreeMemory(allocator, tex_info->allocation.handle);
+		}
 	}
 	VersatileResource::free(resources_allocator, tex_info);
 }
@@ -2111,6 +2199,10 @@ void RenderingDeviceDriverVulkan::texture_unmap(TextureID p_texture) {
 }
 
 BitField<RDD::TextureUsageBits> RenderingDeviceDriverVulkan::texture_get_usages_supported_by_format(DataFormat p_format, bool p_cpu_readable) {
+	if (p_format >= DATA_FORMAT_ASTC_4x4_SFLOAT_BLOCK && p_format <= DATA_FORMAT_ASTC_12x12_SFLOAT_BLOCK && !enabled_device_extension_names.has(VK_EXT_TEXTURE_COMPRESSION_ASTC_HDR_EXTENSION_NAME)) {
+		// Formats that were introduced later with extensions must not reach vkGetPhysicalDeviceFormatProperties if the extension isn't available. This means it's not supported.
+		return 0;
+	}
 	VkFormatProperties properties = {};
 	vkGetPhysicalDeviceFormatProperties(physical_device, RD_TO_VK_FORMAT[p_format], &properties);
 
@@ -4523,27 +4615,13 @@ void RenderingDeviceDriverVulkan::command_copy_texture(CommandBufferID p_cmd_buf
 	}
 #endif
 
-	vkCmdCopyImage((VkCommandBuffer)p_cmd_buffer.id,
-		src_tex_info->vk_view_create_info.image,
-		RD_TO_VK_LAYOUT[p_src_texture_layout],
-		dst_tex_info->vk_view_create_info.image,
-		RD_TO_VK_LAYOUT[p_dst_texture_layout],
-		p_regions.size(),
-		vk_copy_regions);
+	vkCmdCopyImage((VkCommandBuffer)p_cmd_buffer.id, src_tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_src_texture_layout], dst_tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_dst_texture_layout], p_regions.size(), vk_copy_regions);
 }
 
 /*
 这个函数的作用是执行Vulkan中的多采样解析操作（Multisample Resolve），将多重采样（MSAA）的源纹理数据解析（降采样）到目标单采样纹理中。函数名中的"resolve"正是指这一过程。
 */
-void RenderingDeviceDriverVulkan::command_resolve_texture(CommandBufferID p_cmd_buffer,
-	TextureID p_src_texture,
-	TextureLayout p_src_texture_layout,
-	uint32_t p_src_layer,
-	uint32_t p_src_mipmap,
-	TextureID p_dst_texture,
-	TextureLayout p_dst_texture_layout,
-	uint32_t p_dst_layer,
-	uint32_t p_dst_mipmap) {
+void RenderingDeviceDriverVulkan::command_resolve_texture(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, uint32_t p_src_layer, uint32_t p_src_mipmap, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, uint32_t p_dst_layer, uint32_t p_dst_mipmap) {
 	const TextureInfo *src_tex_info = (const TextureInfo *)p_src_texture.id;
 	const TextureInfo *dst_tex_info = (const TextureInfo *)p_dst_texture.id;
 
@@ -4569,13 +4647,7 @@ void RenderingDeviceDriverVulkan::command_resolve_texture(CommandBufferID p_cmd_
 	}
 #endif
 
-	vkCmdResolveImage((VkCommandBuffer)p_cmd_buffer.id,
-		src_tex_info->vk_view_create_info.image,
-		RD_TO_VK_LAYOUT[p_src_texture_layout],
-		dst_tex_info->vk_view_create_info.image,
-		RD_TO_VK_LAYOUT[p_dst_texture_layout],
-		1,
-		&vk_resolve);
+	vkCmdResolveImage((VkCommandBuffer)p_cmd_buffer.id, src_tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_src_texture_layout], dst_tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_dst_texture_layout], 1, &vk_resolve);
 }
 
 void RenderingDeviceDriverVulkan::command_clear_color_texture(CommandBufferID p_cmd_buffer, TextureID p_texture, TextureLayout p_texture_layout, const Color &p_color, const TextureSubresourceRange &p_subresources) {
@@ -4591,12 +4663,7 @@ void RenderingDeviceDriverVulkan::command_clear_color_texture(CommandBufferID p_
 		ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT p_texture must not be used in command_clear_color_texture. Use a clear store action pass instead.");
 	}
 #endif
-	vkCmdClearColorImage((VkCommandBuffer)p_cmd_buffer.id,
-		tex_info->vk_view_create_info.image,
-		RD_TO_VK_LAYOUT[p_texture_layout],
-		&vk_color,
-		1,
-		&vk_subresources);
+	vkCmdClearColorImage((VkCommandBuffer)p_cmd_buffer.id, tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_texture_layout], &vk_color, 1, &vk_subresources);
 }
 
 void RenderingDeviceDriverVulkan::command_copy_buffer_to_texture(CommandBufferID p_cmd_buffer, BufferID p_src_buffer, TextureID p_dst_texture, TextureLayout p_dst_texture_layout, VectorView<BufferTextureCopyRegion> p_regions) {
@@ -4612,12 +4679,7 @@ void RenderingDeviceDriverVulkan::command_copy_buffer_to_texture(CommandBufferID
 		ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT p_dst_texture must not be used in command_copy_buffer_to_texture.");
 	}
 #endif
-	vkCmdCopyBufferToImage((VkCommandBuffer)p_cmd_buffer.id,
-		buf_info->vk_buffer,
-		tex_info->vk_view_create_info.image,
-		RD_TO_VK_LAYOUT[p_dst_texture_layout],
-		p_regions.size(),
-		vk_copy_regions);
+	vkCmdCopyBufferToImage((VkCommandBuffer)p_cmd_buffer.id, buf_info->vk_buffer, tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_dst_texture_layout], p_regions.size(), vk_copy_regions);
 }
 
 void RenderingDeviceDriverVulkan::command_copy_texture_to_buffer(CommandBufferID p_cmd_buffer, TextureID p_src_texture, TextureLayout p_src_texture_layout, BufferID p_dst_buffer, VectorView<BufferTextureCopyRegion> p_regions) {
@@ -4633,12 +4695,7 @@ void RenderingDeviceDriverVulkan::command_copy_texture_to_buffer(CommandBufferID
 		ERR_PRINT("TEXTURE_USAGE_TRANSIENT_BIT p_src_texture must not be used in command_copy_texture_to_buffer.");
 	}
 #endif
-	vkCmdCopyImageToBuffer((VkCommandBuffer)p_cmd_buffer.id,
-		tex_info->vk_view_create_info.image,
-		RD_TO_VK_LAYOUT[p_src_texture_layout],
-		buf_info->vk_buffer,
-		p_regions.size(),
-		vk_copy_regions);
+	vkCmdCopyImageToBuffer((VkCommandBuffer)p_cmd_buffer.id, tex_info->vk_view_create_info.image, RD_TO_VK_LAYOUT[p_src_texture_layout], buf_info->vk_buffer, p_regions.size(), vk_copy_regions);
 }
 
 /******************/
@@ -4653,11 +4710,7 @@ void RenderingDeviceDriverVulkan::pipeline_free(PipelineID p_pipeline) {
 // 绑定推送常量，它与着色器相关。
 void RenderingDeviceDriverVulkan::command_bind_push_constants(CommandBufferID p_cmd_buffer, ShaderID p_shader, uint32_t p_dst_first_index, VectorView<uint32_t> p_data) {
 	const ShaderInfo *shader_info = (const ShaderInfo *)p_shader.id;
-	vkCmdPushConstants((VkCommandBuffer)p_cmd_buffer.id,
-		shader_info->vk_pipeline_layout,
-		shader_info->vk_push_constant_stages,
-		p_dst_first_index * sizeof(uint32_t),
-		p_data.size() * sizeof(uint32_t), p_data.ptr());
+	vkCmdPushConstants((VkCommandBuffer)p_cmd_buffer.id, shader_info->vk_pipeline_layout, shader_info->vk_push_constant_stages, p_dst_first_index * sizeof(uint32_t), p_data.size() * sizeof(uint32_t), p_data.ptr());
 }
 
 // ----- CACHE -----
@@ -5098,11 +5151,7 @@ void RenderingDeviceDriverVulkan::command_render_draw_indirect_count(CommandBuff
 }
 
 // 绑定到管线的顶点输入绑定槽（binding slots）上
-void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer,
-	uint32_t p_binding_count,
-	const BufferID *p_buffers,
-	const uint64_t *p_offsets)
-{
+void RenderingDeviceDriverVulkan::command_render_bind_vertex_buffers(CommandBufferID p_cmd_buffer, uint32_t p_binding_count, const BufferID *p_buffers, const uint64_t *p_offsets) {
 	VkBuffer *vk_buffers = ALLOCA_ARRAY(VkBuffer, p_binding_count);
 	for (uint32_t i = 0; i < p_binding_count; i++) {
 		vk_buffers[i] = ((const BufferInfo *)p_buffers[i].id)->vk_buffer;
@@ -6175,6 +6224,10 @@ uint64_t RenderingDeviceDriverVulkan::limit_get(Limit p_limit) {
 			return vrs_capabilities.max_fragment_size.x;
 		case LIMIT_VRS_MAX_FRAGMENT_HEIGHT:
 			return vrs_capabilities.max_fragment_size.y;
+		case LIMIT_MAX_SHADER_VARYINGS:
+			// The Vulkan spec states that built in varyings like gl_FragCoord should count against this, but in
+			// practice, that doesn't seem to be the case. The validation layers don't even complain.
+			return MIN(limits.maxVertexOutputComponents / 4, limits.maxFragmentInputComponents / 4);
 		default:
 			ERR_FAIL_V(0);
 	}
@@ -6201,6 +6254,8 @@ bool RenderingDeviceDriverVulkan::has_feature(Features p_feature) {
 			return vrs_capabilities.attachment_vrs_supported && physical_device_features.shaderStorageImageExtendedFormats;
 		case SUPPORTS_FRAGMENT_SHADER_WITH_ONLY_SIDE_EFFECTS:
 			return true;
+		case SUPPORTS_BUFFER_DEVICE_ADDRESS:
+			return buffer_device_address_support;
 		default:
 			return false;
 	}

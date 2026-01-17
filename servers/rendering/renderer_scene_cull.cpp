@@ -2510,7 +2510,7 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 				}
 
 				real_t radius = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_RANGE);
-				real_t z_near = MIN(0.005f, radius);
+				real_t z_near = MIN(0.025f, radius);
 				Projection cm;
 				cm.set_perspective(90, 1, z_near, radius);
 
@@ -2600,7 +2600,7 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 
 			real_t radius = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_RANGE);
 			real_t angle = RSG::light_storage->light_get_param(p_instance->base, RS::LIGHT_PARAM_SPOT_ANGLE);
-			real_t z_near = MIN(0.005f, radius);
+			real_t z_near = MIN(0.025f, radius);
 
 			Projection cm;
 			cm.set_perspective(angle * 2.0, 1.0, z_near, radius);
@@ -2659,17 +2659,7 @@ bool RendererSceneCull::_light_instance_update_shadow(Instance *p_instance, cons
 	return animated_material_found;
 }
 
-void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_buffers,
-	RID p_camera,
-	RID p_scenario,
-	RID p_viewport,
-	Size2 p_viewport_size,
-	uint32_t p_jitter_phase_count,	// TAA抖动相位数量（Halton抖动序列的阶位数）
-	float p_screen_mesh_lod_threshold,
-	RID p_shadow_atlas,
-	Ref<XRInterface> &p_xr_interface,
-	RenderInfo *r_render_info)
-{
+void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_buffers, RID p_camera, RID p_scenario, RID p_viewport, Size2 p_viewport_size, uint32_t p_jitter_phase_count, float p_screen_mesh_lod_threshold, RID p_shadow_atlas, Ref<XRInterface> &p_xr_interface, RenderInfo *r_render_info) {
 #ifndef _3D_DISABLED
 
 	Camera *camera = camera_owner.get_or_null(p_camera);
@@ -2744,16 +2734,7 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 			} break;
 		}
 
-		// 相机数据设置
-		camera_data.set_camera(transform,
-			projection,
-			is_orthogonal,
-			is_frustum,
-			vaspect,
-			jitter,
-			taa_frame_count,
-			camera->visible_layers);
-		// 正交、视锥体、透视应该是互斥的，有个enum会比较好。
+		camera_data.set_camera(transform, projection, is_orthogonal, is_frustum, vaspect, jitter, taa_frame_count, camera->visible_layers);
 	} else {
 		XRServer *xr_server = XRServer::get_singleton();
 
@@ -2810,27 +2791,9 @@ void RendererSceneCull::render_camera(const Ref<RenderSceneBuffers> &p_render_bu
 
 	RENDER_TIMESTAMP("Update Occlusion Buffer")
 	// For now just cull on the first camera
-	// 当前只在第一个相机上剔除。更新缓冲信息。
-	RendererSceneOcclusionCull::get_singleton()->buffer_update(p_viewport,
-		camera_data.main_transform,
-		camera_data.main_projection,
-		camera_data.is_orthogonal);
+	RendererSceneOcclusionCull::get_singleton()->buffer_update(p_viewport, camera_data.main_transform, camera_data.main_projection, camera_data.is_orthogonal);
 
-	// 渲染场景
-	_render_scene(&camera_data,
-		p_render_buffers,
-		environment,
-		camera->attributes,
-		compositor,
-		camera->visible_layers,
-		p_scenario,
-		p_viewport,
-		p_shadow_atlas,
-		RID(),
-		-1,
-		p_screen_mesh_lod_threshold,
-		true,
-		r_render_info);
+	_render_scene(&camera_data, p_render_buffers, environment, camera->attributes, compositor, camera->visible_layers, p_scenario, p_viewport, p_shadow_atlas, RID(), -1, p_screen_mesh_lod_threshold, true, r_render_info);
 #endif
 }
 
@@ -3223,22 +3186,7 @@ void RendererSceneCull::_scene_particles_set_view_axis(RID p_particles, const Ve
 	RSG::particles_storage->particles_set_view_axis(p_particles, p_axis, p_up_axis);
 }
 
-void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_camera_data,
-	const Ref<RenderSceneBuffers> &p_render_buffers,
-	RID p_environment,
-	RID p_force_camera_attributes,
-	RID p_compositor,
-	uint32_t p_visible_layers,
-	RID p_scenario,
-	RID p_viewport,
-	RID p_shadow_atlas,
-	RID p_reflection_probe,
-	int p_reflection_probe_pass,
-	float p_screen_mesh_lod_threshold,
-	bool p_using_shadows,
-	RenderingMethod::RenderInfo *r_render_info)
-{
-	// 获取反射探针实例
+void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_camera_data, const Ref<RenderSceneBuffers> &p_render_buffers, RID p_environment, RID p_force_camera_attributes, RID p_compositor, uint32_t p_visible_layers, RID p_scenario, RID p_viewport, RID p_shadow_atlas, RID p_reflection_probe, int p_reflection_probe_pass, float p_screen_mesh_lod_threshold, bool p_using_shadows, RenderingMethod::RenderInfo *r_render_info) {
 	Instance *render_reflection_probe = instance_owner.get_or_null(p_reflection_probe); //if null, not rendering to it
 
 	// Prepare the light - camera volume culling system.
@@ -3349,12 +3297,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 
 		// 设置光源的阴影参数
 		for (int i = 0; i < lights_with_shadow.size(); i++) {
-			_light_instance_setup_directional_shadow(i,
-				lights_with_shadow[i],
-				p_camera_data->main_transform,
-				p_camera_data->main_projection,
-				p_camera_data->is_orthogonal,
-				p_camera_data->vaspect);
+			_light_instance_setup_directional_shadow(i, lights_with_shadow[i], p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect);
 		}
 	}
 
@@ -3407,18 +3350,15 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 		CullData cull_data;
 
 		//prepare for eventual thread usage
-		cull_data.cull = &cull;		// 剔除器指针对象
-		cull_data.scenario = scenario;	// 当前场景数据
-		cull_data.shadow_atlas = p_shadow_atlas;	// 阴影贴图数据
-		cull_data.cam_transform = p_camera_data->main_transform;	// 摄像机变换矩阵
-		cull_data.visible_layers = p_visible_layers;	// 可见渲染层
-		cull_data.render_reflection_probe = render_reflection_probe;	// 反射探针状态
-		cull_data.occlusion_buffer = RendererSceneOcclusionCull::get_singleton()->buffer_get_ptr(p_viewport);	// 获取视口的遮挡缓冲区
-		cull_data.camera_matrix = &p_camera_data->main_projection;	// 摄像机投影矩阵
-		cull_data.visibility_viewport_mask = scenario->viewport_visibility_masks.has(p_viewport) ?
-												scenario->viewport_visibility_masks[p_viewport] : 0; // 视口可见性掩码
-
-// 性能调试宏，默认不启用。
+		cull_data.cull = &cull;
+		cull_data.scenario = scenario;
+		cull_data.shadow_atlas = p_shadow_atlas;
+		cull_data.cam_transform = p_camera_data->main_transform;
+		cull_data.visible_layers = p_visible_layers;
+		cull_data.render_reflection_probe = render_reflection_probe;
+		cull_data.occlusion_buffer = RendererSceneOcclusionCull::get_singleton()->buffer_get_ptr(p_viewport);
+		cull_data.camera_matrix = &p_camera_data->main_projection;
+		cull_data.visibility_viewport_mask = scenario->viewport_visibility_masks.has(p_viewport) ? scenario->viewport_visibility_masks[p_viewport] : 0;
 //#define DEBUG_CULL_TIME
 #ifdef DEBUG_CULL_TIME
 		uint64_t time_from = OS::get_singleton()->get_ticks_usec();
@@ -3431,15 +3371,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				thread.clear();	// 清空个线程的临时结果容器
 			}
 
-			// 创建临时任务分组
-			WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_template_group_task(this,
-				&RendererSceneCull::_scene_cull_threaded,
-				&cull_data,
-				scene_cull_result_threads.size(),
-				-1,
-				true,
-				SNAME("RenderCullInstances"));
-			// 等待所有任务完成
+			WorkerThreadPool::GroupID group_task = WorkerThreadPool::get_singleton()->add_template_group_task(this, &RendererSceneCull::_scene_cull_threaded, &cull_data, scene_cull_result_threads.size(), -1, true, SNAME("RenderCullInstances"));
 			WorkerThreadPool::get_singleton()->wait_for_group_task_completion(group_task);
 
 			// 合并个线程的剔除结果
@@ -3487,19 +3419,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 			for (uint32_t j = 0; j < cull.shadows[i].cascade_count; j++) {
 				const Cull::Shadow::Cascade &c = cull.shadows[i].cascades[j];
 				//			print_line("shadow " + itos(i) + " cascade " + itos(j) + " elements: " + itos(c.cull_result.size()));
-				// 配置实例参数到光源存储系统中
-				RSG::light_storage->light_instance_set_shadow_transform(
-						cull.shadows[i].light_instance,
-						c.projection,
-						c.transform,
-						c.zfar,
-						c.split,
-						j,
-						c.shadow_texel_size,
-						c.bias_scale,
-						c.range_begin,
-						c.uv_scale);
-				// 检查是否达到最大可处理阴影数量
+				RSG::light_storage->light_instance_set_shadow_transform(cull.shadows[i].light_instance, c.projection, c.transform, c.zfar, c.split, j, c.shadow_texel_size, c.bias_scale, c.range_begin, c.uv_scale);
 				if (max_shadows_used == MAX_UPDATE_SHADOWS) {
 					continue;
 				}
@@ -3651,17 +3571,8 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 				//must redraw!
 				// 需要重新绘制的情况
 				RENDER_TIMESTAMP("> Render Light3D " + itos(i));
-				// 光源实例更新阴影数据
-				if (_light_instance_update_shadow(ins,
-					p_camera_data->main_transform,
-					p_camera_data->main_projection,
-					p_camera_data->is_orthogonal,
-					p_camera_data->vaspect,
-					p_shadow_atlas,
-					scenario,
-					p_screen_mesh_lod_threshold,
-					p_visible_layers)) {
-					light->make_shadow_dirty();	// 标记需要下次更新
+				if (_light_instance_update_shadow(ins, p_camera_data->main_transform, p_camera_data->main_projection, p_camera_data->is_orthogonal, p_camera_data->vaspect, p_shadow_atlas, scenario, p_screen_mesh_lod_threshold, p_visible_layers)) {
+					light->make_shadow_dirty();
 				}
 				RENDER_TIMESTAMP("< Render Light3D " + itos(i));
 			} else {
@@ -3743,32 +3654,7 @@ void RendererSceneCull::_render_scene(const RendererSceneRender::CameraData *p_c
 	}
 
 	RENDER_TIMESTAMP("Render 3D Scene");
-	// 剔除结果的数据传入渲染器中进行渲染。
-	scene_render->render_scene(p_render_buffers,
-		p_camera_data,
-		prev_camera_data,
-		scene_cull_result.geometry_instances,
-		scene_cull_result.light_instances,
-		scene_cull_result.reflections,
-		scene_cull_result.voxel_gi_instances,
-		scene_cull_result.decals,
-		scene_cull_result.lightmaps,
-		scene_cull_result.fog_volumes,
-		p_environment,
-		camera_attributes,
-		p_compositor,
-		p_shadow_atlas,
-		occluders_tex,
-		p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas,
-		p_reflection_probe,
-		p_reflection_probe_pass,
-		p_screen_mesh_lod_threshold,
-		render_shadow_data,
-		max_shadows_used,
-		render_sdfgi_data,
-		cull.sdfgi.region_count,
-		&sdfgi_update_data,
-		r_render_info);
+	scene_render->render_scene(p_render_buffers, p_camera_data, prev_camera_data, scene_cull_result.geometry_instances, scene_cull_result.light_instances, scene_cull_result.reflections, scene_cull_result.voxel_gi_instances, scene_cull_result.decals, scene_cull_result.lightmaps, scene_cull_result.fog_volumes, p_environment, camera_attributes, p_compositor, p_shadow_atlas, occluders_tex, p_reflection_probe.is_valid() ? RID() : scenario->reflection_atlas, p_reflection_probe, p_reflection_probe_pass, p_screen_mesh_lod_threshold, render_shadow_data, max_shadows_used, render_sdfgi_data, cull.sdfgi.region_count, &sdfgi_update_data, r_render_info);
 
 	// Test
 	// 如果不出意外，在这里，color和depth纹理中的数据都应该有了，那么可以获取并输出了。
@@ -4195,15 +4081,19 @@ void RendererSceneCull::render_particle_colliders() {
 
 			struct CullAABB {
 				PagedArray<Instance *> *result;
+				uint32_t heightfield_mask;
 				_FORCE_INLINE_ bool operator()(void *p_data) {
 					Instance *p_instance = (Instance *)p_data;
-					result->push_back(p_instance);
+					if (p_instance->layer_mask & heightfield_mask) {
+						result->push_back(p_instance);
+					}
 					return false;
 				}
 			};
 
 			CullAABB cull_aabb;
 			cull_aabb.result = &instance_cull_result;
+			cull_aabb.heightfield_mask = RSG::particles_storage->particles_collision_get_height_field_mask(hfpc->base);
 			hfpc->scenario->indexers[Scenario::INDEXER_GEOMETRY].aabb_query(hfpc->transformed_aabb, cull_aabb);
 			hfpc->scenario->indexers[Scenario::INDEXER_VOLUMES].aabb_query(hfpc->transformed_aabb, cull_aabb);
 
@@ -4646,13 +4536,6 @@ void RendererSceneCull::InterpolationData::notify_free_instance(RID p_rid, Insta
 	instance_interpolate_update_list.erase_multiple_unordered(p_rid);
 	instance_transform_update_list_curr->erase_multiple_unordered(p_rid);
 	instance_transform_update_list_prev->erase_multiple_unordered(p_rid);
-}
-
-/* Debug */
-void RendererSceneCull::save_current_view()
-{
-	OS::get_singleton()->print("OUR TEST !");
-	RSG::write_log_to_file("RendererSceneCull::save_current_view()");
 }
 
 RendererSceneCull::RendererSceneCull() {

@@ -191,42 +191,22 @@ void SceneShaderForwardClustered::ShaderData::set_code(const String &p_code) {
 // #endif
 
 #if 0
-{
-	String log;
-	log += "**compiling shader:\n";
-	log += "**defines:\n";
+	print_line("**compiling shader:");
+	print_line("**defines:\n");
 	for (int i = 0; i < gen_code.defines.size(); i++) {
-		log += gen_code.defines[i] + "\n";
+		print_line(gen_code.defines[i]);
 	}
 
 	HashMap<String, String>::Iterator el = gen_code.code.begin();
 	while (el) {
-		log += "\n**code " + el->key + ":\n" + el->value + "\n";
+		print_line("\n**code " + el->key + ":\n" + el->value);
 		++el;
 	}
 
-	log += "\n**uniforms:\n" + gen_code.uniforms + "\n";
-	log += "\n**vertex_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX] + "\n";
-	log += "\n**fragment_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT] + "\n";
-
-	// 输出到文件
-	String out_dir = "res://output_analysis/set_code/";
-	DirAccess::make_dir_recursive_absolute(out_dir);
-
-	String timestamp = Time::get_singleton()->get_datetime_string_from_system().replace(":", "-");
-	String filename = vformat("%sforward_clustered_%s.log", out_dir, timestamp);
-
-	Ref<FileAccess> file = FileAccess::open(filename, FileAccess::WRITE);
-	if (file.is_valid()) {
-		file->store_string(log);
-		file->close();
-		print_line(vformat("SceneShaderForwardClustered::ShaderData::set_code log written: %s", filename));
-	} else {
-		print_error(vformat("Failed to write SceneShaderForwardClustered::ShaderData::set_code log: %s", filename));
-	}
-}
+	print_line("\n**uniforms:\n" + gen_code.uniforms);
+	print_line("\n**vertex_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX]);
+	print_line("\n**fragment_globals:\n" + gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT]);
 #endif
-
 	SceneShaderForwardClustered::singleton->shader.version_set_code(version, gen_code.code, gen_code.uniforms, gen_code.stage_globals[ShaderCompiler::STAGE_VERTEX], gen_code.stage_globals[ShaderCompiler::STAGE_FRAGMENT], gen_code.defines);
 
 	ubo_size = gen_code.uniform_total_size;
@@ -918,10 +898,9 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 
 	{
 		//default material and shader
-		// 默认材质与着色器
-		default_shader = material_storage->shader_allocate();		// 从材质存储中，分配一个着色器的ID
-		material_storage->shader_initialize(default_shader);		// 材质存储：初始化着色器
-		material_storage->shader_set_code(default_shader, R"(		
+		default_shader = material_storage->shader_allocate();
+		material_storage->shader_initialize(default_shader);
+		material_storage->shader_set_code(default_shader, R"(
 // Default 3D material shader (Forward+).
 
 shader_type spatial;
@@ -935,15 +914,14 @@ void fragment() {
 	ROUGHNESS = 0.8;
 	METALLIC = 0.2;
 }
-)");																// 设置默认着色器的代码
-		default_material = material_storage->material_allocate();	// 从材质存储中，分配一个材质的ID
-		material_storage->material_initialize(default_material);	// 材质存储：初始化材质
-		material_storage->material_set_shader(default_material, default_shader);	// 材质存储：设置材质的着色器
+)");
+		default_material = material_storage->material_allocate();
+		material_storage->material_initialize(default_material);
+		material_storage->material_set_shader(default_material, default_shader);
 
 		// 从默认材质中获取材质数据，材质数据是这个RD的材质数据，是material storage里同名结构的子类 
 		MaterialData *md = static_cast<MaterialData *>(material_storage->material_get_data(default_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
-		default_shader_rd = md->shader_data->get_shader_variant(PIPELINE_VERSION_COLOR_PASS, 0, false);		// 默认着色器的RID
-		default_shader_sdfgi_rd = md->shader_data->get_shader_variant(PIPELINE_VERSION_DEPTH_PASS_WITH_SDF, 0, false);	// 默认深度着色器的RID
+		default_shader_rd = md->shader_data->get_shader_variant(PIPELINE_VERSION_COLOR_PASS, 0, false);
 
 
 
@@ -972,7 +950,7 @@ void fragment() {
 	ALBEDO = vec3(0.4, 0.8, 0.8);
 	ALPHA = 0.1;
 }
-)");	// 融合模式是增加，并且不启用雾，这种方式就意味着如果重叠的越多，那地方就越亮
+)");
 		overdraw_material = material_storage->material_allocate();
 		material_storage->material_initialize(overdraw_material);	// 也就是说storage里控制着着色器的初始化，以及别的操作
 		material_storage->material_set_shader(overdraw_material, overdraw_material_shader);

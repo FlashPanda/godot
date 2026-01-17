@@ -8,8 +8,8 @@ msgstr ""
 "Report-Msgid-Bugs-To: https://github.com/godotengine/godot\n"
 "POT-Creation-Date: \n"
 "PO-Revision-Date: 2024-02-26 06:02+0000\n"
-"Last-Translator: Luka van der Plas <lukavdplas@users.noreply.hosted.weblate."
-"org>\n"
+"Last-Translator: Luka van der Plas "
+"<lukavdplas@users.noreply.hosted.weblate.org>\n"
 "Language-Team: Dutch <https://hosted.weblate.org/projects/godot-engine/godot/"
 "nl/>\n"
 "Language: nl\n"
@@ -18,6 +18,9 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=n != 1;\n"
 "X-Generator: Weblate 5.5-dev\n"
+
+msgid "All Recognized"
+msgstr "Alles Herkend"
 
 msgid "Add current color as a preset."
 msgstr "Huidige kleur als voorkeuze toevoegen."
@@ -31,11 +34,11 @@ msgstr "Openen"
 msgid "Select Current Folder"
 msgstr "Huidige Map Selecteren"
 
+msgid "Save"
+msgstr "Opslaan"
+
 msgid "Select This Folder"
 msgstr "Deze map selecteren"
-
-msgid "All Recognized"
-msgstr "Alles Herkend"
 
 msgid "Open a File"
 msgstr "Open een Bestand"
@@ -48,9 +51,6 @@ msgstr "Map openen"
 
 msgid "Open a File or Directory"
 msgstr "Bestand of map openen"
-
-msgid "Save"
-msgstr "Opslaan"
 
 msgid "Save a File"
 msgstr "Sla een Bestand Op"

@@ -150,12 +150,6 @@ public:
 	static RendererCompositorRD *get_singleton() { return singleton; }
 	RendererCompositorRD();
 	~RendererCompositorRD();
-
-	// debug
-public:
-	virtual void output_rendertarget_to_image(RID render_target_id, String output_path) override;
-
-	virtual void output_shadow_atlas_to_image(RID shadow_atlas_id, String output_path) override;
 };
 
 #endif // RENDERER_COMPOSITOR_RD_H

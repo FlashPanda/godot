@@ -70,7 +70,7 @@ class ProjectManager : public Control {
 
 	Ref<Theme> theme;
 
-	void _update_size_limits();
+	void _update_size_limits(bool p_custom_res);
 	void _update_theme(bool p_skip_creation = false);
 	void _titlebar_resized();
 
@@ -250,6 +250,9 @@ protected:
 public:
 	static ProjectManager *get_singleton() { return singleton; }
 
+	static constexpr int DEFAULT_WINDOW_WIDTH = 1152;
+	static constexpr int DEFAULT_WINDOW_HEIGHT = 800;
+
 	// Project list.
 
 	bool is_initialized() const { return initialized; }
@@ -259,7 +262,7 @@ public:
 
 	void add_new_tag(const String &p_tag);
 
-	ProjectManager();
+	ProjectManager(bool p_custom_res);
 	~ProjectManager();
 };
 

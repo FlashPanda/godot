@@ -64,7 +64,6 @@ class RenderingServer : public Object {
 	int mm_policy = 0;
 	bool render_loop_enabled = true;
 
-
 	/*
 		用于将底层渲染管线中存储的原始表面数据（以字节向量形式的顶点、属性、蒙皮信息和索引数据）
 		以及相关元信息（格式标志、顶点/索引长度、包围盒和 UV 缩放）解码并打包成一个 GDScript 可
@@ -72,15 +71,7 @@ class RenderingServer : public Object {
 		法线、切线、UV、骨骼权重/索引、索引列表等），并正是 mesh_surface_get_arrays() 等公开 API
 		返回给用户的内容。
 	*/
-	Array _get_array_from_surface(uint64_t p_format,
-		Vector<uint8_t> p_vertex_data,
-		Vector<uint8_t> p_attrib_data,
-		Vector<uint8_t> p_skin_data,
-		int p_vertex_len,
-		Vector<uint8_t> p_index_data,
-		int p_index_len,
-		const AABB &p_aabb,
-		const Vector4 &p_uv_scale) const;
+	Array _get_array_from_surface(uint64_t p_format, Vector<uint8_t> p_vertex_data, Vector<uint8_t> p_attrib_data, Vector<uint8_t> p_skin_data, int p_vertex_len, Vector<uint8_t> p_index_data, int p_index_len, const AABB &p_aabb, const Vector4 &p_uv_scale) const;
 
 	// 二维和三维的比较容差
 	const Vector2 SMALL_VEC2 = Vector2(CMP_EPSILON, CMP_EPSILON);
@@ -100,22 +91,7 @@ protected:
 	// 是将脚本层（GDScript/C#）传入的网格表面属性数组（顶点、法线、UV、骨骼等）
 	// 解包、打包成底层渲染子系统可消费的字节流，并在此过程中计算出必要的元信息
 	// （如包围盒、骨骼包围盒、UV 缩放），最后返回一个 Error 值指示执行结果或参数合法性
-	Error _surface_set_data(Array p_arrays,
-		uint64_t p_format,
-		uint32_t *p_offsets,
-		uint32_t p_vertex_stride,
-		uint32_t p_normal_stride,
-		uint32_t p_attrib_stride,
-		uint32_t p_skin_stride,
-		Vector<uint8_t> &r_vertex_array,
-		Vector<uint8_t> &r_attrib_array,
-		Vector<uint8_t> &r_skin_array,
-		int p_vertex_array_len,
-		Vector<uint8_t> &r_index_array,
-		int p_index_array_len,
-		AABB &r_aabb,
-		Vector<AABB> &r_bone_aabb,
-		Vector4 &r_uv_scale);
+	Error _surface_set_data(Array p_arrays, uint64_t p_format, uint32_t *p_offsets, uint32_t p_vertex_stride, uint32_t p_normal_stride, uint32_t p_attrib_stride, uint32_t p_skin_stride, Vector<uint8_t> &r_vertex_array, Vector<uint8_t> &r_attrib_array, Vector<uint8_t> &r_skin_array, int p_vertex_array_len, Vector<uint8_t> &r_index_array, int p_index_array_len, AABB &r_aabb, Vector<AABB> &r_bone_aabb, Vector4 &r_uv_scale);
 
 	static RenderingServer *(*create_func)();	// 创建函数指针
 	static void _bind_methods();	// 绑定方法到脚本。
@@ -862,9 +838,12 @@ MultiMesh 将成百上千个相同网格实例打包成一个资源提交给渲�
 		MULTIMESH_INTERP_QUALITY_HIGH,
 	};
 
-	// 多网格分配数据空间
-	virtual void multimesh_allocate_data(RID p_multimesh, int p_instances, MultimeshTransformFormat p_transform_format, bool p_use_colors = false, bool p_use_custom_data = false) = 0;
-	// 多网格获取实例数量
+protected:
+#ifndef DISABLE_DEPRECATED
+	void _multimesh_allocate_data_bind_compat_99455(RID p_multimesh, int p_instances, MultimeshTransformFormat p_transform_format, bool p_use_colors, bool p_use_custom_data);
+#endif
+public:
+	virtual void multimesh_allocate_data(RID p_multimesh, int p_instances, MultimeshTransformFormat p_transform_format, bool p_use_colors = false, bool p_use_custom_data = false, bool p_use_indirect = false) = 0;
 	virtual int multimesh_get_instance_count(RID p_multimesh) const = 0;
 
 	// 多网格设置单个网格
@@ -898,6 +877,7 @@ MultiMesh 将成百上千个相同网格实例打包成一个资源提交给渲�
 	*/
 
 	virtual void multimesh_set_buffer(RID p_multimesh, const Vector<float> &p_buffer) = 0;
+	virtual RID multimesh_get_command_buffer_rd_rid(RID p_multimesh) const = 0;
 	virtual RID multimesh_get_buffer_rd_rid(RID p_multimesh) const = 0;
 	virtual Vector<float> multimesh_get_buffer(RID p_multimesh) const = 0;
 
@@ -1310,6 +1290,7 @@ MultiMesh 将成百上千个相同网格实例打包成一个资源提交给渲�
 	virtual void particles_set_one_shot(RID p_particles, bool p_one_shot) = 0;
 	// 预运行时间，用于在首次渲染前填充粒子效果
 	virtual void particles_set_pre_process_time(RID p_particles, double p_time) = 0;
+	virtual void particles_request_process_time(RID p_particles, real_t p_request_process_time) = 0;
 	// 设定输出爆发比例
 	virtual void particles_set_explosiveness_ratio(RID p_particles, float p_ratio) = 0;
 	// 设定随机性
@@ -1330,6 +1311,7 @@ MultiMesh 将成百上千个相同网格实例打包成一个资源提交给渲�
 	virtual void particles_set_fractional_delta(RID p_particles, bool p_enable) = 0;
 	// 设置碰撞检测的基本粒子尺寸
 	virtual void particles_set_collision_base_size(RID p_particles, float p_size) = 0;
+	virtual void particles_set_seed(RID p_particles, uint32_t p_seed) = 0;
 
 	// 定义每个粒子在世界中的朝向方式，影响渲染时粒子的对齐行为
 	enum ParticlesTransformAlign {
@@ -1450,6 +1432,7 @@ MultiMesh 将成百上千个相同网格实例打包成一个资源提交给渲�
 
 	// 设置高度图分辨率
 	virtual void particles_collision_set_height_field_resolution(RID p_particles_collision, ParticlesCollisionHeightfieldResolution p_resolution) = 0; // For SDF and vector field.
+	virtual void particles_collision_set_height_field_mask(RID p_particles_collision, uint32_t p_heightfield_mask) = 0;
 
 	/* FOG VOLUME API */
 	// 雾体积API
@@ -2004,7 +1987,8 @@ MultiMesh 将成百上千个相同网格实例打包成一个资源提交给渲�
 		ENV_TONE_MAPPER_LINEAR,		// 线性映射，简单但可能导致高亮区域丢失细节。
 		ENV_TONE_MAPPER_REINHARD,	// Reinhardt 算法，避免高亮区域过曝，适用于一般场景。
 		ENV_TONE_MAPPER_FILMIC,		// 电影级算法，提供更自然的高光过渡，适合电影风格渲染。
-		ENV_TONE_MAPPER_ACES		// ACES 算法，提供高对比度和色彩还原，适用于高质量渲染。
+		ENV_TONE_MAPPER_ACES,		// ACES 算法，提供高对比度和色彩还原，适用于高质量渲染。
+		ENV_TONE_MAPPER_AGX,
 	};
 
 	// 设置色调映射的方式
@@ -2512,6 +2496,7 @@ MultiMesh 将成百上千个相同网格实例打包成一个资源提交给渲�
 	// 当 p_enable = true 时，强制让该 CanvasItem 在其父项之后绘制，突破默认“子项在父项之上”的绘制顺序，方便实现底层背景或阴影等效果
 	// 相当于节点层面的 CanvasItem.show_behind_parent，可用于制作分层 UI、动态阴影或背景装饰等场景
 	virtual void canvas_item_set_draw_behind_parent(RID p_item, bool p_enable) = 0;
+	virtual void canvas_item_set_use_identity_transform(RID p_item, bool p_enabled) = 0;
 
 	// 用于在 Godot 的 9-切片（nine-patch）绘制中，控制纹理沿某一轴（水平或垂直）如何填充目标区域。
 	// 九宫格填充
@@ -3015,10 +3000,6 @@ private:
 	SurfaceUpgradeCallback surface_upgrade_callback = nullptr;
 	bool warn_on_surface_upgrade = true;
 #endif
-
-public:
-	/* Debug */
-	virtual void save_current_view() = 0;
 };
 
 // Make variant understand the enums.

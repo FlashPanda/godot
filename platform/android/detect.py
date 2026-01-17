@@ -19,6 +19,10 @@ def can_build():
     return os.path.exists(get_env_android_sdk_root())
 
 
+def get_tools(env: "SConsEnvironment"):
+    return ["clang", "clang++", "as", "ar", "link"]
+
+
 def get_opts():
     from SCons.Variables import BoolVariable
 
@@ -60,7 +64,7 @@ def get_android_ndk_root(env: "SConsEnvironment"):
 
 # This is kept in sync with the value in 'platform/android/java/app/config.gradle'.
 def get_ndk_version():
-    return "23.2.8568313"
+    return "28.1.13356709"
 
 
 # This is kept in sync with the value in 'platform/android/java/app/config.gradle'.
@@ -183,7 +187,7 @@ def configure(env: "SConsEnvironment"):
     has_swappy = detect_swappy()
     if not has_swappy:
         print_warning(
-            "Swappy Frame Pacing not detected! It is strongly recommended you download it from https://github.com/darksylinc/godot-swappy/releases and extract it so that the following files can be found:\n"
+            "Swappy Frame Pacing not detected! It is strongly recommended you download it from https://github.com/godotengine/godot-swappy/releases and extract it so that the following files can be found:\n"
             + " thirdparty/swappy-frame-pacing/arm64-v8a/libswappy_static.a\n"
             + " thirdparty/swappy-frame-pacing/armeabi-v7a/libswappy_static.a\n"
             + " thirdparty/swappy-frame-pacing/x86/libswappy_static.a\n"

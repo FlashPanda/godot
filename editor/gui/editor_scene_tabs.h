@@ -44,8 +44,18 @@ class TextureRect;
 class EditorSceneTabs : public MarginContainer {
 	GDCLASS(EditorSceneTabs, MarginContainer);
 
-	static EditorSceneTabs *singleton;
+	inline static EditorSceneTabs *singleton = nullptr;
 
+public:
+	enum {
+		SCENE_SHOW_IN_FILESYSTEM = 3000, // Prevents conflicts with EditorNode options.
+		SCENE_RUN,
+		SCENE_CLOSE_OTHERS,
+		SCENE_CLOSE_RIGHT,
+		SCENE_CLOSE_ALL,
+	};
+
+private:
 	PanelContainer *tabbar_panel = nullptr;
 	HBoxContainer *tabbar_container = nullptr;
 
@@ -70,7 +80,6 @@ class EditorSceneTabs : public MarginContainer {
 	void _update_tab_titles();
 	void _reposition_active_tab(int p_to_index);
 	void _update_context_menu();
-	void _disable_menu_option_if(int p_option, bool p_condition);
 	void _custom_menu_option(int p_option);
 
 	void _tab_preview_done(const String &p_path, const Ref<Texture2D> &p_preview, const Ref<Texture2D> &p_small_preview, const Variant &p_udata);

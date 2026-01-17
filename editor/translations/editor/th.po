@@ -9,7 +9,7 @@
 # Lon3r <mptube.p@gmail.com>, 2020.
 # Kongfa Warorot <gongpha@hotmail.com>, 2020, 2021.
 # Kongfa Waroros <gongpha@hotmail.com>, 2021.
-# Atirut Wattanamongkol <artjang301@gmail.com>, 2021, 2023.
+# Atirut Wattanamongkol <artjang301@gmail.com>, 2021, 2023, 2024.
 # PT 07 <porton555@gmail.com>, 2021.
 # SysError_ <ictsanook@hotmail.com>, 2021, 2023.
 # Kanda Ninthfish <akkhaporn@gmail.com>, 2022.
@@ -18,13 +18,18 @@
 # LadsForTea <jajasamag@gmail.com>, 2023.
 # Satakun Utama <galaxytomostore@gmail.com>, 2023.
 # รัชพล คิดการ <rutchaphon.far@gmail.com>, 2023.
+# Donte <donte5405@outlook.com>, 2024.
+# Mineis Meee <simsfashion694@gmail.com>, 2024.
+# Suvijak Nopparatcharoensuk <guy.suvijak@hotmail.com>, 2025.
+# J Iamsamang <nodtem66@gmail.com>, 2025.
+# Tan <nazapizzaemail.com@gmail.com>, 2025.
 msgid ""
 msgstr ""
 "Project-Id-Version: Godot Engine editor interface\n"
 "Report-Msgid-Bugs-To: https://github.com/godotengine/godot\n"
 "POT-Creation-Date: \n"
-"PO-Revision-Date: 2023-12-13 14:13+0000\n"
-"Last-Translator: รัชพล คิดการ <rutchaphon.far@gmail.com>\n"
+"PO-Revision-Date: 2025-06-04 16:52+0000\n"
+"Last-Translator: Tan <nazapizzaemail.com@gmail.com>\n"
 "Language-Team: Thai <https://hosted.weblate.org/projects/godot-engine/godot/"
 "th/>\n"
 "Language: th\n"
@@ -32,7 +37,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
-"X-Generator: Weblate 5.3-rc\n"
+"X-Generator: Weblate 5.12-dev\n"
 
 msgid "Main Thread"
 msgstr "เธรดหลัก"
@@ -184,11 +189,14 @@ msgstr "ปุ่มจอยที่ %d"
 msgid "Pressure:"
 msgstr "แรงกด:"
 
+msgid "touched"
+msgstr "สัมผัส"
+
 msgid "released"
 msgstr "ปล่อย"
 
 msgid "Screen %s at (%s) with %s touch points"
-msgstr "การสั่งงานหน้าจอ %s ที่ตำแหน่ง (s) ด้วยการแตะ %s จุด"
+msgstr "การสั่งงานหน้าจอ %s ที่ตำแหน่ง (%s) ด้วยการแตะ %s จุด"
 
 msgid ""
 "Screen dragged with %s touch points at position (%s) with velocity of (%s)"
@@ -264,16 +272,19 @@ msgid "Completion Query"
 msgstr "ตัวช่วยเติมโค้ด"
 
 msgid "New Line"
-msgstr "บรรทัดใหม่"
+msgstr "สร้างบรรทัดใหม่"
 
 msgid "New Blank Line"
-msgstr "บรรทัดว่างใหม่"
+msgstr "สร้างบรรทัดว่างใหม่"
 
 msgid "New Line Above"
-msgstr "บรรทัดใหม่ด้านบน"
+msgstr "สร้างบรรทัดใหม่ด้านบน"
 
 msgid "Indent"
-msgstr "ย่อหน้า"
+msgstr "เพิ่มย่อหน้า"
+
+msgid "Dedent"
+msgstr "ลดย่อหน้า"
 
 msgid "Backspace"
 msgstr "ลบไปทางซ้าย"
@@ -377,6 +388,9 @@ msgstr "แสดงที่ซ่อนอยู่"
 msgid "Swap Input Direction"
 msgstr "สลับทิศทางอินพุต"
 
+msgid "Start Unicode Character Input"
+msgstr "เริ่มป้อนตัวอักขระแบบ Unicode"
+
 msgid "Invalid input %d (not passed) in expression"
 msgstr "อินพุต %d (ไม่ส่งผ่าน) ใน expression ไม่ถูกต้อง"
 
@@ -435,6 +449,9 @@ msgstr ""
 msgid "An action with the name '%s' already exists."
 msgstr "มีชื่อของ Action '%s' อยู่แล้ว"
 
+msgid "Cannot Revert - Action is same as initial"
+msgstr "ไม่สามารถเปลี่ยนกลับได้ - การดำเนินการเหมือนกับครั้งแรก"
+
 msgid "Revert Action"
 msgstr "ย้อนกลับ Action"
 
@@ -467,6 +484,21 @@ msgstr "การกระทำ"
 
 msgid "Deadzone"
 msgstr "Deadzone"
+
+msgid "Name:"
+msgstr "ชื่อ:"
+
+msgid "Type:"
+msgstr "ชนิด:"
+
+msgid "Add Metadata Property for \"%s\""
+msgstr "เพิ่มข้อมูลเมตาเพิ่มเติมสำหรับ \"%s\""
+
+msgid "Metadata name can't be empty."
+msgstr "ชื่อไม่สามารถปล่อยว่างได้"
+
+msgid "Names starting with _ are reserved for editor-only metadata."
+msgstr "ชื่อที่ขึ้นต้นด้วย _ สงวนไว้ใช้กับ metadata ของ editor"
 
 msgid "Time:"
 msgstr "เวลา:"
@@ -549,12 +581,6 @@ msgstr "แก้ไขความยาวของ Animation"
 msgid "Change Animation Loop"
 msgstr "เปลี่ยนรูปแบบโหมดวนซ้ำ (Loop) ของ Animation"
 
-msgid "Can't change loop mode on animation instanced from imported scene."
-msgstr "ไม่สามารถแก้ไขโหมดวนซ้ำ (Loop) ของ Animation จากฉากที่นำเข้ามาได้"
-
-msgid "Can't change loop mode on animation embedded in another scene."
-msgstr "ไม่สามารถแก้ไขโหมดวนซ้ำ (Loop) ของ Animation ที่ฝังอยู่อีกฉากหนึ่งได้"
-
 msgid "Animation length (frames)"
 msgstr "ความยาว Animation (เฟรม)"
 
@@ -611,9 +637,6 @@ msgstr "ขนาด:"
 
 msgid "Blend Shape:"
 msgstr "รูปร่างการ Blend:"
-
-msgid "Type:"
-msgstr "ชนิด:"
 
 msgid "(Invalid, expected type: %s)"
 msgstr "(ไม่ถูกต้อง, ต้องการชนิดของ: %s)"
@@ -687,6 +710,9 @@ msgstr "ค่าต่ำสุด/สูงสุดของการวน�
 msgid "Duplicate Key(s)"
 msgstr "สร้างคีย์ซ้ำอีกอัน"
 
+msgid "Add RESET Value(s)"
+msgstr "เพิ่มค่าเริ่มต้น"
+
 msgid "Delete Key(s)"
 msgstr "ลบคีย์"
 
@@ -699,8 +725,17 @@ msgstr "เปลี่ยนโหมดการประมาณค่าช
 msgid "Change Animation Loop Mode"
 msgstr "เปลี่ยนโหมดการวนซ้ำแอนิเมชัน"
 
+msgid ""
+"Compressed tracks can't be edited or removed. Re-import the animation with "
+"compression disabled in order to edit."
+msgstr ""
+"แทร็กที่บีบอัดไม่สามารถแก้ไขหรือลบได้ นำเข้าภาพเคลื่อนไหวอีกครั้งโดยปิดใช้งานการบีบอัดเพื่อแก้ไข"
+
 msgid "Remove Anim Track"
 msgstr "ลบแทร็กแอนิเมชัน"
+
+msgid "Hold Shift when clicking the key icon to skip this dialog."
+msgstr "กด Shift ค้างไว้เมื่อคลิกไอคอนรูปกุญแจเพื่อข้ามกล่องโต้ตอบนี้"
 
 msgid "Create"
 msgstr "สร้าง"
@@ -764,6 +799,9 @@ msgstr "ขนาด"
 msgid "Methods"
 msgstr "วิธีการ"
 
+msgid "Bezier"
+msgstr "เบซิเยร์"
+
 msgid "Audio"
 msgstr "เสียง"
 
@@ -773,20 +811,42 @@ msgstr "คลิปบอร์ดว่างเปล่า!"
 msgid "Paste Tracks"
 msgstr "วางแทร็ก"
 
+msgid "Make Easing Keys"
+msgstr "สร้างคีย์ Easing"
+
+msgid ""
+"Some AnimationPlayerEditor's options are disabled since this is the dummy "
+"AnimationPlayer for preview.\n"
+"\n"
+"The dummy player is forced active, non-deterministic and doesn't have the "
+"root motion track. Furthermore, the original node is inactive temporary."
+msgstr ""
+"ตัวเลือกบางตัวของ AnimationPlayerEditor ถูกปิดใช้งานเนื่องจากนี่คือ AnimationPlayer "
+"จำลองสำหรับการดูตัวอย่าง\n"
+"\n"
+"ตัวเล่นจำลองจะถูกบังคับให้ทำงาน ไม่แน่นอน และไม่มีแทร็กการเคลื่อนที่หลัก นอกจากนี้ "
+"โหนดดั้งเดิมจะไม่ทำงานชั่วคราว"
+
+msgid "AnimationPlayer is inactive. The playback will not be processed."
+msgstr "AnimationPlayer ไม่ทำงาน การเล่นซ้ำจะไม่ได้รับการประมวลผล"
+
 msgid "Select an AnimationPlayer node to create and edit animations."
 msgstr "เลือกโหนด AnimationPlayer เพื่อสร้างและแก้ไขแอนิเมชัน"
 
 msgid "Warning: Editing imported animation"
 msgstr "คำเตือน: กำลังแก้ไขแอนิเมชันที่นำเข้ามา"
 
+msgid "Dummy Player"
+msgstr "ผู้เล่นดัมมี่"
+
+msgid "Toggle between the bezier curve editor and track editor."
+msgstr "สลับไปมาระหว่างตัวแก้ไขเส้นโค้งเบซิเยร์และตัวแก้ไขแทร็ก"
+
 msgid "Only show tracks from nodes selected in tree."
 msgstr "แสดงแทร็กจากโหนดที่เลือกในผังเท่านั้น"
 
 msgid "Group tracks by node or display them as plain list."
 msgstr "จัดกลุ่มแทร็กโดยใช้โนดหรือแสดงเป็นรายการธรรมดา"
-
-msgid "Snap:"
-msgstr "สแนป:"
 
 msgid "Animation step value."
 msgstr "ค่าของขั้นของแอนิเมชัน"
@@ -802,6 +862,18 @@ msgstr "แก้ไข"
 
 msgid "Animation properties."
 msgstr "คุณสมบัติแอนิเมชัน"
+
+msgid "Set Start Offset (Audio)"
+msgstr "ตั้งค่าออฟเซ็ตเริ่มต้น (เสียง)"
+
+msgid "Set End Offset (Audio)"
+msgstr "ตั้งค่าออฟเซ็ตสิ้นสุด (เสียง)"
+
+msgid "Move First Selected Key to Cursor"
+msgstr "ย้ายคีย์ที่เลือกแรกไปที่เคอร์เซอร์"
+
+msgid "Move Last Selected Key to Cursor"
+msgstr "ย้ายคีย์ที่เลือกล่าสุดไปที่เคอร์เซอร์"
 
 msgid "Delete Selection"
 msgstr "ลบที่เลือก"
@@ -821,6 +893,12 @@ msgstr "สร้างแทร็กรีเซ็ท"
 msgid "Optimize"
 msgstr "เพิ่มประสิทธิภาพ"
 
+msgid "Trim keys placed in negative time"
+msgstr "ตัดแต่งคีย์ที่วางอยู่ในจังหวะลบ"
+
+msgid "Trim keys placed exceed the animation length"
+msgstr "ตัดแต่งคีย์ที่วางเกินความยาวของแอนิเมชั่น"
+
 msgid "Remove invalid keys"
 msgstr "ลบคีย์ที่ผิดพลาด"
 
@@ -836,11 +914,44 @@ msgstr "เก็บกวาด"
 msgid "Scale Ratio:"
 msgstr "อัตราส่วนขนาด:"
 
+msgid "Select Transition and Easing"
+msgstr "เลือกการเปลี่ยนผ่านและ Easing"
+
+msgctxt "Transition Type"
+msgid "Sine"
+msgstr "Sine (อัตราส่วนของด้านตรงข้ามมุมที่กำหนด)"
+
+msgctxt "Transition Type"
+msgid "Quart"
+msgstr "Quart (เศษหนึ่งส่วนสี่)"
+
+msgctxt "Transition Type"
+msgid "Bounce"
+msgstr "เด้ง"
+
+msgctxt "Transition Type"
+msgid "Spring"
+msgstr "สปริง"
+
+msgctxt "Ease Type"
+msgid "InOut"
+msgstr "เข้าออก"
+
+msgctxt "Ease Type"
+msgid "OutIn"
+msgstr "ออกเข้า"
+
 msgid "Select Tracks to Copy"
 msgstr "เลือกแทร็กที่จะคัดลอก"
 
 msgid "Select All/None"
 msgstr "เลือกทั้งหมด/ไม่เลือก"
+
+msgid "Close"
+msgstr "ปิด"
+
+msgid "Error!"
+msgstr "ผิดพลาด!"
 
 msgid "Add Audio Track Clip"
 msgstr "เพิ่มคลิปแทร็กเสียง"
@@ -875,6 +986,9 @@ msgstr "แทนที่ทั้งหมด"
 msgid "Selection Only"
 msgstr "เฉพาะที่กำลังเลือก"
 
+msgid "Hide"
+msgstr "ซ่อน"
+
 msgid "Toggle Scripts Panel"
 msgstr "เปิด/ปิดแผงสคริปต์"
 
@@ -907,6 +1021,9 @@ msgid ""
 "target node."
 msgstr "ไม่พบเมธอดเป้าหมาย ระบุเมธอดที่ถูกต้องหรือเพิ่มสคริปต์ในโนดเป้าหมาย"
 
+msgid "%s: Callback code won't be generated, please add it manually."
+msgstr "%s: ไม่สามารถสร้างรหัสการโทรกลับได้ กรุณาเพิ่มรหัสด้วยตนเอง"
+
 msgid "Connect to Node:"
 msgstr "เชื่อมต่อกับโนด:"
 
@@ -922,6 +1039,9 @@ msgstr "ไม่มีสคริปต์ในฉาก"
 msgid "Select Method"
 msgstr "เลือกเมท็อด"
 
+msgid "No method found matching given filters."
+msgstr "ไม่พบวิธีการที่ตรงกับตัวกรองที่กำหนด"
+
 msgid "Remove"
 msgstr "ลบ"
 
@@ -930,6 +1050,9 @@ msgstr "เพิ่มตัวแปร:"
 
 msgid "Extra Call Arguments:"
 msgstr "ตัวแปรเพิ่มเติม:"
+
+msgid "Allows to drop arguments sent by signal emitter."
+msgstr "อนุญาตให้ลบอาร์กิวเมนต์ที่ส่งโดยตัวส่งสัญญาณ"
 
 msgid "Receiver Method:"
 msgstr "ตัวรับเมธอด:"
@@ -949,9 +1072,6 @@ msgstr "ตัดการเชื่อมต่อสัญญาณหลั
 
 msgid "Cannot connect signal"
 msgstr "ไม่สามารถเชื่อมต่อสัญญาณได้"
-
-msgid "Close"
-msgstr "ปิด"
 
 msgid "Connect"
 msgstr "เชื่อม"
@@ -1004,6 +1124,12 @@ msgstr "สร้าง %s ใหม่"
 msgid "No results for \"%s\"."
 msgstr "ไม่มีผลลัพธ์สำหรับ \"%s\""
 
+msgid "This class is marked as deprecated."
+msgstr "คลาสนี้ถูกทำเครื่องหมายว่าไม่สนับสนุนอีกต่อไป"
+
+msgid "This class is marked as experimental."
+msgstr "คลาสนี้ถูกทำเครื่องหมายว่าเป็นคลาสทดลอง"
+
 msgid "Favorites:"
 msgstr "ที่ชื่นชอบ:"
 
@@ -1037,8 +1163,32 @@ msgstr "คัดลอกตำแหน่งโหนด"
 msgid "Instance:"
 msgstr "อินสแตนซ์:"
 
+msgid ""
+"This node has been instantiated from a PackedScene file:\n"
+"%s\n"
+"Click to open the original file in the Editor."
+msgstr ""
+"โหนดนี้ถูกสร้างขึ้นจากไฟล์ PackedScene:\n"
+"%s\n"
+"คลิกเพื่อเปิดไฟล์ต้นฉบับใน Editor"
+
 msgid "Toggle Visibility"
 msgstr "ซ่อน/แสดง"
+
+msgid "Clear"
+msgstr "เคลียร์"
+
+msgid "Updating assets on target device:"
+msgstr "การอัปเดตสินทรัพย์บนอุปกรณ์เป้าหมาย:"
+
+msgid "Getting remote file system"
+msgstr "การรับระบบไฟล์ระยะไกล"
+
+msgid "Sending list of changed files:"
+msgstr "ส่งรายการไฟล์ที่เปลี่ยนแปลง:"
+
+msgid "ms"
+msgstr "ms (มิลลิวินาที)"
 
 msgid "Monitors"
 msgstr "มอนิเตอร์"
@@ -1058,9 +1208,6 @@ msgstr "หยุด"
 msgid "Start"
 msgstr "เริ่ม"
 
-msgid "Clear"
-msgstr "เคลียร์"
-
 msgid "Measure:"
 msgstr "วัด:"
 
@@ -1076,6 +1223,20 @@ msgstr "รวม"
 msgid "Self"
 msgstr "ตัวเอง"
 
+msgid ""
+"Inclusive: Includes time from other functions called by this function.\n"
+"Use this to spot bottlenecks.\n"
+"\n"
+"Self: Only count the time spent in the function itself, not in other "
+"functions called by that function.\n"
+"Use this to find individual functions to optimize."
+msgstr ""
+"รวม: รวมเวลาจากฟังก์ชันอื่นที่เรียกใช้โดยฟังก์ชันนี้\n"
+"ใช้สิ่งนี้เพื่อระบุจุดคอขวด\n"
+"\n"
+"ตนเอง: นับเฉพาะเวลาที่ใช้ในฟังก์ชันนั้นเท่านั้น ไม่นับในฟังก์ชันอื่นที่เรียกใช้โดยฟังก์ชันนั้น\n"
+"ใช้สิ่งนี้เพื่อค้นหาฟังก์ชันแต่ละรายการเพื่อเพิ่มประสิทธิภาพ"
+
 msgid "Frame #:"
 msgstr "เฟรมที่:"
 
@@ -1088,6 +1249,15 @@ msgstr "เวลา"
 msgid "Calls"
 msgstr "จำนวนครั้ง"
 
+msgid "CPU"
+msgstr "ซีพียู"
+
+msgid "GPU"
+msgstr "จีพียู"
+
+msgid "Execution resumed."
+msgstr "การดำเนินการเริ่มต้นอีกครั้ง"
+
 msgid "Bytes:"
 msgstr "ไบต์:"
 
@@ -1097,8 +1267,14 @@ msgstr "ผิดพลาด:"
 msgid "Stack Trace"
 msgstr "แทร็กสแตค"
 
+msgid "Debug session closed."
+msgstr "เซสชันแก้ไขปิดแล้ว"
+
 msgid "Copy Error"
 msgstr "คัดลอกผิดพลาด"
+
+msgid "Open C++ Source on GitHub"
+msgstr "เปิดซอร์ส C++ บน GitHub"
 
 msgid "C++ Source"
 msgstr "C++ ต้นฉบับ"
@@ -1216,6 +1392,12 @@ msgstr "ค้นหาทรัพยากรมาแทนที่:"
 msgid "Open"
 msgstr "เปิด"
 
+msgid "Owners of: %s (Total: %d)"
+msgstr "เจ้าของ: %s (รวม: %d)"
+
+msgid "Localization remap for path '%s' and locale '%s'."
+msgstr "การรีแมปตำแหน่งสำหรับเส้นทาง '%s' และตำแหน่ง '%s'"
+
 msgid "Cannot remove:"
 msgstr "ไม่สามารถลบ:"
 
@@ -1252,11 +1434,11 @@ msgstr "เป็นเจ้าของ"
 msgid "Resources Without Explicit Ownership:"
 msgstr "รีซอร์สที่ไม่มีเจ้าของที่ชัดเจน:"
 
-msgid "Could not create folder."
-msgstr "ไม่สามารถสร้างโฟลเดอร์"
+msgid "Using slashes in folder names will create subfolders recursively."
+msgstr "การใช้เครื่องหมายทับในชื่อโฟลเดอร์จะสร้างโฟลเดอร์ย่อยขึ้นมาซ้ำๆ"
 
-msgid "Create Folder"
-msgstr "สร้างโฟลเดอร์"
+msgid "Double-click to open in browser."
+msgstr "ดับเบิลคลิกเพื่อเปิดในเบราว์เซอร์"
 
 msgid "Thanks from the Godot community!"
 msgstr "ขอขอบคุณจากชุมชนผู้ใช้ Godot!"
@@ -1276,6 +1458,9 @@ msgstr "ผู้พัฒนา"
 msgid "Authors"
 msgstr "ทีมงาน"
 
+msgid "Patrons"
+msgstr "ผู้สนับสนุน"
+
 msgid "Platinum Sponsors"
 msgstr "ผู้สนับสนุนระดับทองคำขาว"
 
@@ -1284,6 +1469,12 @@ msgstr "ผู้สนับสนุนระดับทอง"
 
 msgid "Silver Sponsors"
 msgstr "ผู้บริจาคระดับเงิน"
+
+msgid "Diamond Members"
+msgstr "สมาชิกระดับเพชร"
+
+msgid "Titanium Members"
+msgstr "สมาชิกระดับไททาเนียม"
 
 msgid "Donors"
 msgstr "ผู้บริจาค"
@@ -1313,11 +1504,43 @@ msgstr "ไลบรารี"
 msgid "Licenses"
 msgstr "สัญญาอนุญาต"
 
+msgid "%d file conflicts with your project and won't be installed"
+msgid_plural "%d files conflict with your project and won't be installed"
+msgstr[0] "ไฟล์ %d ไฟล์ขัดแย้งกับโครงการของคุณและจะไม่ได้รับการติดตั้ง"
+
+msgid "This asset doesn't have a root directory, so it can't be ignored."
+msgstr "สินทรัพย์นี้ไม่มีไดเร็กทอรีรูท ดังนั้นจึงไม่สามารถละเลยได้"
+
+msgid "Ignore the root directory when extracting files."
+msgstr "ไม่ต้องสนใจไดเร็กทอรีรูทเมื่อแตกไฟล์"
+
 msgid "Uncompressing Assets"
 msgstr "กำลังคลายบีบอัด"
 
+msgid "Asset \"%s\" installed successfully!"
+msgstr "ติดตั้งสินทรัพย์ \"%s\" สำเร็จแล้ว!"
+
 msgid "Success!"
 msgstr "สำเร็จ!"
+
+msgid "Open the list of the asset contents and select which files to install."
+msgstr "เปิดรายการเนื้อหาของสินทรัพย์และเลือกไฟล์ที่จะติดตั้ง"
+
+msgid ""
+"Change the folder where the contents of the asset are going to be installed."
+msgstr "เปลี่ยนโฟลเดอร์ที่จะติดตั้งเนื้อหาของทรัพย์สิน"
+
+msgid "Ignore asset root"
+msgstr "ไม่สนใจรากสินทรัพย์"
+
+msgid "Show contents of the asset and conflicting files."
+msgstr "แสดงเนื้อหาของทรัพย์สินและไฟล์ที่ขัดแย้ง"
+
+msgid "Contents of the asset:"
+msgstr "เนื้อหาของสินทรัพย์:"
+
+msgid "Configure Asset Before Installing"
+msgstr "กำหนดค่าสินทรัพย์ก่อนการติดตั้ง"
 
 msgid "Install"
 msgstr "ติดตั้ง"
@@ -1400,14 +1623,11 @@ msgstr "ตำแหน่งของเลย์เอาต์ใหม่...
 msgid "Open Audio Bus Layout"
 msgstr "เปิดเลย์เอาต์ของบัสเสียง"
 
-msgid "There is no '%s' file."
-msgstr "ไม่มีไฟล์ '%s'"
-
-msgid "Invalid file, not an audio bus layout."
-msgstr "ไฟล์ไม่ถูกต้อง ไม่ใช่เลย์เอาต์ของ Audio Bus"
-
 msgid "Error saving file: %s"
 msgstr "ผิดพลาดขณะบันทึกไฟล์: %s"
+
+msgid "Layout:"
+msgstr "เลย์เอาต์:"
 
 msgid "Add Bus"
 msgstr "เพิ่มบัส"
@@ -1436,6 +1656,18 @@ msgstr "โหลดค่าเริ่มต้นเลย์เอาต์
 msgid "Create a new Bus Layout."
 msgstr "สร้างเลย์เอาต์บัสใหม่"
 
+msgid "Must not collide with an existing engine class name."
+msgstr "จะต้องไม่ชนกับชื่อคลาสเครื่องยนต์ที่มีอยู่"
+
+msgid "Must not collide with an existing global script class name."
+msgstr "จะต้องไม่ขัดแย้งกับชื่อคลาสสคริปต์ Global ที่มีอยู่"
+
+msgid "Must not collide with an existing built-in type name."
+msgstr "ต้องไม่ขัดแย้งกับชื่อประเภทที่มีอยู่แล้วภายใน"
+
+msgid "Must not collide with an existing global constant name."
+msgstr "จะต้องไม่ขัดแย้งกับชื่อค่าคงที่ Global ที่มีอยู่"
+
 msgid "Autoload '%s' already exists!"
 msgstr "มีออโต้โหลด '%s' อยู่แล้ว!"
 
@@ -1454,20 +1686,88 @@ msgstr "เปิด"
 msgid "Rearrange Autoloads"
 msgstr "จัดลำดับออโต้โหลด"
 
+msgid "%s is an invalid path. File does not exist."
+msgstr "%s เป็นเส้นทางที่ไม่ถูกต้อง ไฟล์ไม่มีอยู่"
+
 msgid "%s is an invalid path. Not in resource path (res://)."
 msgstr "เส้นทางไฟล์ %s ไม่ถูกต้อง: ไม่มีในเส้นทางไฟล์ (res://)"
 
 msgid "Path:"
 msgstr "ตำแหน่ง:"
 
+msgid "Set path or press \"%s\" to create a script."
+msgstr "ตั้งค่าเส้นทางหรือกด \"%s\" เพื่อสร้างสคริปต์"
+
 msgid "Node Name:"
 msgstr "ชื่อโนด:"
+
+msgid "3D Engine"
+msgstr "เอ็นจิ้น 3D"
+
+msgid "2D Physics"
+msgstr "ฟิสิกส์ 2 มิติ"
+
+msgid "3D Physics"
+msgstr "ฟิสิกส์ 3 มิติ"
 
 msgid "Navigation"
 msgstr "ตัวนำทาง"
 
+msgid "RenderingDevice"
+msgstr "ตัวเรนเดอร์"
+
 msgid "Vulkan"
 msgstr "Vulkan"
+
+msgid "Text Server: Fallback"
+msgstr "ข้อความจากเซิร์ฟเวอร์: สำรอง"
+
+msgid "Text Server: Advanced"
+msgstr "ข้อความจากเซิร์ฟเวอร์: ขั้นสูง"
+
+msgid "TTF, OTF, Type 1, WOFF1 Fonts"
+msgstr "ฟอนต์ TTF, OTF, Type 1, WOFF1"
+
+msgid "SIL Graphite Fonts"
+msgstr "ฟอนต์ SIL Graphite"
+
+msgid "Multi-channel Signed Distance Field Font Rendering"
+msgstr "การเรนเดอร์ฟอนต์ฟิลด์ระยะห่างที่มีการเซ็นชื่อหลายช่องทาง"
+
+msgid "3D Nodes as well as RenderingServer access to 3D features."
+msgstr "3D Nodes รวมถึงการเข้าถึงฟีเจอร์ 3D ของ RenderingServer"
+
+msgid "2D Physics nodes and PhysicsServer2D."
+msgstr "โหนดฟิสิกส์ 2D และ PhysicsServer2D"
+
+msgid ""
+"TrueType, OpenType, Type 1, and WOFF1 font format support using FreeType "
+"library (if disabled, WOFF2 support is also disabled)."
+msgstr ""
+"รองรับรูปแบบฟอนต์ TrueType, OpenType, Type 1 และ WOFF1 โดยใช้ไลบรารี FreeType "
+"(หากปิดใช้งาน การรองรับ WOFF2 จะถูกปิดใช้งานด้วยเช่นกัน)"
+
+msgid "WOFF2 font format support using FreeType and Brotli libraries."
+msgstr "รูปแบบฟอนต์ WOFF2 รองรับการใช้ไลบรารี FreeType และ Brotli"
+
+msgid ""
+"SIL Graphite smart font technology support (supported by Advanced Text Server "
+"only)."
+msgstr ""
+"รองรับเทคโนโลยีฟอนต์อัจฉริยะ SIL Graphite (รองรับโดย Advanced Text Server เท่านั้น)"
+
+msgid ""
+"Multi-channel signed distance field font rendering support using msdfgen "
+"library (pre-rendered MSDF fonts can be used even if this option disabled)."
+msgstr ""
+"รองรับการเรนเดอร์ฟอนต์ฟิลด์ระยะห่างที่ลงนามหลายช่องทางโดยใช้ไลบรารี msdfgen "
+"(สามารถใช้ฟอนต์ MSDF ที่เรนเดอร์ไว้ล่วงหน้าได้ แม้ว่าตัวเลือกนี้จะปิดใช้งานอยู่ก็ตาม)"
+
+msgid "Text Rendering and Font Options:"
+msgstr "ตัวเลือกการแสดงผลข้อความและแบบอักษร:"
+
+msgid "This will scan all files in the current project to detect used classes."
+msgstr "การดำเนินการนี้จะสแกนไฟล์ทั้งหมดในโปรเจ็กต์ปัจจุบันเพื่อตรวจหาคลาสที่ใช้"
 
 msgid "File '%s' format is invalid, import aborted."
 msgstr "นามสกุลของไฟล์ '%s' ผิดพลาด ยกเลิกการนำเข้า"
@@ -1487,6 +1787,9 @@ msgstr "รีเซ็ตเป็นค่าเริ่มต้น"
 msgid "Export Profile"
 msgstr "ส่งออกโปรไฟล์"
 
+msgid "Forced Classes on Detect:"
+msgstr "คลาสบังคับในการตรวจจับ:"
+
 msgid "Paste Params"
 msgstr "วางตัวแปร"
 
@@ -1505,8 +1808,14 @@ msgstr "[ว่างเปล่า]"
 msgid "[unsaved]"
 msgstr "[ไฟล์ใหม่]"
 
+msgid "%s - Godot Engine"
+msgstr "%s - Godot Engine"
+
 msgid "Dock Position"
 msgstr "ตำแหน่งแผง"
+
+msgid "Move this dock to the bottom panel."
+msgstr "ย้ายแท่นนี้ไปที่แผงด้านล่าง"
 
 msgid "3D Editor"
 msgstr "ตัวแก้ไข 3D"
@@ -1555,6 +1864,9 @@ msgstr ""
 "สามารถตั้งค่าการนำเข้าการตั้งต่าสำหรับ asset ต่าง ๆ ได้ ต้องการหน้าต่าง FileSystem "
 "เพื่อใช้งานฟังก์ชันนี้"
 
+msgid "Provides an overview of the editor's and each scene's undo history."
+msgstr "ให้ภาพรวมของประวัติการเลิกทำของตัวแก้ไขและแต่ละฉาก"
+
 msgid "(none)"
 msgstr "(ว่าง)"
 
@@ -1582,6 +1894,9 @@ msgstr "ตั้งค่าคลาส:"
 msgid "Enable Contextual Editor"
 msgstr "เปิดการทำงานตัวแก้ไขตามบริบท"
 
+msgid "Main Features:"
+msgstr "คุณสมบัติหลัก:"
+
 msgid ""
 "Profile '%s' already exists. Remove it first before importing, import aborted."
 msgstr "มีโปรไฟล์ '%s' อยู่แล้ว กรุณาลบก่อนที่จะนำเข้า, การนำเข้าถูกยกเลิก"
@@ -1600,6 +1915,9 @@ msgstr "นำเข้า"
 
 msgid "Export"
 msgstr "ส่งออก"
+
+msgid "Extra Options:"
+msgstr "ตัวเลือกเพิ่มเติม:"
 
 msgid "Create or import a profile to edit available classes and properties."
 msgstr "สร้าง หรือนำเข้าโปรไฟล์การตั้งค่าเพื่อแก้ไขฟังก์ชัน/คลาสและคุณสมบัติต่าง ๆ"
@@ -1632,6 +1950,12 @@ msgstr "มีการนำเข้าไฟล์ %s หลายอัน �
 
 msgid "(Re)Importing Assets"
 msgstr "กำลังนำเข้าทรัพยากร(อีกครั้ง)"
+
+msgid "Import resources of type: %s"
+msgstr "นำเข้าทรัพยากรประเภท: %s"
+
+msgid "This value is an integer composed as a bitmask of the following flags."
+msgstr "ค่านี้เป็นจำนวนเต็มที่ประกอบเป็นบิตมาสก์ของแฟล็กต่อไปนี้"
 
 msgid "Constructors"
 msgstr "ตัวสร้าง"
@@ -1698,20 +2022,14 @@ msgstr "คุณสมบัตินี้ยังไม่มีคำอธ
 msgid "Editor"
 msgstr "ตัวแก้ไข"
 
-msgid "Property:"
-msgstr "คุณสมบัติ:"
+msgid "Show in FileSystem"
+msgstr "แสดงในรูปแบบไฟล์"
 
-msgid "Signal:"
-msgstr "สัญญาณ:"
+msgid "Open in File Manager"
+msgstr "เปิดโฟลเดอร์"
 
-msgid "%d matches."
-msgstr "%d ตรงกัน"
-
-msgid "Method"
-msgstr "เมธอด"
-
-msgid "Signal"
-msgstr "สัญญาณ"
+msgid "Class"
+msgstr "คลาส"
 
 msgid "Constant"
 msgstr "คงที่"
@@ -1721,6 +2039,18 @@ msgstr "คุณสมบัติ"
 
 msgid "Theme Property"
 msgstr "คุณสมบัติธีม"
+
+msgid "Method"
+msgstr "เมธอด"
+
+msgid "Signal"
+msgstr "สัญญาณ"
+
+msgid "File"
+msgstr "ไฟล์"
+
+msgid "%d matches."
+msgstr "%d ตรงกัน"
 
 msgid "Search Help"
 msgstr "ค้นหาความช่วยเหลือ"
@@ -1755,9 +2085,6 @@ msgstr "คุณสมบัติธีมเท่านั้น"
 msgid "Member Type"
 msgstr "ชนิดสมาชิก"
 
-msgid "Class"
-msgstr "คลาส"
-
 msgid "Move Up"
 msgstr "เลื่อนขึ้น"
 
@@ -1773,8 +2100,8 @@ msgstr "ขนาดใหม่:"
 msgid "Set %s"
 msgstr "ตั้ง %s"
 
-msgid "Name:"
-msgstr "ชื่อ:"
+msgid "Favorites"
+msgstr "ที่ชื่นชอบ"
 
 msgid "Creating Mesh Previews"
 msgstr "กำลังสร้างภาพตัวอย่าง Mesh"
@@ -1879,15 +2206,6 @@ msgstr "รีซอร์สนี้ถูกนำเข้าจึงไม
 msgid "Open Base Scene"
 msgstr "เปิดไฟล์ฉากที่ใช้สืบทอด"
 
-msgid "Quick Open..."
-msgstr "เปิดด่วน..."
-
-msgid "Quick Open Scene..."
-msgstr "เปิดฉากด่วน..."
-
-msgid "Quick Open Script..."
-msgstr "เปิดสคริปต์ด่วน..."
-
 msgid ""
 "A root node is required to save the scene. You can add a root node using the "
 "Scene tree dock."
@@ -1895,9 +2213,6 @@ msgstr "จำเป็นต้องมีโนดรากในการบ
 
 msgid "Save Scene As..."
 msgstr "บันทึกฉากเป็น..."
-
-msgid "Current scene not saved. Open anyway?"
-msgstr "ฉากปัจจุบันยังไม่ได้บันทึก จะเปิดไฟล์หรือไม่?"
 
 msgid "Remote Undo: %s"
 msgstr "เลิกทำระยะไกล: %s"
@@ -1948,30 +2263,6 @@ msgstr "ฉาก '%s' มีการอ้างอิงสูญหาย:"
 
 msgid "Clear Recent Scenes"
 msgstr "ล้างรายการฉากล่าสุด"
-
-msgid ""
-"No main scene has ever been defined, select one?\n"
-"You can change it later in \"Project Settings\" under the 'application' "
-"category."
-msgstr ""
-"ยังไม่ได้กำหนดฉากเริ่มต้น กำหนดตอนนี้หรือไม่?\n"
-"สามารถแก้ไขภายหลังที่ \"ตัวเลือกโปรเจกต์\" ใต้หัวข้อ 'application'"
-
-msgid ""
-"Selected scene '%s' does not exist, select a valid one?\n"
-"You can change it later in \"Project Settings\" under the 'application' "
-"category."
-msgstr ""
-"ไม่มีฉาก '%s' ที่เลือกไว้ เลือกใหม่ตอนนี้หรือไม่?\n"
-"สามารถแก้ไขภายหลังที่ \"ตัวเลือกโปรเจกต์\" ใต้หัวข้อ 'application'"
-
-msgid ""
-"Selected scene '%s' is not a scene file, select a valid one?\n"
-"You can change it later in \"Project Settings\" under the 'application' "
-"category."
-msgstr ""
-"'%s' ไม่ใช่ไฟล์ฉาก เลือกใหม่ตอนนี้หรือไม่?\n"
-"สามารถแก้ไขภายหลังที่ \"ตัวเลือกโปรเจกต์\" ใต้หัวข้อ 'application'"
 
 msgid "Default"
 msgstr "ค่าเริ่มต้น"
@@ -2030,6 +2321,15 @@ msgstr "เปิดไฟล์ล่าสุด"
 msgid "Save Scene"
 msgstr "บันทึกฉาก"
 
+msgid "Quick Open..."
+msgstr "เปิดด่วน..."
+
+msgid "Quick Open Scene..."
+msgstr "เปิดฉากด่วน..."
+
+msgid "Quick Open Script..."
+msgstr "เปิดสคริปต์ด่วน..."
+
 msgid "MeshLibrary..."
 msgstr "ไลบรารี Mesh..."
 
@@ -2044,6 +2344,12 @@ msgstr "ตั้งค่าตัวแก้ไข"
 
 msgid "Project"
 msgstr "โปรเจกต์"
+
+msgid "Project Settings..."
+msgstr "การตั้งค่าโปรเจกต์..."
+
+msgid "Project Settings"
+msgstr "การตั้งค่าโปรเจกต์"
 
 msgid "Version Control"
 msgstr "เวอร์ชันคอนโทรล"
@@ -2108,6 +2414,9 @@ msgstr "คุณสมบัติ"
 msgid "Node"
 msgstr "โนด"
 
+msgid "Output"
+msgstr "เอาท์พุต"
+
 msgid "Don't Save"
 msgstr "ไม่บันทึก"
 
@@ -2132,12 +2441,8 @@ msgstr "ส่งออกไลบรารี"
 msgid "Open & Run a Script"
 msgstr "เปิดและรันสคริปต์"
 
-msgid ""
-"The following files are newer on disk.\n"
-"What action should be taken?"
-msgstr ""
-"ไฟล์เหล่านี้มีความใหม่กว่าบนดิสก์\n"
-"ต้องจะทำอย่างไรต่อไป?"
+msgid "Version Control Settings..."
+msgstr "การตั้งค่าระบบจัดการเวอร์ชัน"
 
 msgid "New Inherited"
 msgstr "สืบทอด"
@@ -2241,17 +2546,11 @@ msgstr "ไม่ใช้ร่วมกับวัตถุอื่น"
 msgid "Save As..."
 msgstr "บันทึกเป็น..."
 
-msgid "Show in FileSystem"
-msgstr "แสดงในรูปแบบไฟล์"
-
 msgid "New %s"
 msgstr "%s ใหม่"
 
 msgid "New Script..."
 msgstr "สคริปต์ใหม่..."
-
-msgid "Remote Debug"
-msgstr "ดีบักระยะไกล"
 
 msgid ""
 "No runnable export preset found for this platform.\n"
@@ -2264,6 +2563,9 @@ msgstr ""
 msgid "Write your logic in the _run() method."
 msgstr "เขียนโปรแกรมในเมท็อด _run()"
 
+msgid "None"
+msgstr "ไม่มี"
+
 msgid "Common"
 msgstr "ทั่วไป"
 
@@ -2272,6 +2574,9 @@ msgstr "การตั้งค่าตัวแก้ไข"
 
 msgid "General"
 msgstr "ทั่วไป"
+
+msgid "Filter Settings"
+msgstr "กรองการตั้งค่า"
 
 msgid "The editor must be restarted for changes to take effect."
 msgstr "ต้องเปิดตัวแก้ไขใหม่เพื่อให้การเปลี่ยนแปลงมีผล"
@@ -2342,6 +2647,9 @@ msgstr "กำลังคลายเทมเพลตส่งออก"
 msgid "Importing:"
 msgstr "กำลังนำเข้า:"
 
+msgid "Official export templates aren't available for development builds."
+msgstr "ไม่มีเทมเพลตการส่งออกอย่างเป็นทางการสำหรับรุ่นผู้พัฒนา"
+
 msgid "Uncompressing Android Build Sources"
 msgstr "กำลังคลาย Android Build Sources"
 
@@ -2353,9 +2661,6 @@ msgstr "รุ่นปัจจุบัน:"
 
 msgid "Uninstall"
 msgstr "ถอนการติดตั้ง"
-
-msgid "Official export templates aren't available for development builds."
-msgstr "ไม่มีเทมเพลตการส่งออกอย่างเป็นทางการสำหรับรุ่นผู้พัฒนา"
 
 msgid "Select Template File"
 msgstr "เลือกไฟล์เทมเพลต"
@@ -2462,9 +2767,6 @@ msgstr "จัดการเทมเพลตส่งออก"
 msgid "Browse"
 msgstr "ค้นหา"
 
-msgid "Favorites"
-msgstr "ที่ชื่นชอบ"
-
 msgid "View items as a grid of thumbnails."
 msgstr "แสดงไอเทมในรูปแบบตาราง"
 
@@ -2499,6 +2801,9 @@ msgstr "ทำซ้ำไฟล์:"
 msgid "Duplicating folder:"
 msgstr "ทำซ้ำโฟลเดอร์:"
 
+msgid "Create Folder"
+msgstr "สร้างโฟลเดอร์"
+
 msgid "New Inherited Scene"
 msgstr "ฉากสืบทอดใหม่"
 
@@ -2519,9 +2824,6 @@ msgstr "ลบจากที่่ชื่นชอบ"
 
 msgid "Reimport"
 msgstr "นำเข้าใหม่"
-
-msgid "Open in File Manager"
-msgstr "เปิดโฟลเดอร์"
 
 msgid "New Folder..."
 msgstr "สร้างโฟลเดอร์..."
@@ -2602,12 +2904,6 @@ msgstr "เลือกโฟลเดอร์ปัจจุบัน"
 msgid "Select This Folder"
 msgstr "เลือกโฟลเดอร์นี้"
 
-msgid "All Recognized"
-msgstr "ทุกนามสุกลที่รู้จัก"
-
-msgid "All Files (*)"
-msgstr "ทุกไฟล์ (*)"
-
 msgid "Open a File"
 msgstr "เปิดไฟล์"
 
@@ -2622,6 +2918,9 @@ msgstr "เปิดไฟล์หรือโฟลเดอร์"
 
 msgid "Save a File"
 msgstr "บันทึกไฟล์"
+
+msgid "Could not create folder."
+msgstr "ไม่สามารถสร้างโฟลเดอร์"
 
 msgid "Go Back"
 msgstr "ย้อนกลับ"
@@ -2665,11 +2964,11 @@ msgstr "รีเฟรชไฟล์"
 msgid "(Un)favorite current folder."
 msgstr "เพิ่ม/ลบโฟลเดอร์ปัจจุบันไปยังที่ชื่นชอบ"
 
-msgid "Toggle the visibility of hidden files."
-msgstr "เปิด/ปิดการแสดงไฟล์ที่ซ่อน"
-
 msgid "Directories & Files:"
 msgstr "ไฟล์และโฟลเดอร์:"
+
+msgid "Toggle the visibility of hidden files."
+msgstr "เปิด/ปิดการแสดงไฟล์ที่ซ่อน"
 
 msgid "Preview:"
 msgstr "ตัวอย่าง:"
@@ -2680,14 +2979,17 @@ msgstr "ไฟล์:"
 msgid "No sub-resources found."
 msgstr "ไม่พบทรัพยากรย่อย"
 
+msgid " (recently opened)"
+msgstr " (เปิดเมื่อเร็วๆ นี้)"
+
 msgid "Play the project."
 msgstr "เล่นโปรเจกต์"
 
 msgid "Play the edited scene."
 msgstr "เล่นฉากปัจจุบัน"
 
-msgid "Quick Run Scene..."
-msgstr "เริ่มฉากด่วน..."
+msgid "Network Profiler"
+msgstr "โปรไฟล์เน็ตเวิร์ก"
 
 msgid "Play This Scene"
 msgstr "เล่นฉากนี้"
@@ -2719,6 +3021,9 @@ msgid ""
 msgstr ""
 "กด %s ค้างเพื่อปัดเศษเป็นจำนวนเต็ม\n"
 "กด Shift ค้างเพื่อเพิ่มความแม่นยำของการเปลี่ยนแปลง"
+
+msgid "(unknown)"
+msgstr "(ไม่ทราบ)"
 
 msgid "Toggle Visible"
 msgstr "ซ่อน/แสดง"
@@ -3094,18 +3399,6 @@ msgstr "แก้ไขการผสานไปข้างหน้า"
 msgid "Change Blend Time"
 msgstr "แก้ไขระยะเวลาการผสาน"
 
-msgid "Play selected animation backwards from current pos. (A)"
-msgstr "เล่นแอนิเมชันที่เลือกย้อนหลังจากตำแหน่งปัจจุบัน (A)"
-
-msgid "Play selected animation backwards from end. (Shift+A)"
-msgstr "เล่นแอนิเมชันที่เลือกย้อนหลังจากท้ายสุด (Shift+A)"
-
-msgid "Play selected animation from start. (Shift+D)"
-msgstr "เล่นแอนิเมชันที่เลือกจากเริ่มต้น (Shift+D)"
-
-msgid "Play selected animation from current pos. (D)"
-msgstr "เล่นแอนิเมชันที่เลือกจากตำแหน่งปัจจุบัน (D)"
-
 msgid "Animation position (in seconds)."
 msgstr "ตำแหน่งแอนิเมชัน (วินาที)"
 
@@ -3165,9 +3458,6 @@ msgstr "รวมสัญลักษณ์ (3D)"
 
 msgid "Pin AnimationPlayer"
 msgstr "ปักหมุด AnimationPlayer"
-
-msgid "Error!"
-msgstr "ผิดพลาด!"
 
 msgid "Cross-Animation Blend Times"
 msgstr "ระยะเวลาการผสาน Cross-Animation"
@@ -3680,30 +3970,6 @@ msgstr "ความกว้างขวา"
 msgid "Full Rect"
 msgstr "สี่เหลี่ยมผืนผ้าเต็ม"
 
-msgid "Load Emission Mask"
-msgstr "โหลด Mask การปะทุ"
-
-msgid "Emission Mask"
-msgstr "มาส์กการปะทุ"
-
-msgid "Solid Pixels"
-msgstr "พิกเซลรวม"
-
-msgid "Border Pixels"
-msgstr "พิกเซลขอบ"
-
-msgid "Directed Border Pixels"
-msgstr "พิกเซลที่ติดกัน"
-
-msgid "Generate Visibility AABB"
-msgstr "สร้างการมองเห็น AABB"
-
-msgid "Create Emission Points From Node"
-msgstr "สร้างจุดปะทุจากโหนด"
-
-msgid "Generation Time (sec):"
-msgstr "เวลาในการสร้าง (วินาที):"
-
 msgid "Load Curve Preset"
 msgstr "โหลดพรีเซ็ตเส้นโค้ง"
 
@@ -3804,8 +4070,8 @@ msgstr "แก้ไขปลั๊กอิน"
 msgid "Installed Plugins:"
 msgstr "ปลั๊กอินที่ติดตั้งแล้ว:"
 
-msgid " - Variation"
-msgstr " - ชนิด"
+msgid "Variation"
+msgstr "รูปแบบ"
 
 msgid "Change AudioStreamPlayer3D Emission Angle"
 msgstr "แก้ไของศาการเปล่งเสียงของ AudioStreamPlayer3D"
@@ -3837,42 +4103,6 @@ msgstr "ปรับรัศมีแสง"
 msgid "Change Notifier AABB"
 msgstr "แก้ไข Notifier AABB"
 
-msgid "Convert to CPUParticles2D"
-msgstr "แปลงเป็น CPUParticles2D"
-
-msgid "Generate Visibility Rect"
-msgstr "สร้างกรอบการมองเห็น"
-
-msgid "The geometry's faces don't contain any area."
-msgstr "พื้นผิวของรูปเรขาคณิตไม่มีพื้นที่"
-
-msgid "The geometry doesn't contain any faces."
-msgstr "รูปเรขาคณิตไม่มีหน้า"
-
-msgid "\"%s\" doesn't contain geometry."
-msgstr "\"%s\" ไม่มีรูปทรงเรขาคณิต"
-
-msgid "\"%s\" doesn't contain face geometry."
-msgstr "\"%s\" ไม่มีหน้าของรูปทรงเรขาคณิต"
-
-msgid "Create Emitter"
-msgstr "สร้างตัวปะทุ"
-
-msgid "Emission Points:"
-msgstr "จุดปะทุ:"
-
-msgid "Surface Points"
-msgstr "จุดพื้นผิว"
-
-msgid "Surface Points+Normal (Directed)"
-msgstr "จุดพื้นผิว+เส้นบอกทิศ"
-
-msgid "Volume"
-msgstr "ระดับเสียง"
-
-msgid "Emission Source:"
-msgstr "แหล่งปะทุ:"
-
 msgid "Create Occluder Polygon"
 msgstr "สร้างรูปหลายเหลี่ยมกั้นแสง"
 
@@ -3882,9 +4112,6 @@ msgid ""
 msgstr ""
 "ไม่สามารถกำหนดตำแหน่งการบันทึกสำหรับภาพไลท์แมป\n"
 "บันทึกฉากของคุณแล้วลองอีกครั้ง"
-
-msgid "Failed creating lightmap images, make sure path is writable."
-msgstr "ผิดพลาดขณะสร้างภาพ lightmap กรุณาตรวจสอบว่าสามารถเขียนไฟล์ในตำแหน่งที่บันทึกได้"
 
 msgid "Bake Lightmaps"
 msgstr "สร้าง Lightmaps"
@@ -3901,9 +4128,6 @@ msgstr "ไม่สามารถสร้างรูปร่างขอบ
 msgid "Mesh is empty!"
 msgstr "Mesh ว่างเปล่า!"
 
-msgid "Create Navigation Mesh"
-msgstr "สร้าง Mesh นำทาง"
-
 msgid "Contained Mesh is not of type ArrayMesh."
 msgstr "Mesh ไม่ได้เป็นประเภท ArrayMesh"
 
@@ -3912,6 +4136,9 @@ msgstr "ผิดพลาดขณะสร้างแผ่นคลี่ UV
 
 msgid "No mesh to debug."
 msgstr "ไม่มีพื้นผิวให้แก้ไขจุดบกพร่อง"
+
+msgid "Create Navigation Mesh"
+msgstr "สร้าง Mesh นำทาง"
 
 msgid "Create Outline"
 msgstr "สร้างเส้นรอบรูป"
@@ -4042,11 +4269,8 @@ msgstr "จำนวน:"
 msgid "Populate"
 msgstr "สร้าง"
 
-msgid "Edit Poly"
-msgstr "แก้ไขรูปหลายเหลี่ยม"
-
-msgid "Edit Poly (Remove Point)"
-msgstr "แก้ไขรูปหลายเหลี่ยม (ลบจุด)"
+msgid "Please Confirm..."
+msgstr "กรุณายืนยัน..."
 
 msgid "Create Navigation Polygon"
 msgstr "สร้างรูปทรงนำทาง"
@@ -4081,6 +4305,9 @@ msgstr "แทรกคีย์แอนิเมชัน"
 msgid "Objects: %d\n"
 msgstr "วัตถุ: %d\n"
 
+msgid "Translating:"
+msgstr "การเลื่อนตำแหน่ง:"
+
 msgid "Top View."
 msgstr "มุมบน"
 
@@ -4104,12 +4331,6 @@ msgstr "จัดการแปลงให้เข้ากับวิว"
 
 msgid "Align Rotation with View"
 msgstr "จัดการหมุนให้เข้ากับวิว"
-
-msgid "None"
-msgstr "ไม่มี"
-
-msgid "Translating:"
-msgstr "การเลื่อนตำแหน่ง:"
 
 msgid "Rotating %s degrees."
 msgstr "หมุน %s องศา"
@@ -4323,6 +4544,66 @@ msgstr "ก่อน"
 msgid "Post"
 msgstr "หลัง"
 
+msgid "Generate Visibility Rect"
+msgstr "สร้างกรอบการมองเห็น"
+
+msgid "Load Emission Mask"
+msgstr "โหลด Mask การปะทุ"
+
+msgid "Solid Pixels"
+msgstr "พิกเซลรวม"
+
+msgid "Border Pixels"
+msgstr "พิกเซลขอบ"
+
+msgid "Directed Border Pixels"
+msgstr "พิกเซลที่ติดกัน"
+
+msgid "Emission Mask"
+msgstr "มาส์กการปะทุ"
+
+msgid "Convert to CPUParticles2D"
+msgstr "แปลงเป็น CPUParticles2D"
+
+msgid "Generation Time (sec):"
+msgstr "เวลาในการสร้าง (วินาที):"
+
+msgid "Generate Visibility AABB"
+msgstr "สร้างการมองเห็น AABB"
+
+msgid "\"%s\" doesn't contain geometry."
+msgstr "\"%s\" ไม่มีรูปทรงเรขาคณิต"
+
+msgid "\"%s\" doesn't contain face geometry."
+msgstr "\"%s\" ไม่มีหน้าของรูปทรงเรขาคณิต"
+
+msgid "Create Emission Points From Node"
+msgstr "สร้างจุดปะทุจากโหนด"
+
+msgid "The geometry's faces don't contain any area."
+msgstr "พื้นผิวของรูปเรขาคณิตไม่มีพื้นที่"
+
+msgid "The geometry doesn't contain any faces."
+msgstr "รูปเรขาคณิตไม่มีหน้า"
+
+msgid "Create Emitter"
+msgstr "สร้างตัวปะทุ"
+
+msgid "Emission Points:"
+msgstr "จุดปะทุ:"
+
+msgid "Surface Points"
+msgstr "จุดพื้นผิว"
+
+msgid "Surface Points+Normal (Directed)"
+msgstr "จุดพื้นผิว+เส้นบอกทิศ"
+
+msgid "Volume"
+msgstr "ระดับเสียง"
+
+msgid "Emission Source:"
+msgstr "แหล่งปะทุ:"
+
 msgid "Remove Point from Curve"
 msgstr "ลบจุดในเส้นโค้ง"
 
@@ -4358,9 +4639,6 @@ msgstr "ลบจุด"
 
 msgid "Close Curve"
 msgstr "ปิดเส้นโค้ง"
-
-msgid "Please Confirm..."
-msgstr "กรุณายืนยัน..."
 
 msgid "Mirror Handle Angles"
 msgstr "มุมตัวสะท้อน"
@@ -4420,13 +4698,6 @@ msgstr "คุณสมบัติโครงของ Polygon2D ไม่ไ�
 msgid "Sync Bones"
 msgstr "ซิงค์โครง"
 
-msgid ""
-"No texture in this polygon.\n"
-"Set a texture to be able to edit UV."
-msgstr ""
-"ไม่มีเทกเจอร์ในโพลีกอน\n"
-"ตั้งเทกเจอร์เพื่อที่จะปรับแต่ง UV ได้"
-
 msgid "Create UV Map"
 msgstr "สร้าง UV Map"
 
@@ -4462,20 +4733,14 @@ msgstr "เคลื่อนย้ายโพลีกอน"
 msgid "Paint Bone Weights"
 msgstr "เติมน้ำหนักโครง"
 
-msgid "Open Polygon 2D UV editor."
-msgstr "เปิดตัวแก้ไข Polygon 2D UV"
-
-msgid "Polygon 2D UV Editor"
-msgstr "ตัวแก้ไข Polygon 2D UV"
-
-msgid "UV"
-msgstr "UV"
-
 msgid "Points"
 msgstr "จุด"
 
 msgid "Polygons"
 msgstr "โพลีกอน"
+
+msgid "UV"
+msgstr "UV"
 
 msgid "Bones"
 msgstr "โครง"
@@ -4549,6 +4814,12 @@ msgstr "ซิงค์โครงกับโพลีกอน"
 msgid "Create Polygon3D"
 msgstr "สร้าง Polygon3D"
 
+msgid "Edit Poly"
+msgstr "แก้ไขรูปหลายเหลี่ยม"
+
+msgid "Edit Poly (Remove Point)"
+msgstr "แก้ไขรูปหลายเหลี่ยม (ลบจุด)"
+
 msgid "ERROR: Couldn't load resource!"
 msgstr "ผิดพลาด: โหลดรีซอร์สไม่ได้!"
 
@@ -4620,9 +4891,6 @@ msgstr "สลับการเรียงลำดับตามตัวอ
 
 msgid "Sort"
 msgstr "เรียง"
-
-msgid "File"
-msgstr "ไฟล์"
 
 msgid "Open..."
 msgstr "เปิด..."
@@ -4712,9 +4980,6 @@ msgstr "[ละเว้น]"
 msgid "Go to Function"
 msgstr "ไปยังฟังก์ชัน"
 
-msgid "Lookup Symbol"
-msgstr "ค้นหาสัญลักษณ์"
-
 msgid "Pick Color"
 msgstr "เลือกสี"
 
@@ -4790,6 +5055,9 @@ msgstr "ไปยังฟังก์ชัน..."
 msgid "Go to Line..."
 msgstr "ไปยังบรรทัด..."
 
+msgid "Lookup Symbol"
+msgstr "ค้นหาสัญลักษณ์"
+
 msgid "Toggle Breakpoint"
 msgstr "เปิด/ปิด เบรกพอยต์"
 
@@ -4801,6 +5069,12 @@ msgstr "ไปเบรกพอยต์ถัดไป"
 
 msgid "Go to Previous Breakpoint"
 msgstr "ไปเบรกพอยต์ก่อนหน้า"
+
+msgid "Shader Editor"
+msgstr "ตัวแก้ไขเชเดอร์"
+
+msgid "Toggle Shader Editor Bottom Panel"
+msgstr "เปิด/ปิดแผงตัวแก้ไขเชเดอร์"
 
 msgid "This skeleton has no bones, create some children Bone2D nodes."
 msgstr "โครงหลักนี้ยังไม่มีโครงใดๆ สร้างโหนดลูกของ Bone2D"
@@ -4913,6 +5187,18 @@ msgstr "ลบแอนิเมชัน"
 msgid "Animation Frames:"
 msgstr "เฟรมแอนิเมชัน:"
 
+msgid "Play selected animation backwards from current pos. (A)"
+msgstr "เล่นแอนิเมชันที่เลือกย้อนหลังจากตำแหน่งปัจจุบัน (A)"
+
+msgid "Play selected animation backwards from end. (Shift+A)"
+msgstr "เล่นแอนิเมชันที่เลือกย้อนหลังจากท้ายสุด (Shift+A)"
+
+msgid "Play selected animation from start. (Shift+D)"
+msgstr "เล่นแอนิเมชันที่เลือกจากเริ่มต้น (Shift+D)"
+
+msgid "Play selected animation from current pos. (D)"
+msgstr "เล่นแอนิเมชันที่เลือกจากตำแหน่งปัจจุบัน (D)"
+
 msgid "Zoom Reset"
 msgstr "รีเซ็ตการซูม"
 
@@ -4921,6 +5207,9 @@ msgstr "เลือกเฟรม"
 
 msgid "Size"
 msgstr "ขนาด"
+
+msgid "Auto Slice"
+msgstr "แบ่งอัตโนมัติ"
 
 msgid "Create Frames from Sprite Sheet"
 msgstr "สร้างเฟรมจากสไปรต์ชีต"
@@ -4945,9 +5234,6 @@ msgstr "สแแนปพิกเซล"
 
 msgid "Grid Snap"
 msgstr "สแนปเส้นกริด"
-
-msgid "Auto Slice"
-msgstr "แบ่งอัตโนมัติ"
 
 msgid "Step:"
 msgstr "ขนาด:"
@@ -5610,8 +5896,8 @@ msgid ""
 "Warning: You won't be able to open the project with previous versions of the "
 "engine anymore."
 msgstr ""
-"โปรเจกต์ที่เลือก \"%s\" ไม่ได้ระบุเวอร์ชั่น Godot ที่ซัพพอร์ตเอาไว้ในไฟล์การตั้งค่า (\"project."
-"godot\")\n"
+"โปรเจกต์ที่เลือก \"%s\" ไม่ได้ระบุเวอร์ชั่น Godot ที่ซัพพอร์ตเอาไว้ในไฟล์การตั้งค่า "
+"(\"project.godot\")\n"
 "\n"
 "ตำแหน่งโปรเจกต์: %s\n"
 "\n"
@@ -5641,6 +5927,23 @@ msgstr "สแกน"
 msgid "Loading, please wait..."
 msgstr "กำลังโหลด โปรดรอ..."
 
+msgid "Filter Projects"
+msgstr "กรองโปรเจ็กต์"
+
+msgid "Tags"
+msgstr "แท็ก"
+
+msgid "You don't have any projects yet."
+msgstr "คุณยังไม่มีโปรเจ็กต์ใดๆ"
+
+msgid ""
+"Get started by creating a new one,\n"
+"importing one that exists, or by downloading a project template from the "
+"Asset Library!"
+msgstr ""
+"เริ่มต้นด้วยการสร้างโปรเจกต์ใหม่,\n"
+"นำเข้าที่มีอยู่แล้ว, หรือดาวน์โหลดเทมเพล็ตโปรเจกต์จาก Asset Library!"
+
 msgid "Create New Project"
 msgstr "สร้างโปรเจกต์ใหม่"
 
@@ -5650,6 +5953,9 @@ msgstr "นำเข้าโปรเจกต์ที่มีอยู่เ
 msgid "Rename Project"
 msgstr "เปลี่ยนชื่อโปรเจกต์"
 
+msgid "Manage Tags"
+msgstr "จัดการแท็ก"
+
 msgid "Remove Missing"
 msgstr "ลบที่หายไป"
 
@@ -5658,6 +5964,9 @@ msgstr "เลือกโฟลเดอร์เพื่อสแกน"
 
 msgid "Remove All"
 msgstr "ลบทั้งหมด"
+
+msgid "Manage Project Tags"
+msgstr "จัดการแท็กโปรเจกต์"
 
 msgid "It would be a good idea to name your project."
 msgstr "ควรตั้งชื่อโปรเจกต์"
@@ -5681,17 +5990,8 @@ msgstr "ผิดพลาดขณะเปิดไฟล์แพคเกจ
 msgid "The following files failed extraction from package:"
 msgstr "ผิดพลาดขณะแยกไฟล์ต่อไปนี้จากแพคเกจ:"
 
-msgid "Import & Edit"
-msgstr "นำเข้าและแก้ไข"
-
-msgid "Create & Edit"
-msgstr "สร้างและแก้ไข"
-
 msgid "Install Project:"
 msgstr "ติดตั้งโปรเจกต์:"
-
-msgid "Install & Edit"
-msgstr "ติดตั้งและแก้ไข"
 
 msgid "Project Name:"
 msgstr "ชื่อโปรเจกต์:"
@@ -6059,35 +6359,14 @@ msgstr "ตำแหน่งฐานไม่ถูกต้อง"
 msgid "Wrong extension chosen."
 msgstr "เลือกนามสกุลไม่ถูกต้อง"
 
-msgid "Change Cylinder Radius"
-msgstr "ปรับรัศมีทรงกระบอก"
-
-msgid "Change Cylinder Height"
-msgstr "ปรับความสูงทรงกระบอก"
+msgid "Note: Built-in shaders can't be edited using an external editor."
+msgstr "หมายเหตุ: ไม่สามารถแก้ไขเชเดอร์ในตัวได้โดยใช้ตัวแก้ไขภายนอก"
 
 msgid "Change Torus Inner Radius"
 msgstr "แก้ไขรัศมีภายในของวงแหวน"
 
 msgid "Change Torus Outer Radius"
 msgstr "แก้ไขรัศมีภายนอกของวงแหวน"
-
-msgid "Next Plane"
-msgstr "ระนาบถัดไป"
-
-msgid "Previous Plane"
-msgstr "ระนาบก่อนหน้า"
-
-msgid "Plane:"
-msgstr "ระนาบ:"
-
-msgid "Next Floor"
-msgstr "ไปชั้นบน"
-
-msgid "Previous Floor"
-msgstr "ไปชั้นล่าง"
-
-msgid "Floor:"
-msgstr "ชั้น:"
 
 msgid "GridMap Delete Selection"
 msgstr "ลบที่เลือกใน GridMap"
@@ -6101,6 +6380,12 @@ msgstr "วางที่เลือกใน GridMap"
 msgid "GridMap Paint"
 msgstr "วาด GridMap"
 
+msgid "Previous Floor"
+msgstr "ไปชั้นล่าง"
+
+msgid "Next Floor"
+msgstr "ไปชั้นบน"
+
 msgid "Edit X Axis"
 msgstr "แก้ไขแกน X"
 
@@ -6110,6 +6395,12 @@ msgstr "แก้ไขแกน Y"
 msgid "Edit Z Axis"
 msgstr "แก้ไขแกน Z"
 
+msgid "GridMap Settings"
+msgstr "การตั้งค่า GridMap"
+
+msgid "Pick Distance:"
+msgstr "ระยะการเลือก:"
+
 msgid "Cursor Rotate X"
 msgstr "เคอร์เซอร์หมุนตามแกน X"
 
@@ -6118,39 +6409,6 @@ msgstr "เคอร์เซอร์หมุนตามแกน Y"
 
 msgid "Cursor Rotate Z"
 msgstr "เคอร์เซอร์หมุนตามแกน Z"
-
-msgid "Cursor Back Rotate X"
-msgstr "เคอร์เซอร์หมุนย้อนแกน X"
-
-msgid "Cursor Back Rotate Y"
-msgstr "เคอร์เซอร์หมุนย้อนแกน Y"
-
-msgid "Cursor Back Rotate Z"
-msgstr "เคอร์เซอร์หมุนย้อนแกน Z"
-
-msgid "Cursor Clear Rotation"
-msgstr "เคอร์เซอร์ลบการหมุน"
-
-msgid "Paste Selects"
-msgstr "วางที่เลือก"
-
-msgid "Cut Selection"
-msgstr "ตัดที่เลือก"
-
-msgid "Clear Selection"
-msgstr "ลบที่เลือก"
-
-msgid "Fill Selection"
-msgstr "เติมส่วนที่เลือก"
-
-msgid "Grid Map"
-msgstr "จำกัดด้วยเส้นตาราง"
-
-msgid "GridMap Settings"
-msgstr "การตั้งค่า GridMap"
-
-msgid "Pick Distance:"
-msgstr "ระยะการเลือก:"
 
 msgid "Give a MeshLibrary resource to this GridMap to use its meshes."
 msgstr "มอบทรัพยากร MeshLibrary ให้กับ GridMap นี้เพื่อใช้ mesh"
@@ -6175,9 +6433,6 @@ msgstr "RPC ขาออก"
 
 msgid "Config"
 msgstr "ตั้งค่า"
-
-msgid "Network Profiler"
-msgstr "โปรไฟล์เน็ตเวิร์ก"
 
 msgid "Delete Property?"
 msgstr "ลบคุณสมบัติ?"
@@ -6320,13 +6575,6 @@ msgid ""
 "shape resource for it!"
 msgstr "ต้องมีรูปทรงเพื่อให้ CollisionShape2D ทำงานได้ กรุณาสร้างรูปทรง!"
 
-msgid ""
-"Polygon-based shapes are not meant be used nor edited directly through the "
-"CollisionShape2D node. Please use the CollisionPolygon2D node instead."
-msgstr ""
-"รูปร่างโพลีกอนไม่สามารถใช้หรือแก้ไขโดยตรงจากโหนด CollisionShape2D กรุณาใช้โหนด "
-"CollisionPolygon2D แทน"
-
 msgid "Node A and Node B must be PhysicsBody2Ds"
 msgstr "โหนด A และ โหนด B จะต้องเป็น PhysicsBody2D"
 
@@ -6428,8 +6676,301 @@ msgstr "ซอร์สไม่ถูกต้องสำหรับเชด
 msgid "Invalid comparison function for that type."
 msgstr "ฟังก์ชันการเปรียบเทียบไม่ถูกต้องสำหรับประเภทนั้น"
 
+msgid "Varying may not be assigned in the '%s' function."
+msgstr "การ Varying ไม่สามารถกำหนดใน Function '%s' ได้"
+
+msgid "'%s' cannot be used within the '%s' processor function."
+msgstr "'%s' ไม่สามารถใช้งานภายใน Processor Function '%s' ได้"
+
+msgid ""
+"'%s' cannot be used here, because '%s' is called by the '%s' processor "
+"function (which is not allowed)."
+msgstr ""
+"'%s' ไม่สามารถใช้งานตรงนี้ได้ เพราะ '%s' ถูกเรียกใช้โดย Processor Function '%s' "
+"(ซึ่งไม่สามารถทำได้)"
+
+msgid "Assignment to function."
+msgstr "การกำหนดให้กับ Function"
+
+msgid "Swizzling assignment contains duplicates."
+msgstr "มีส่วนซ้ำของ Swizzling Assignment"
+
+msgid "Assignment to uniform."
+msgstr "การกำหนดให้กับ Uniform"
+
 msgid "Constants cannot be modified."
-msgstr "ค่าคงที่ไม่สามารถแก้ไขได้"
+msgstr "Constant จะไม่สามารถแก้ไขได้อีก"
+
+msgid ""
+"Sampler argument %d of function '%s' called more than once using both built-"
+"ins and uniform textures, this is not supported (use either one or the other)."
+msgstr ""
+"Sampler Argument %d ของ Function '%s' ถูกเรียกมากกว่าหนึ่งครั้งโดยใช้ทั้ง Built-in และ "
+"Uniform Texture ซึ่งไม่รองรับ (เลือกใช้อย่างใดอย่างหนึ่ง)"
+
+msgid ""
+"Sampler argument %d of function '%s' called more than once using textures "
+"that differ in either filter, repeat, or texture hint setting."
+msgstr ""
+"Sampler Argument %d ของ Function '%s' ถูกเรียกมากกว่าหนึ่งครั้งโดยใช้ Texture "
+"ที่มีความแตกต่างที่อาจเป็น Filter, Repeat หรือการตั้งค่า Texture Hint"
+
+msgid ""
+"Sampler argument %d of function '%s' called more than once using different "
+"built-ins. Only calling with the same built-in is supported."
+msgstr ""
+"Sampler Argument %d ของ Function %s ถูกเรียกใช้มากกว่าหนึ่งครั้งโดยใช้ Built-in "
+"ประเภทที่แตกต่างกัน ระบบรองรับการเรียกใช้งานแบบ Built-in ประเภทเดียวเท่านั้น"
+
+msgid "Array size is already defined."
+msgstr "Array Size ได้ถูกระบุอยู่แล้ว"
+
+msgid "Unknown array size is forbidden in that context."
+msgstr "ไม่อนุญาตให้ใช้ Array Size แบบไม่รู้ขนาดใน Context ดังกล่าว"
+
+msgid "Expected a positive integer constant."
+msgstr "ต้องการ Constant แบบ Integer ค่าจำนวนเต็มบวก"
+
+msgid "Invalid data type for the array."
+msgstr "ประเภทข้อมูลสำหรับ Array ไม่ถูกต้อง"
+
+msgid "Expected array initialization."
+msgstr "ต้องการตัวประกาศ Array"
+
+msgid "Cannot convert from '%s' to '%s'."
+msgstr "ไม่สามารถแปลงข้อมูลจาก '%s' ไป '%s' ได้"
+
+msgid "Expected ')' in expression."
+msgstr "ต้องการเครื่องหมาย ')' ใน Expression"
+
+msgid "Void value not allowed in expression."
+msgstr "ไม่อนุญาตให้ใช้ข้อมูลแบบ Void ใน Expression"
+
+msgid "Expected '(' after the type name."
+msgstr "ต้องการเครื่องหมาย '(' หลังจากชื่อ Type"
+
+msgid "No matching constructor found for: '%s'."
+msgstr "ไม่พบ Constructor สำหรับ: '%s'"
+
+msgid "Expected a function name."
+msgstr "โปรดใส่ชื่อ Function"
+
+msgid "Built-in function '%s' is not supported for the '%s' shader type."
+msgstr "Function แบบ Built-in '%s' ไม่รองรับ Shader Type แบบ '%s'"
+
+msgid "No matching function found for: '%s'."
+msgstr "ไม่พบ Function สำหรับ: '%s'"
+
+msgid "Varying '%s' cannot be passed for the '%s' parameter in that context."
+msgstr "การ Varying '%s' ไม่สามารถ Pass สำหรับ Parameter '%s' ใน Context ดังกล่าวได้"
+
+msgid ""
+"Unable to pass a multiview texture sampler as a parameter to custom function. "
+"Consider to sample it in the main function and then pass the vector result to "
+"it."
+msgstr ""
+"ไม่สามารถ Pass ข้อมูล Multiview Texture Sampler ในรูปแบบ Parameter ไปยัง Function "
+"แบบกำหนดเองได้ โปรด Sample ข้อมูลดังกล่าวใน Function หลักและจากนั้นให้ส่งผ่านผลลัพธ์ข้อมูล "
+"Vector ออกมาแทน"
+
+msgid "Unknown identifier in expression: '%s'."
+msgstr "ไม่รู้จัก Identifier ใน Expression: '%s'"
+
+msgid ""
+"%s has been removed in favor of using hint_%s with a uniform.\n"
+"To continue with minimal code changes add 'uniform sampler2D %s : hint_%s, "
+"filter_linear_mipmap;' near the top of your shader."
+msgstr ""
+"%s ได้ถูกนำออก ขอให้ใช้ hint_%s กับข้อมูล Uniform แทน\n"
+"เพื่อให้เกิดการแก้ไขโค้ดน้อยที่สุด ให้เพิ่ม 'uniform sampler2D %s : hint_%s, "
+"filter_linear_mipmap;' ที่โค้ดส่วนบนของ Shader ของคุณแทน"
+
+msgid "Can't use function as identifier: '%s'."
+msgstr "ไม่สามารถใช้ Function'%s' แบบ Identifier ได้"
+
+msgid "Only integer expressions are allowed for indexing."
+msgstr "อนุญาตให้ใช้ Integer Expression สำหรับ Indexing เท่านั้น"
+
+msgid "Index [%d] out of range [%d..%d]."
+msgstr "Index [%d] เกินระยะ [%d..%d] ที่กำหนด"
+
+msgid "Expected expression, found: '%s'."
+msgstr "ต้องการ Expression แต่พบ '%s' แทน"
+
+msgid "Empty statement. Remove ';' to fix this warning."
+msgstr "Statement ว่าง ให้นำ ';' ออกเพื่อแก้ปัญหาคำเตือนนี้"
+
+msgid "Expected an identifier as a member."
+msgstr "ต้องการ Identifier ให้เป็น Member"
+
+msgid "Cannot combine symbols from different sets in expression '.%s'."
+msgstr "ไม่สามารถรวม Symbol ของ Set ที่แตกต่างกันใน Expression '%s' ได้"
+
+msgid "Invalid member for '%s' expression: '.%s'."
+msgstr "Member ของ Expression '%s' ไม่ถูกต้อง: '%s'"
+
+msgid "An object of type '%s' can't be indexed."
+msgstr "Object ของประเภท '%s' ไม่สามารถ Index ได้"
+
+msgid "Invalid base type for increment/decrement operator."
+msgstr "Base Type ของ Increment/Decrement Operator ไม่ถูกต้อง"
+
+msgid "Invalid token for the operator: '%s'."
+msgstr "Token สำหรับ Operator ไม่ถูกต้อง: '%s'"
+
+msgid "Unexpected end of expression."
+msgstr "มีตัวอักษรที่ไม่ถูกต้องที่ท้ายสุดของคำสั่ง"
+
+msgid "Invalid arguments to unary operator '%s': %s."
+msgstr "Argument ถึง Unary Operator '%s' ไม่ถูกต้อง: '%s'"
+
+msgid "Missing matching ':' for select operator."
+msgstr "ตัว Matching ':' ของ Select Operator หายไป"
+
+msgid "Invalid argument to ternary operator: '%s'."
+msgstr "Argument ของ Ternary Operator ไม่ถูกต้อง: '%s'"
+
+msgid "Invalid arguments to operator '%s': '%s'."
+msgstr "Argument ของ Operator '%s' ไม่ถูกต้อง: '%s'"
+
+msgid "A switch may only contain '%s' and '%s' blocks."
+msgstr "สเตตเมนต์ 'switch' สามารถมีบล็อก'%s' และ '%s' ได้เท่านั้น"
+
+msgid "Expected variable type after precision modifier."
+msgstr "ต้องระบุประเภทตัวแปรหลังจาก Precision Modifier"
+
+msgid "Invalid variable type (samplers are not allowed)."
+msgstr "ประเภทตัวแปรไม่ถูกต้อง (ไม่อนุญาตให้ใช้ Samplers)"
+
+msgid "Expected an identifier or '[' after type."
+msgstr "ต้องการ Identifier หรือ '[' หลังจากประเภทข้อมูล"
+
+msgid "Expected an identifier."
+msgstr "ต้องการ Identifier"
+
+msgid "Expected array initializer."
+msgstr "ต้องระบุ Array Initializer"
+
+msgid "Expected data type after precision modifier."
+msgstr "ต้องระบุประเภทข้อมูลหลังจากการระบุ Precision Modifier"
+
+msgid "Expected a constant expression."
+msgstr "ต้องการนิพจน์สำหรับ Constant"
+
+msgid "Expected initialization of constant."
+msgstr "ต้องการข้อมูลเริ่มต้นสำหรับ Constant"
+
+msgid "Expected constant expression for argument %d of function call after '='."
+msgstr ""
+"ต้องการ Constant Expression สำหรับ Argument %d ของ Function Call หลังจากส่วน '='"
+
+msgid "Expected a boolean expression."
+msgstr "ต้องการนิพจน์ Boolean"
+
+msgid "Cases must be defined before default case."
+msgstr "Default Case ต้องประกาศหลังสุดเสมอ"
+
+msgid "Default case must be defined only once."
+msgstr "บล็อก Default Case มีได้อันเดียวเท่านั้น"
+
+msgid "'%s' must be placed within a '%s' block."
+msgstr "'%s' จะต้องอยู่ในบล็อก '%s'"
+
+msgid "Expected an integer constant."
+msgstr "ต้องการ Constant ประเภท Integer"
+
+msgid "Duplicated case label: %d."
+msgstr "Case Label ซ้ำกัน: '%d'"
+
+msgid "Using '%s' in the '%s' processor function is incorrect."
+msgstr "การใช้ '%s' ใน Processor Function '%s' นั้นไม่ถูกต้อง"
+
+msgid "Expected '%s' with an expression of type '%s'."
+msgstr "ต้องการ '%s' สำหรับนิพจน์ของชนิดข้อมูล '%s'"
+
+msgid "Expected return with an expression of type '%s'."
+msgstr "จำเป็นต้อง Return ค่ากลับสำหรับประเภทข้อมูล '%s'"
+
+msgid "'%s' is not allowed outside of a loop or '%s' statement."
+msgstr "'%s' ไม่อนุญาตให้อยู่นอก Loop หรือ Statement '%s'"
+
+msgid "'%s' is not allowed outside of a loop."
+msgstr "'%s' ไม่อนุญาตให้อยู่นอก Loop"
+
+msgid "The left expression is expected to be a variable declaration."
+msgstr "ฝั่งด้านซ้ายของนิพจน์จะต้องเป็นการประกาศตัวแปร"
+
+msgid "The precision modifier cannot be used on structs."
+msgstr "Precision Modifier ไม่สามารถใช้งานกับข้อมูลประเภท Struct ได้"
+
+msgid "The precision modifier cannot be used on boolean types."
+msgstr "Precision Modifier ไม่สามารถใช้งานกับข้อมูลประเภท Boolean ได้"
+
+msgid "Expected '%s' at the beginning of shader. Valid types are: %s."
+msgstr "ต้องการ '%s' ที่จุดเริ่มต้นของ Shader โดยชนิดที่ถูกต้องคือ: %s."
+
+msgid ""
+"Expected an identifier after '%s', indicating the type of shader. Valid types "
+"are: %s."
+msgstr "ต้องการ Identifier หลังจาก '%s' ซึ่งระบุชนิดของ Shader โดยชนิดที่ถูกต้องคือ: '%s'"
+
+msgid "Invalid shader type. Valid types are: %s"
+msgstr "Shader Type ผิด ที่ถูกต้องคือ: %s"
+
+msgid "Expected an identifier for render mode."
+msgstr "ต้องการ Identifier ของ Render Mode"
+
+msgid "Duplicated render mode: '%s'."
+msgstr "Render Mode ซ้ำ: '%s'"
+
+msgid ""
+"Redefinition of render mode: '%s'. The '%s' mode has already been set to '%s'."
+msgstr "Redefinition ของ Render Mode: '%s'. '%s' ได้ถูกตั้งค่าเป็น '%s' อยู่แล้ว"
+
+msgid "Invalid render mode: '%s'."
+msgstr "โหมด Render ไม่ถูกต้อง: '%s'"
+
+msgid "Unexpected token: '%s'."
+msgstr "Token เกินออกมา: '%s'"
+
+msgid "Expected a struct identifier."
+msgstr "ต้องการ Identifier เพิ่มเติมสำหรับ Struct"
+
+msgid "Nested structs are not allowed."
+msgstr "ไม่อนุญาตให้ประกาศ Struct แบบ Nested"
+
+msgid "Expected data type."
+msgstr "ประเภทข้อมูลหายไป"
+
+msgid "A '%s' data type is not allowed here."
+msgstr "ไม่อนุญาตให้ใช้ข้อมูลประเภท '%s' ตรงนี้"
+
+msgid "Expected an identifier or '['."
+msgstr "Identifier หรือ '[' หายไป"
+
+msgid "Empty structs are not allowed."
+msgstr "ไม่อนุญาตให้ประกาศ Struct แบบว่างเปล่า"
+
+msgid "Uniform instances are not yet implemented for '%s' shaders."
+msgstr "Uniform Instance ยังไม่รองรับสำหรับ Shader '%s' ในขณะนี้"
+
+msgid "Varyings cannot be used in '%s' shaders."
+msgstr "Varyings ไม่สามารถใช้งานกับ Shader '%s' ได้"
+
+msgid "Interpolation qualifiers are not supported for uniforms."
+msgstr "Inperpolation Qualifier ต่าง ๆ ไม่สามารถใช้งานได้กับ Uniform"
+
+msgid "The '%s' data type is not supported for uniforms."
+msgstr "ไม่สามารถรองรับประเภทข้อมูล '%s' สำหรับข้อมูล Uniform"
+
+msgid "The '%s' data type is not allowed here."
+msgstr "ไม่อนุญาตให้ใช้อักขระ '%s' ตรงนี้"
+
+msgid "Interpolation modifier '%s' cannot be used with boolean types."
+msgstr "Interpolation Modifier '%s' ไม่สามารถใช้งานกับข้อมูลชนิด Boolean ได้"
+
+msgid "Invalid data type for varying."
+msgstr "ประเภทข้อมูลสำหรับ varying ไม่ถูกต้อง"
 
 msgid "Invalid argument name."
 msgstr "ชื่อตัวแปรอาร์กูเมนท์ไม่ถูกต้อง"

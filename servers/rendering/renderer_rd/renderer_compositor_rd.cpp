@@ -242,18 +242,7 @@ void RendererCompositorRD::set_boot_image(const Ref<Image> &p_image, const Color
 	Rect2 imgrect(0, 0, p_image->get_width(), p_image->get_height());
 	Rect2 screenrect;
 	if (p_scale) {
-		if (window_size.width > window_size.height) {
-			//scale horizontally
-			screenrect.size.y = window_size.height;
-			screenrect.size.x = imgrect.size.x * window_size.height / imgrect.size.y;
-			screenrect.position.x = (window_size.width - screenrect.size.x) / 2;
-
-		} else {
-			//scale vertically
-			screenrect.size.x = window_size.width;
-			screenrect.size.y = imgrect.size.y * window_size.width / imgrect.size.x;
-			screenrect.position.y = (window_size.height - screenrect.size.y) / 2;
-		}
+		screenrect = OS::get_singleton()->calculate_boot_screen_rect(window_size, imgrect.size);
 	} else {
 		screenrect = imgrect;
 		screenrect.position += ((window_size - screenrect.size) / 2.0).floor();
@@ -382,23 +371,4 @@ RendererCompositorRD::~RendererCompositorRD() {
 	memdelete(uniform_set_cache);
 	memdelete(framebuffer_cache);
 	ShaderRD::set_shader_cache_dir(String());
-}
-
-void RendererCompositorRD::output_rendertarget_to_image(RID render_target_id, String output_path)
-{
-	RID rd_texture = texture_storage->render_target_get_rd_texture(render_target_id);
-	PackedByteArray texture_data = RD::get_singleton()->texture_get_data(rd_texture, 0);
-	Size2i texture_size = RD::get_singleton()->texture_size(rd_texture);
-	RD::TextureFormat texture_format = RD::get_singleton()->texture_get_format(rd_texture);
-	Ref<Image> img = Image::create_from_data(texture_size.width, texture_size.height, false, Image::FORMAT_RGBA8, texture_data);
-	img->save_png(output_path);
-}
-
-void RendererCompositorRD::output_shadow_atlas_to_image(RID shadow_atlas_id, String output_path)
-{
-	Ref<Image> rd_texture = texture_storage->texture_2d_get(shadow_atlas_id);
-
-	if (!rd_texture.is_null()) {
-		rd_texture->save_png(output_path);
-	}
 }

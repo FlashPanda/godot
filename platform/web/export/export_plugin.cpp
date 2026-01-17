@@ -192,9 +192,9 @@ Error EditorExportPlatformWeb::_add_manifest_icon(const String &p_path, const St
 
 	Ref<Image> icon;
 	if (!p_icon.is_empty()) {
-		icon.instantiate();
-		const Error err = ImageLoader::load_image(p_icon, icon);
-		if (err != OK) {
+		Error err = OK;
+		icon = _load_icon_or_splash_image(p_icon, &err);
+		if (err != OK || icon.is_null() || icon->is_empty()) {
 			add_message(EXPORT_MESSAGE_ERROR, TTR("Icon Creation"), vformat(TTR("Could not read file: \"%s\"."), p_icon));
 			return err;
 		}
@@ -338,9 +338,11 @@ Error EditorExportPlatformWeb::_build_pwa(const Ref<EditorExportPreset> &p_prese
 void EditorExportPlatformWeb::get_preset_features(const Ref<EditorExportPreset> &p_preset, List<String> *r_features) const {
 	if (p_preset->get("vram_texture_compression/for_desktop")) {
 		r_features->push_back("s3tc");
+		r_features->push_back("bptc");
 	}
 	if (p_preset->get("vram_texture_compression/for_mobile")) {
 		r_features->push_back("etc2");
+		r_features->push_back("astc");
 	}
 	if (p_preset->get("variant/thread_support").operator bool()) {
 		r_features->push_back("threads");

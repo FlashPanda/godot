@@ -137,6 +137,9 @@ class OS_Windows : public OS {
 
 	bool is_using_con_wrapper() const;
 
+	Vector<String> _get_video_adapter_driver_info_reg(const String &p_name) const;
+	Vector<String> _get_video_adapter_driver_info_wmi(const String &p_name) const;
+
 	// functions used by main to initialize/deinitialize the OS
 protected:
 	virtual void initialize() override;
@@ -251,6 +254,9 @@ public:
 	virtual String get_system_ca_certificates() override;
 
 	void set_main_window(HWND p_main_window) { main_window = p_main_window; }
+
+	virtual bool _test_create_rendering_device_and_gl(const String &p_display_driver) const override;
+	virtual bool _test_create_rendering_device(const String &p_display_driver) const override;
 
 	HINSTANCE get_hinstance() { return hInstance; }
 	OS_Windows(HINSTANCE _hInstance);

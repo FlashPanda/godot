@@ -279,17 +279,7 @@ bool RenderSceneBuffersRD::has_texture(const StringName &p_context, const String
 	return named_textures.has(key);
 }
 
-RID RenderSceneBuffersRD::create_texture(const StringName &p_context,
-	const StringName &p_texture_name,
-	const RD::DataFormat p_data_format,
-	const uint32_t p_usage_bits,
-	const RD::TextureSamples p_texture_samples,
-	const Size2i p_size,
-	const uint32_t p_layers,
-	const uint32_t p_mipmaps,
-	bool p_unique,
-	bool p_discardable)
-{
+RID RenderSceneBuffersRD::create_texture(const StringName &p_context, const StringName &p_texture_name, const RD::DataFormat p_data_format, const uint32_t p_usage_bits, const RD::TextureSamples p_texture_samples, const Size2i p_size, const uint32_t p_layers, const uint32_t p_mipmaps, bool p_unique, bool p_discardable) {
 	// Keep some useful data, we use default values when these are 0.
 	// 如果输入的尺寸为0，那么就用内部尺寸
 	Size2i size = p_size == Size2i(0, 0) ? internal_size : p_size;
@@ -396,15 +386,7 @@ RID RenderSceneBuffersRD::create_texture_view(const StringName &p_context, const
 RID RenderSceneBuffersRD::get_texture(const StringName &p_context, const StringName &p_texture_name) const {
 	NTKey key(p_context, p_texture_name);
 
-	// ERR_FAIL_COND_V(!named_textures.has(key), RID());
-
-	if (unlikely(!named_textures.has(key))) {
-		// 这里输出p_context和p_texture_name
-		_err_print_error(FUNCTION_STR, __FILE__, __LINE__,
-				 vformat("Condition \"!named_textures.has(key)\" is true. Context: \"%s\", Texture: \"%s\". Returning: RID()", p_context, p_texture_name));
-
-		return RID();
-	}
+	ERR_FAIL_COND_V(!named_textures.has(key), RID());
 
 	return named_textures[key].texture;
 }
@@ -733,8 +715,6 @@ uint32_t RenderSceneBuffersRD::get_color_usage_bits(bool p_resolve, bool p_msaa,
 	DEV_ASSERT((!p_resolve && !p_msaa) || (p_resolve != p_msaa));
 
 	uint32_t usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_INPUT_ATTACHMENT_BIT;
-	// Test
-	usage_bits |= RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
 	if (p_msaa) {
 		usage_bits |= RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
 	} else if (p_resolve) {
@@ -756,8 +736,7 @@ RD::DataFormat RenderSceneBuffersRD::get_depth_format(bool p_resolve, bool p_msa
 			p_storage ? RD::DATA_FORMAT_D24_UNORM_S8_UINT : RD::DATA_FORMAT_D32_SFLOAT_S8_UINT
 		};
 
-		bool supported_for_usage = RD::get_singleton()->texture_is_format_supported_for_usage(preferred_formats[0], get_depth_usage_bits(p_resolve, p_msaa, p_storage));
-		return  supported_for_usage ? preferred_formats[0] : preferred_formats[1];
+		return RD::get_singleton()->texture_is_format_supported_for_usage(preferred_formats[0], get_depth_usage_bits(p_resolve, p_msaa, p_storage)) ? preferred_formats[0] : preferred_formats[1];
 	}
 }
 
@@ -770,8 +749,7 @@ uint32_t RenderSceneBuffersRD::get_depth_usage_bits(bool p_resolve, bool p_msaa,
 	} else if (p_resolve) {
 		usage_bits |= RD::TEXTURE_USAGE_CAN_COPY_TO_BIT | (p_storage ? RD::TEXTURE_USAGE_STORAGE_BIT : 0);
 	} else {
-		// RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT can be removed. This is only used to output data.
-		usage_bits |= RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | RD::TEXTURE_USAGE_CAN_COPY_FROM_BIT;
+		usage_bits |= RD::TEXTURE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 	}
 
 	return usage_bits;
