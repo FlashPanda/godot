@@ -34,6 +34,7 @@
 #include "servers/rendering/renderer_rd/pipeline_cache_rd.h"
 #include "servers/rendering/renderer_rd/shaders/effects/blur_raster.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/copy.glsl.gen.h"
+#include "servers/rendering/renderer_rd/shaders/effects/my_post_process.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/copy_to_fb.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/cube_to_dp.glsl.gen.h"
 #include "servers/rendering/renderer_rd/shaders/effects/cubemap_downsampler.glsl.gen.h"
@@ -226,6 +227,19 @@ private:
 		PipelineCacheRD pipeline;
 	} cube_to_dp;
 
+	// My post process
+	struct MyPostProcessPushConstant {
+		float raster_size[2];
+		float reserved[2];
+	};
+
+	struct MyPostProcess {
+		MyPostProcessPushConstant push_constant;
+		MyPostProcessShaderRD shader;
+		RID shader_version;
+		RID pipeline;
+	} my_post_process;
+
 	// Cubemap effects
 
 	struct CubemapDownsamplerPushConstant {
@@ -357,6 +371,8 @@ public:
 	void cubemap_roughness_raster(RID p_source_rd_texture, RID p_dest_framebuffer, uint32_t p_face_id, uint32_t p_sample_count, float p_roughness, float p_size);
 
 	void merge_specular(RID p_dest_framebuffer, RID p_specular, RID p_base, RID p_reflection, uint32_t p_view_count);
+
+	void custom_my_post_process(RID p_source_rd_texture, RID p_dest_texture, const Rect2i &p_rect);
 };
 
 } // namespace RendererRD

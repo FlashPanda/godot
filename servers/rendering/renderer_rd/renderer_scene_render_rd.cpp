@@ -413,6 +413,7 @@ void RendererSceneRenderRD::_render_buffers_copy_depth_texture(const RenderDataR
 }
 
 void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const RenderDataRD *p_render_data) {
+
 	RendererRD::TextureStorage *texture_storage = RendererRD::TextureStorage::get_singleton();
 
 	ERR_FAIL_NULL(p_render_data);
@@ -423,6 +424,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 	ERR_FAIL_COND_MSG(p_render_data->reflection_probe.is_valid(), "Post processes should not be applied on reflection probes.");
 
 	// Glow, auto exposure and DoF (if enabled).
+	// 顺序是：DOF、Auto Exposure、Glow
 
 	Size2i target_size = rb->get_target_size();
 	bool can_use_effects = target_size.x >= 8 && target_size.y >= 8; // FIXME I think this should check internal size, we do all our post processing at this size...
@@ -577,6 +579,12 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 		}
 
 		RD::get_singleton()->draw_command_end_label();
+	}
+
+	if (can_use_effects) {
+		RID base_texture = rb->get_internal_texture();
+
+		copy_effects->custom_my_post_process(base_texture, base_texture, Rect2(Vector2(), color_size));
 	}
 
 	{
@@ -787,6 +795,8 @@ bool RendererSceneRenderRD::_debug_draw_can_use_effects(RS::ViewportDebugDraw p_
 			can_use_effects = true;
 			break;
 		// Modes that completely override rendering to draw debug information should disable camera effects.
+		// 完全接管渲染，用来绘制调试信息的显示模式，应该禁用相机效果。
+			// 但是话说回来，我如果是调试输出，和后效也没啥关系
 		case RS::VIEWPORT_DEBUG_DRAW_UNSHADED:
 		case RS::VIEWPORT_DEBUG_DRAW_OVERDRAW:
 		case RS::VIEWPORT_DEBUG_DRAW_WIREFRAME:

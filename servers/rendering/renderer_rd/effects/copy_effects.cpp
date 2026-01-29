@@ -90,6 +90,7 @@ CopyEffects::CopyEffects(bool p_prefer_raster_effects) {
 		copy_modes.push_back("\n#define MODE_CUBEMAP_ARRAY_TO_PANORAMA\n");
 		copy_modes.push_back("\n#define MODE_GBUFFER_ROUGHNESS_COPY\n");	// rgba16f
 
+
 		copy.shader.initialize(copy_modes);
 		memset(&copy.push_constant, 0, sizeof(CopyPushConstant));
 
@@ -100,6 +101,15 @@ CopyEffects::CopyEffects(bool p_prefer_raster_effects) {
 				copy.pipelines[i] = RD::get_singleton()->compute_pipeline_create(copy.shader.version_get_shader(copy.shader_version, i));
 			}
 		}
+	}
+	// my post process进行的测试
+	{
+		my_post_process.shader.initialize(Vector<String>());
+		memset(&my_post_process.push_constant, 0, sizeof(MyPostProcessPushConstant));
+
+		my_post_process.shader_version = my_post_process.shader.version_create();
+		my_post_process.pipeline = RD::get_singleton()->compute_pipeline_create(my_post_process.shader.version_get_shader(my_post_process.shader_version, 0));
+
 	}
 
 	{
@@ -1346,4 +1356,8 @@ void CopyEffects::merge_specular(RID p_dest_framebuffer, RID p_specular, RID p_b
 	RD::get_singleton()->draw_list_end();
 
 	RD::get_singleton()->draw_command_end_label();
+}
+
+void CopyEffects::custom_my_post_process(RID p_source_rd_texture, RID p_dest_texture, const Rect2i &p_rect) {
+
 }

@@ -20,6 +20,12 @@ from SCons import __version__ as scons_raw_version
 # an `editor.py` file at the root of the module creates a clash with the editor
 # folder when doing `import editor.template_builder`)
 
+# --- Force MSVC to English + UTF-8 output for all child processes --- #
+os.environ.setdefault("VSLANG", "1033")        # 1033 = English
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+os.environ.setdefault("LANG", "en_US.UTF-8")
+os.environ.setdefault("LC_ALL", "C")
+# -------------------------------------------------------------------- #
 
 def _helper_module(name, path):
     spec = spec_from_file_location(name, path)
