@@ -146,6 +146,9 @@ class Node3DEditorViewport : public Control {
 		VIEW_DISPLAY_DEBUG_GBUFFER_DEPTH,
 		VIEW_DISPLAY_DEBUG_GBUFFER_ROUGHNESS,
 
+		CUSTOM_DISPLAY,
+		CUSTOM_DISPLAY_DEBUG_MY_POST_PROCESS,
+
 		VIEW_DISPLAY_DEBUG_PSSM_SPLITS,
 		VIEW_DISPLAY_NORMAL_BUFFER,
 		VIEW_DISPLAY_DEBUG_SHADOW_ATLAS,
@@ -257,6 +260,8 @@ private:
 
 	MenuButton *view_menu = nullptr;
 	PopupMenu *display_submenu = nullptr;
+
+	PopupMenu *custom_submenu = nullptr;	// 自定义菜单
 
 	Control *surface = nullptr;
 	SubViewport *viewport = nullptr;

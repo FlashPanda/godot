@@ -5616,6 +5616,11 @@ Node3DEditorViewport::Node3DEditorViewport(Node3DEditor *p_spatial_editor, int p
 	display_submenu->add_radio_check_item(TTR("Internal Buffer"), VIEW_DISPLAY_INTERNAL_BUFFER);
 	view_menu->get_popup()->add_submenu_node_item(TTR("Display Advanced..."), display_submenu, VIEW_DISPLAY_ADVANCED);
 
+	custom_submenu = memnew(PopupMenu);
+	custom_submenu->set_hide_on_checkable_item_selection(false);
+	custom_submenu->add_radio_check_item(TTR("My Post Process"), CUSTOM_DISPLAY_DEBUG_MY_POST_PROCESS);
+	view_menu->get_popup()->add_submenu_node_item(TTR("My Custom ..."), custom_submenu, CUSTOM_DISPLAY);
+
 	view_menu->get_popup()->add_separator();
 	view_menu->get_popup()->add_check_shortcut(ED_SHORTCUT("spatial_editor/view_environment", TTRC("View Environment")), VIEW_ENVIRONMENT);
 	view_menu->get_popup()->add_check_shortcut(ED_SHORTCUT("spatial_editor/view_gizmos", TTRC("View Gizmos")), VIEW_GIZMOS);

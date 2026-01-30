@@ -1794,6 +1794,8 @@ public:
 		VIEWPORT_DEBUG_DRAW_OCCLUDERS,					// 绘制 CPU 生成的遮挡剔除缓冲，显示遮挡体光栅化结果。
 		VIEWPORT_DEBUG_DRAW_MOTION_VECTORS,				// 绘制运动向量缓冲，用于时域抗锯齿（TAA）运动补偿。
 		VIEWPORT_DEBUG_DRAW_INTERNAL_BUFFER,			// 绘制引擎内部后处理使用的缓冲区，以便调试中间输出。
+
+		VIEWPORT_DEBUG_MY_POST_PROCESS,
 	};
 
 	// 设置调试绘制模式
