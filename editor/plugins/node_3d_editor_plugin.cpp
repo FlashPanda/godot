@@ -3647,6 +3647,19 @@ void Node3DEditorViewport::_menu_option(int p_option) {
 			view_menu->get_popup()->set_item_checked(idx, current);
 
 		} break;
+
+		case VIEW_MY_POST_PROCESS: {
+			int idx = view_menu->get_popup()->get_item_index(VIEW_MY_POST_PROCESS);
+			bool current = view_menu->get_popup()->is_item_checked(idx);
+			current = !current;
+			if (current) {
+
+			} else {
+
+			}
+
+			view_menu->get_popup()->set_item_checked(idx, current);
+		}break;
 		case VIEW_PERSPECTIVE: {
 			view_menu->get_popup()->set_item_checked(view_menu->get_popup()->get_item_index(VIEW_PERSPECTIVE), true);
 			view_menu->get_popup()->set_item_checked(view_menu->get_popup()->get_item_index(VIEW_ORTHOGONAL), false);
@@ -3881,6 +3894,12 @@ void Node3DEditorViewport::_menu_option(int p_option) {
 				}
 			}
 		} break;
+
+		// case CUSTOM_DISPLAY_DEBUG_MY_POST_PROCESS: {
+		// 	custom_submenu->set_item_checked(0, true);
+		// 	viewport->set_custom_post_process();
+		// break;
+		// }
 	}
 }
 
@@ -5616,12 +5635,8 @@ Node3DEditorViewport::Node3DEditorViewport(Node3DEditor *p_spatial_editor, int p
 	display_submenu->add_radio_check_item(TTR("Internal Buffer"), VIEW_DISPLAY_INTERNAL_BUFFER);
 	view_menu->get_popup()->add_submenu_node_item(TTR("Display Advanced..."), display_submenu, VIEW_DISPLAY_ADVANCED);
 
-	custom_submenu = memnew(PopupMenu);
-	custom_submenu->set_hide_on_checkable_item_selection(false);
-	custom_submenu->add_radio_check_item(TTR("My Post Process"), CUSTOM_DISPLAY_DEBUG_MY_POST_PROCESS);
-	view_menu->get_popup()->add_submenu_node_item(TTR("My Custom ..."), custom_submenu, CUSTOM_DISPLAY);
-
 	view_menu->get_popup()->add_separator();
+	view_menu->get_popup()->add_check_shortcut(ED_SHORTCUT("spatial_editor/view_environment", TTRC("Enable my post process")), VIEW_MY_POST_PROCESS);
 	view_menu->get_popup()->add_check_shortcut(ED_SHORTCUT("spatial_editor/view_environment", TTRC("View Environment")), VIEW_ENVIRONMENT);
 	view_menu->get_popup()->add_check_shortcut(ED_SHORTCUT("spatial_editor/view_gizmos", TTRC("View Gizmos")), VIEW_GIZMOS);
 	view_menu->get_popup()->add_check_shortcut(ED_SHORTCUT("spatial_editor/view_transform_gizmo", TTRC("View Transform Gizmo")), VIEW_TRANSFORM_GIZMO);
