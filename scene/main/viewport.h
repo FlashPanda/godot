@@ -680,6 +680,9 @@ public:
 	void set_vrs_texture(Ref<Texture2D> p_texture);
 	Ref<Texture2D> get_vrs_texture() const;
 
+	// 设置启用自定义后处理
+	void set_post_process(bool p_enable);
+
 	virtual DisplayServer::WindowID get_window_id() const = 0;
 
 	void set_embedding_subwindows(bool p_embed);

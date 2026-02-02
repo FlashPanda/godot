@@ -765,6 +765,8 @@ public:
 	FUNC2(viewport_set_vrs_update_mode, RID, ViewportVRSUpdateMode)
 	FUNC2(viewport_set_vrs_texture, RID, RID)
 
+	FUNC2(viewport_set_post_process, RID, bool)
+
 	/* COMPOSITOR EFFECT */
 
 #undef server_name

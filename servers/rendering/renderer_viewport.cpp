@@ -1702,6 +1702,11 @@ void RendererViewport::viewport_set_vrs_texture(RID p_viewport, RID p_texture) {
 	_configure_3d_render_buffers(viewport);
 }
 
+void RendererViewport::viewport_set_post_process(RID p_viewport, bool p_enable) {
+	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
+	ERR_FAIL_NULL(viewport);
+}
+
 bool RendererViewport::free(RID p_rid) {
 	if (viewport_owner.owns(p_rid)) {
 		Viewport *viewport = viewport_owner.get_or_null(p_rid);

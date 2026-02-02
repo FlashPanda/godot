@@ -582,7 +582,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 	}
 
 	//
-	if (can_use_effects && get_debug_draw_mode() == RS::ViewportDebugDraw::VIEWPORT_DEBUG_MY_POST_PROCESS) {
+	if (can_use_effects && false) {
 		RID base_texture = color_texture;
 		RID dest_texture = rb->create_texture(SNAME("MyPostProcess"), SNAME("post_temp"), _render_buffers_get_color_format(), RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT, RD::TEXTURE_SAMPLES_1, color_size);
 

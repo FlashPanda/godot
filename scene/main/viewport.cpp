@@ -3837,6 +3837,13 @@ void Viewport::set_vrs_texture(Ref<Texture2D> p_texture) {
 	RS::get_singleton()->viewport_set_vrs_texture(viewport, tex);
 }
 
+// 设置启用自定义后处理
+void Viewport::set_post_process(bool p_enable)
+{
+	ERR_MAIN_THREAD_GUARD;
+	RS::get_singleton()->viewport_set_post_process(viewport, p_enable);
+}
+
 Ref<Texture2D> Viewport::get_vrs_texture() const {
 	ERR_READ_THREAD_GUARD_V(Ref<Texture2D>());
 	return vrs_texture;

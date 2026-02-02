@@ -3652,11 +3652,7 @@ void Node3DEditorViewport::_menu_option(int p_option) {
 			int idx = view_menu->get_popup()->get_item_index(VIEW_MY_POST_PROCESS);
 			bool current = view_menu->get_popup()->is_item_checked(idx);
 			current = !current;
-			if (current) {
-
-			} else {
-
-			}
+			viewport->set_post_process(current);
 
 			view_menu->get_popup()->set_item_checked(idx, current);
 		}break;
