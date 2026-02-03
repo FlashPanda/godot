@@ -854,6 +854,8 @@ public:
 		return debug_draw;
 	}
 
+	void set_use_my_post_process(bool p_enable) override;
+
 	Ref<RenderSceneBuffers> render_buffers_create() override;
 	void gi_set_use_half_resolution(bool p_enable) override;
 

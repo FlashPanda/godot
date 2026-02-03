@@ -500,7 +500,6 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 		}
 		RD::get_singleton()->draw_command_end_label();
 	}
-
 	float auto_exposure_scale = 1.0;
 
 	if (can_use_effects && RSG::camera_attributes->camera_attributes_uses_auto_exposure(p_render_data->camera_attributes)) {
@@ -582,7 +581,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 	}
 
 	//
-	if (can_use_effects && false) {
+	if (can_use_effects && use_my_post_process) {
 		RID base_texture = color_texture;
 		RID dest_texture = rb->create_texture(SNAME("MyPostProcess"), SNAME("post_temp"), _render_buffers_get_color_format(), RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_STORAGE_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT, RD::TEXTURE_SAMPLES_1, color_size);
 
@@ -1468,6 +1467,10 @@ bool RendererSceneRenderRD::free(RID p_rid) {
 
 void RendererSceneRenderRD::set_debug_draw_mode(RS::ViewportDebugDraw p_debug_draw) {
 	debug_draw = p_debug_draw;
+}
+
+void RendererSceneRenderRD::set_use_my_post_process(bool p_enable) {
+	use_my_post_process = p_enable;
 }
 
 void RendererSceneRenderRD::update() {

@@ -121,6 +121,7 @@ protected:
 
 private:
 	RS::ViewportDebugDraw debug_draw = RS::VIEWPORT_DEBUG_DRAW_DISABLED;
+	bool use_my_post_process = false;
 	static RendererSceneRenderRD *singleton;
 
 	/* Shadow atlas */
@@ -327,6 +328,8 @@ public:
 	_FORCE_INLINE_ RS::ViewportDebugDraw get_debug_draw_mode() const {
 		return debug_draw;
 	}
+
+	virtual void set_use_my_post_process(bool p_enable) override;
 
 	virtual void set_time(double p_time, double p_step) override;
 

@@ -3831,6 +3831,10 @@ void RasterizerSceneGLES3::set_debug_draw_mode(RS::ViewportDebugDraw p_debug_dra
 	debug_draw = p_debug_draw;
 }
 
+void RasterizerSceneGLES3::set_use_my_post_process(bool p_enable) {
+
+}
+
 Ref<RenderSceneBuffers> RasterizerSceneGLES3::render_buffers_create() {
 	Ref<RenderSceneBuffersGLES3> rb;
 	rb.instantiate();

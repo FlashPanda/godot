@@ -123,6 +123,7 @@ public:
 
 		bool snap_2d_transforms_to_pixel = false;
 		bool snap_2d_vertices_to_pixel = false;
+		bool use_my_post_processing = false;	// 自定义标记
 
 		uint64_t time_cpu_begin;
 		uint64_t time_cpu_end;

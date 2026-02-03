@@ -952,6 +952,8 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 				// render...
 				RSG::scene->set_debug_draw_mode(vp->debug_draw);
 
+				RSG::scene->set_use_my_post_process(vp->use_my_post_processing);
+
 				// and draw viewport
 				_draw_viewport(vp);
 
@@ -979,6 +981,7 @@ void RendererViewport::draw_viewports(bool p_swap_buffers) {
 		{
 			// 设置调试绘制模式
 			RSG::scene->set_debug_draw_mode(vp->debug_draw);
+			RSG::scene->set_use_my_post_process(vp->use_my_post_processing);
 
 			// render standard mono camera
 			// 进行视口绘制
@@ -1705,6 +1708,8 @@ void RendererViewport::viewport_set_vrs_texture(RID p_viewport, RID p_texture) {
 void RendererViewport::viewport_set_post_process(RID p_viewport, bool p_enable) {
 	Viewport *viewport = viewport_owner.get_or_null(p_viewport);
 	ERR_FAIL_NULL(viewport);
+
+	viewport->use_my_post_processing = p_enable;
 }
 
 bool RendererViewport::free(RID p_rid) {

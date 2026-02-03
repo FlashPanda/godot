@@ -159,6 +159,8 @@ public:
 	void set_time(double p_time, double p_step) override {}
 	void set_debug_draw_mode(RS::ViewportDebugDraw p_debug_draw) override {}
 
+	void set_use_my_post_process(bool p_enable) override {}
+
 	Ref<RenderSceneBuffers> render_buffers_create() override { return Ref<RenderSceneBuffers>(); }
 	void gi_set_use_half_resolution(bool p_enable) override {}
 
