@@ -104,12 +104,13 @@ CopyEffects::CopyEffects(bool p_prefer_raster_effects) {
 	}
 	// my post process进行的测试
 	{
-		my_post_process.shader.initialize(Vector<String>());
+		Vector<String> copy_modes;
+		copy_modes.push_back("\n");
+		my_post_process.shader.initialize(copy_modes);
 		memset(&my_post_process.push_constant, 0, sizeof(MyPostProcessPushConstant));
 
 		my_post_process.shader_version = my_post_process.shader.version_create();
 		my_post_process.pipeline = RD::get_singleton()->compute_pipeline_create(my_post_process.shader.version_get_shader(my_post_process.shader_version, 0));
-
 	}
 
 	{
@@ -1372,16 +1373,15 @@ void CopyEffects::custom_my_post_process(RID p_source_rd_texture, RID p_dest_tex
 	// setup our uniforms
 	RID default_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
 
-	RD::Uniform u_source_rd_texture(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({ default_sampler, p_source_rd_texture }));
-	RD::Uniform u_dest_texture(RD::UNIFORM_TYPE_IMAGE, 0, p_dest_texture);
+	RD::Uniform u_source_rd_texture(RD::UNIFORM_TYPE_IMAGE, 0, p_source_rd_texture );
+	// RD::Uniform u_dest_texture(RD::UNIFORM_TYPE_IMAGE, 0, p_dest_texture);
 
-	RID shader = my_post_process.shader.version_get_shader(copy.shader_version, 0);
+	RID shader = my_post_process.shader.version_get_shader(my_post_process.shader_version, 0);
 	ERR_FAIL_COND(shader.is_null());
 
 	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
 	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, my_post_process.pipeline);
 	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 0, u_source_rd_texture), 0);
-	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 3, u_dest_texture), 3);
 	RD::get_singleton()->compute_list_set_push_constant(compute_list, &my_post_process.push_constant, sizeof(MyPostProcessPushConstant));
 	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_rect.size.width, p_rect.size.height, 1);
 	RD::get_singleton()->compute_list_end();
