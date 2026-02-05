@@ -2062,7 +2062,7 @@ void fragment_shader(in SceneData scene_data) {
 				break;
 			}
 #endif
-
+    // todo: light complexity
 				if (!bool(directional_lights.data[i].mask & instances.data[instance_index].layer_mask)) {
 					continue; //not masked
 				}

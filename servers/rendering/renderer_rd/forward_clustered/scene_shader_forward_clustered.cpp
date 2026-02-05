@@ -917,13 +917,13 @@ void fragment() {
 )");
 		default_material = material_storage->material_allocate();
 		material_storage->material_initialize(default_material);
+		// 很奇怪，如果是将材质与着色器关联起来，为什么要通过material storage这东西弄？
+		// 因为Material只是个数据集，逻辑就用material storage来弄了。
 		material_storage->material_set_shader(default_material, default_shader);
 
 		// 从默认材质中获取材质数据，材质数据是这个RD的材质数据，是material storage里同名结构的子类 
 		MaterialData *md = static_cast<MaterialData *>(material_storage->material_get_data(default_material, RendererRD::MaterialStorage::SHADER_TYPE_3D));
 		default_shader_rd = md->shader_data->get_shader_variant(PIPELINE_VERSION_COLOR_PASS, 0, false);
-
-
 
 		default_material_shader_ptr = md->shader_data;		// 默认材质的着色器数据
 		default_material_uniform_set = md->uniform_set;		// 默认材质的uniform 集
@@ -934,6 +934,7 @@ void fragment() {
 	 * 当你在编辑器里切到 Debug Draw → Overdraw（或渲染器进入对应调试模式）时，
 	 * 渲染器会用这一套统一的调试材质替换场景里所有物体的原材质，以可视化哪些区域
 	 * 被重复绘制了很多次（填充率/片元压力高）
+	 * 感觉就是alpha值不断增加所以形成了不透明的区域。越亮的地方填充率越高。
 	*/
 	{
 		overdraw_material_shader = material_storage->shader_allocate();
