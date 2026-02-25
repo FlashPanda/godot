@@ -1117,8 +1117,33 @@ vec3 encode24(vec3 v) {
 }
 #endif // MODE_RENDER_NORMAL_ROUGHNESS
 
+// Light complexity: green -> red -> white
+// 0..MAX_VIS   : green -> red
+// MAX_VIS..2x  : red   -> white
+// >=2xMAX_VIS  : white
+
+#define MAX_VIS 16.0
+
+vec3 light_complexity_color(float lightCount) {
+    float t = lightCount / MAX_VIS;
+
+    if (t <= 1.0) {
+        // green -> red
+        // t=0: (0,1,0)  t=1: (1,0,0)
+        return mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 0.0, 0.0), clamp(t, 0.0, 1.0));
+    } else if (t <= 2.0) {
+        // red -> white
+        // t=1: (1,0,0)  t=2: (1,1,1)
+        float u = clamp(t - 1.0, 0.0, 1.0);
+        return mix(vec3(1.0, 0.0, 0.0), vec3(1.0, 1.0, 1.0), u);
+    } else {
+        return vec3(1.0);
+    }
+}
+
 void fragment_shader(in SceneData scene_data) {
 	uint instance_index = instance_index_interp;
+	uint lightCount = 0;    // count light sources
 
 #ifdef PREMUL_ALPHA_USED
 	float premul_alpha = 1.0;
@@ -2394,6 +2419,7 @@ void fragment_shader(in SceneData scene_data) {
 
 			float size_A = sc_use_directional_soft_shadows() ? directional_lights.data[i].size : 0.0;
 
+            lightCount += 1;
 			light_compute(normal, directional_lights.data[i].direction, normalize(view), size_A,
 #ifndef DEBUG_DRAW_PSSM_SPLITS
 					directional_lights.data[i].color * directional_lights.data[i].energy,
@@ -2470,6 +2496,7 @@ void fragment_shader(in SceneData scene_data) {
 					continue; // Statically baked light and object uses lightmap, skip
 				}
 
+                lightCount += 1;
 				light_process_omni(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, scene_data.taa_frame_count, albedo, alpha, screen_uv,
 #ifdef LIGHT_BACKLIGHT_USED
 						backlight,
@@ -2538,6 +2565,7 @@ void fragment_shader(in SceneData scene_data) {
 					continue; // Statically baked light and object uses lightmap, skip
 				}
 
+                lightCount += 1;
 				light_process_spot(light_index, vertex, view, normal, vertex_ddx, vertex_ddy, f0, orms, scene_data.taa_frame_count, albedo, alpha, screen_uv,
 #ifdef LIGHT_BACKLIGHT_USED
 						backlight,
@@ -2799,6 +2827,10 @@ void fragment_shader(in SceneData scene_data) {
 #if defined(PREMUL_ALPHA_USED) && !defined(MODE_RENDER_DEPTH)
 	frag_color.rgb *= premul_alpha;
 #endif //PREMUL_ALPHA_USED
+
+#ifdef SHOW_LIGHT_COMPLETEX
+    frag_color.rgb = light_complexity_color(lightCount);
+#endif
 }
 
 void main() {
