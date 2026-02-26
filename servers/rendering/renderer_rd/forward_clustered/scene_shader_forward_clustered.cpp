@@ -289,6 +289,10 @@ uint16_t SceneShaderForwardClustered::ShaderData::_get_shader_version(PipelineVe
 				shader_flags |= SHADER_COLOR_PASS_FLAG_MULTIVIEW;
 			}
 
+			if (p_color_pass_flags & PIPELINE_COLOR_PASS_FLAG_LIGHT_COMPLEX) {
+				shader_flags |= SHADER_COLOR_PASS_FLAG_LIGHT_COMPLEX;
+			}
+
 			return ShaderVersion::SHADER_VERSION_DEPTH_PASS_WITH_MATERIAL + ShaderVersion::SHADER_VERSION_COLOR_PASS + shader_flags;
 		} break;
 		default: {
@@ -627,6 +631,7 @@ void SceneShaderForwardClustered::init(const String p_defines) {
 			"\n#define USE_LIGHTMAP\n", // SHADER_COLOR_PASS_FLAG_LIGHTMAP
 			"\n#define USE_MULTIVIEW\n", // SHADER_COLOR_PASS_FLAG_MULTIVIEW
 			"\n#define MOTION_VECTORS\n", // SHADER_COLOR_PASS_FLAG_MOTION_VECTORS
+			"\n#define SHOW_LIGHT_COMPLEX\n",	// SHADER_COLOR_PASS_FLAG_LIGHT_COMPLEX
 		};
 
 		for (int i = 0; i < SHADER_COLOR_PASS_FLAG_COUNT; i++) {

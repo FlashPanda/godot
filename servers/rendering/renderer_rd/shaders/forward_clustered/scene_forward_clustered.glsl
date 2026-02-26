@@ -2828,7 +2828,7 @@ void fragment_shader(in SceneData scene_data) {
 	frag_color.rgb *= premul_alpha;
 #endif //PREMUL_ALPHA_USED
 
-#ifdef SHOW_LIGHT_COMPLETEX
+#ifdef SHOW_LIGHT_COMPLEX
     frag_color.rgb = light_complexity_color(lightCount);
 #endif
 }
