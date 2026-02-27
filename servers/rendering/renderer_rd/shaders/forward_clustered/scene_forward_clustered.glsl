@@ -2087,7 +2087,6 @@ void fragment_shader(in SceneData scene_data) {
 				break;
 			}
 #endif
-    // todo: light complexity
 				if (!bool(directional_lights.data[i].mask & instances.data[instance_index].layer_mask)) {
 					continue; //not masked
 				}
@@ -2828,9 +2827,6 @@ void fragment_shader(in SceneData scene_data) {
 	frag_color.rgb *= premul_alpha;
 #endif //PREMUL_ALPHA_USED
 
-#ifdef SHOW_LIGHT_COMPLEX
-    frag_color.rgb = light_complexity_color(lightCount);
-#endif
 }
 
 void main() {
