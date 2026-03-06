@@ -4200,6 +4200,7 @@ RID RenderingDevice::render_pipeline_create(RID p_shader, FramebufferFormatID p_
 	}
 
 	// Validate shader vs. framebuffer.
+	// 校验着色器与framebuffer是否匹配
 	{
 		ERR_FAIL_COND_V_MSG(p_for_render_pass >= uint32_t(fb_format.E->key().passes.size()), RID(), "Render pass requested for pipeline creation (" + itos(p_for_render_pass) + ") is out of bounds");
 		const FramebufferPass &pass = fb_format.E->key().passes[p_for_render_pass];

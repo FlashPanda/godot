@@ -51,6 +51,7 @@
 #define RB_TEX_SPECULAR_MSAA SNAME("specular_msaa")
 #define RB_TEX_NORMAL_ROUGHNESS SNAME("normal_roughness")
 #define RB_TEX_NORMAL_ROUGHNESS_MSAA SNAME("normal_roughness_msaa")
+#define RB_TEX_NORMAL_ROUGHNESS_LIGHT SNAME("normal_roughness_light")
 #define RB_TEX_VOXEL_GI SNAME("voxel_gi")
 #define RB_TEX_VOXEL_GI_MSAA SNAME("voxel_gi_msaa")
 
@@ -162,6 +163,8 @@ public:
 		static uint32_t get_normal_roughness_usage_bits(bool p_resolve, bool p_msaa, bool p_storage);
 		static RD::DataFormat get_voxelgi_format();
 		static uint32_t get_voxelgi_usage_bits(bool p_resolve, bool p_msaa, bool p_storage);
+		static RD::DataFormat get_light_format();
+		static uint32_t get_light_usage_bits(bool p_storage);
 	};
 
 private:

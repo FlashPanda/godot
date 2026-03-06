@@ -366,6 +366,8 @@ public:
 	static uint32_t get_velocity_usage_bits(bool p_resolve, bool p_msaa, bool p_storage);
 	static RD::DataFormat get_vrs_format();
 	static uint32_t get_vrs_usage_bits();
+	static uint32_t get_light_usage_bits(bool p_storage);
+	static RD::DataFormat get_light_format(bool p_storage);
 
 private:
 	////////////////////////////////////////////////////////////////////////////////////////////////////////////

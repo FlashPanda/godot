@@ -755,6 +755,17 @@ uint32_t RenderSceneBuffersRD::get_depth_usage_bits(bool p_resolve, bool p_msaa,
 	return usage_bits;
 }
 
+uint32_t RenderSceneBuffersRD::get_light_usage_bits(bool p_storage) {
+	uint32_t usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_INPUT_ATTACHMENT_BIT;
+	usage_bits |= (p_storage ? RD::TEXTURE_USAGE_STORAGE_BIT : 0);
+
+	return usage_bits;
+}
+
+RD::DataFormat RenderSceneBuffersRD::get_light_format(bool p_storage) {
+	return RD::DATA_FORMAT_R32G32B32A32_SFLOAT;
+}
+
 RD::DataFormat RenderSceneBuffersRD::get_velocity_format() {
 	return RD::DATA_FORMAT_R16G16_SFLOAT;
 }

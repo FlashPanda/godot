@@ -976,17 +976,21 @@ layout(location = 0) out vec4 normal_roughness_output_buffer;
 
 #ifdef MODE_RENDER_VOXEL_GI
 layout(location = 1) out uvec2 voxel_gi_buffer;
-#endif
+layout(location = 2) out vec4 light_complex_output_buffer;
+#else
+layout(location = 1) out vec4 light_complex_output_buffer;
+#endif// MODE_RENDER_VOXEL_GI
 
-#endif //MODE_RENDER_NORMAL
-#else // RENDER DEPTH
+#endif //MODE_RENDER_NORMAL_ROUGHNESS
+#else // not MODE_RENDER_DEPTH
 
 #ifdef MODE_SEPARATE_SPECULAR
 
 layout(location = 0) out vec4 diffuse_buffer; //diffuse (rgb) and roughness
 layout(location = 1) out vec4 specular_buffer; //specular and SSS (subsurface scatter)
-#else
+#else // not MODE_SEPARATE_SPECULAR
 
+// not MODE_RENDER_DEPTH and Not MODE_SEPARATE_SPECULAR
 layout(location = 0) out vec4 frag_color;
 #endif // MODE_SEPARATE_SPECULAR
 
@@ -2827,6 +2831,9 @@ void fragment_shader(in SceneData scene_data) {
 	frag_color.rgb *= premul_alpha;
 #endif //PREMUL_ALPHA_USED
 
+#ifdef MODE_RENDER_NORMAL_ROUGHNESS
+    light_complex_output_buffer = vec4(float(lightCount), 0.0, 0.0, 0.0);
+#endif
 }
 
 void main() {

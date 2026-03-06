@@ -67,6 +67,9 @@ void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_normal_rou
 		if (msaa) {
 			render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS_MSAA, get_normal_roughness_format(), get_normal_roughness_usage_bits(false, msaa, render_buffers->get_can_be_storage()), render_buffers->get_texture_samples());
 		}
+		uint32_t usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_INPUT_ATTACHMENT_BIT;
+		usage_bits |= (render_buffers->get_can_be_storage() ? RD::TEXTURE_USAGE_STORAGE_BIT : 0);
+		render_buffers->create_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS_LIGHT, RD::DATA_FORMAT_R32G32B32A32_SFLOAT, usage_bits);
 	}
 }
 
@@ -219,8 +222,9 @@ RID RenderForwardClustered::RenderBufferDataForwardClustered::get_depth_fb(Depth
 			ensure_normal_roughness_texture();
 
 			RID normal_roughness_buffer = render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, use_msaa ? RB_TEX_NORMAL_ROUGHNESS_MSAA : RB_TEX_NORMAL_ROUGHNESS);
+			RID light_complex_buffer = render_buffers->get_texture(RB_SCOPE_FORWARD_CLUSTERED, RB_TEX_NORMAL_ROUGHNESS_LIGHT);
 
-			return FramebufferCacheRD::get_singleton()->get_cache_multiview(render_buffers->get_view_count(), depth, normal_roughness_buffer);
+			return FramebufferCacheRD::get_singleton()->get_cache_multiview(render_buffers->get_view_count(), depth, normal_roughness_buffer, light_complex_buffer);
 		} break;
 		case DEPTH_FB_ROUGHNESS_VOXELGI: {
 			ensure_normal_roughness_texture();
@@ -275,6 +279,17 @@ RD::DataFormat RenderForwardClustered::RenderBufferDataForwardClustered::get_vox
 
 uint32_t RenderForwardClustered::RenderBufferDataForwardClustered::get_voxelgi_usage_bits(bool p_resolve, bool p_msaa, bool p_storage) {
 	return RenderSceneBuffersRD::get_color_usage_bits(p_resolve, p_msaa, p_storage);
+}
+
+RD::DataFormat RenderForwardClustered::RenderBufferDataForwardClustered::get_light_format() {
+	return RD::DATA_FORMAT_R32G32B32A32_SFLOAT;
+}
+
+uint32_t RenderForwardClustered::RenderBufferDataForwardClustered::get_light_usage_bits(bool p_storage) {
+	uint32_t usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT | RD::TEXTURE_USAGE_COLOR_ATTACHMENT_BIT | RD::TEXTURE_USAGE_INPUT_ATTACHMENT_BIT;
+	usage_bits |= (p_storage ? RD::TEXTURE_USAGE_STORAGE_BIT : 0);
+
+	return usage_bits;
 }
 
 void RenderForwardClustered::setup_render_buffer_data(Ref<RenderSceneBuffersRD> p_render_buffers) {
@@ -2116,9 +2131,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			case PASS_MODE_DEPTH_NORMAL_ROUGHNESS: {
 				depth_framebuffer = rb_data->get_depth_fb(RenderBufferDataForwardClustered::DEPTH_FB_ROUGHNESS);
 				depth_pass_clear.push_back(Color(0, 0, 0, 0));
+				depth_pass_clear.push_back(Color(0, 0, 0, 0));
 			} break;
 			case PASS_MODE_DEPTH_NORMAL_ROUGHNESS_VOXEL_GI: {
 				depth_framebuffer = rb_data->get_depth_fb(RenderBufferDataForwardClustered::DEPTH_FB_ROUGHNESS_VOXELGI);
+				depth_pass_clear.push_back(Color(0, 0, 0, 0));
 				depth_pass_clear.push_back(Color(0, 0, 0, 0));
 				depth_pass_clear.push_back(Color(0, 0, 0, 0));
 			} break;
@@ -4804,6 +4821,11 @@ static RD::FramebufferFormatID _get_color_framebuffer_format_for_pipeline(RD::Da
 	attachment.usage_flags = RenderSceneBuffersRD::get_depth_usage_bits(false, multisampling, p_can_be_storage);
 	attachments.push_back(attachment);
 
+	// // Light attachment
+	// attachment.format = RenderSceneBuffersRD::get_light_format(p_can_be_storage);
+	// attachment.usage_flags = RenderSceneBuffersRD::get_light_usage_bits(p_can_be_storage);
+	// attachments.push_back(attachment);
+
 	thread_local Vector<RD::FramebufferPass> passes;
 	passes.resize(1);
 	passes.ptrw()[0].color_attachments.resize(attachments.size() - 1);
@@ -4854,6 +4876,10 @@ static RD::FramebufferFormatID _get_depth_framebuffer_format_for_pipeline(bool p
 
 	if (p_voxelgi) {
 		attachment.format = RenderForwardClustered::RenderBufferDataForwardClustered::get_voxelgi_format();
+		attachment.usage_flags = RenderForwardClustered::RenderBufferDataForwardClustered::get_voxelgi_usage_bits(false, multisampling, p_can_be_storage);
+		attachments.push_back(attachment);
+
+		attachment.format = RenderForwardClustered::RenderBufferDataForwardClustered::get_light_format();
 		attachment.usage_flags = RenderForwardClustered::RenderBufferDataForwardClustered::get_voxelgi_usage_bits(false, multisampling, p_can_be_storage);
 		attachments.push_back(attachment);
 	}
