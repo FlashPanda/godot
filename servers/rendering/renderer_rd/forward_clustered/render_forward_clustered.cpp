@@ -4872,16 +4872,21 @@ static RD::FramebufferFormatID _get_depth_framebuffer_format_for_pipeline(bool p
 		attachment.format = RenderForwardClustered::RenderBufferDataForwardClustered::get_normal_roughness_format();
 		attachment.usage_flags = RenderForwardClustered::RenderBufferDataForwardClustered::get_normal_roughness_usage_bits(false, multisampling, p_can_be_storage);
 		attachments.push_back(attachment);
-	}
 
-	if (p_voxelgi) {
-		attachment.format = RenderForwardClustered::RenderBufferDataForwardClustered::get_voxelgi_format();
-		attachment.usage_flags = RenderForwardClustered::RenderBufferDataForwardClustered::get_voxelgi_usage_bits(false, multisampling, p_can_be_storage);
-		attachments.push_back(attachment);
+		if (p_voxelgi) {
+			attachment.format = RenderForwardClustered::RenderBufferDataForwardClustered::get_voxelgi_format();
+			attachment.usage_flags = RenderForwardClustered::RenderBufferDataForwardClustered::get_voxelgi_usage_bits(false, multisampling, p_can_be_storage);
+			attachments.push_back(attachment);
 
-		attachment.format = RenderForwardClustered::RenderBufferDataForwardClustered::get_light_format();
-		attachment.usage_flags = RenderForwardClustered::RenderBufferDataForwardClustered::get_voxelgi_usage_bits(false, multisampling, p_can_be_storage);
-		attachments.push_back(attachment);
+			attachment.format = RenderForwardClustered::RenderBufferDataForwardClustered::get_light_format();
+			attachment.usage_flags = RenderForwardClustered::RenderBufferDataForwardClustered::get_light_usage_bits(p_can_be_storage);
+			attachments.push_back(attachment);
+		}
+		else {
+			attachment.format = RenderForwardClustered::RenderBufferDataForwardClustered::get_light_format();
+			attachment.usage_flags = RenderForwardClustered::RenderBufferDataForwardClustered::get_light_usage_bits(p_can_be_storage);
+			attachments.push_back(attachment);
+		}
 	}
 
 	thread_local Vector<RD::FramebufferPass> passes;
