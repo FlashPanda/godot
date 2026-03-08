@@ -835,6 +835,7 @@ bool RendererSceneRenderRD::_debug_draw_can_use_effects(RS::ViewportDebugDraw p_
 		case RS::VIEWPORT_DEBUG_DRAW_PSSM_SPLITS:
 		case RS::VIEWPORT_DEBUG_DRAW_SDFGI_PROBES:
 		case RS::VIEWPORT_DEBUG_DRAW_DISABLE_LOD:
+		case RS::VIEWPORT_DEBUG_DRAW_LIGHT_COMPLEXITY:
 			can_use_effects = true;
 			break;
 		default:
@@ -1053,6 +1054,11 @@ void RendererSceneRenderRD::_render_buffers_debug_draw(const RenderDataRD *p_ren
 
 		copy_effects->copy_roughness_to_rect(_render_buffers_get_normal_texture(rb), gbuffer_roughness_texture_rid, Rect2(Vector2(), rtsize));
 		copy_effects->copy_to_fb_rect(gbuffer_roughness_texture_rid, texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize));
+	}
+
+	if (debug_draw == RS::VIEWPORT_DEBUG_DRAW_LIGHT_COMPLEXITY && _render_buffers_get_normal_texture(rb).is_valid()) {
+		Size2 rtsize = texture_storage->render_target_get_size(render_target);
+		copy_effects->copy_to_fb_rect(_render_buffers_get_normal_texture(rb), texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize), false, false, false, false, RID(), false, false, false, true);
 	}
 }
 

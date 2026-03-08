@@ -1781,6 +1781,7 @@ public:
 		VIEWPORT_DEBUG_DRAW_GBUFFER_NORMAL,
 		VIEWPORT_DEBUG_DRAW_GBUFFER_DEPTH,
 		VIEWPORT_DEBUG_DRAW_GBUFFER_ROUGHNESS,
+		VIEWPORT_DEBUG_DRAW_LIGHT_COMPLEXITY,			// 光照复杂度
 		VIEWPORT_DEBUG_DRAW_PSSM_SPLITS,				// 为各级定向阴影切片着色（红、绿、蓝、黄），可视化级联范围。
 		VIEWPORT_DEBUG_DRAW_DECAL_ATLAS,				// 绘制贴花图集，显示所有 Decal 资源纹理。
 		VIEWPORT_DEBUG_DRAW_SDFGI,						// 绘制 SDFGI（Signed Distance Field GI）级联数据结构。
@@ -1793,7 +1794,7 @@ public:
 		VIEWPORT_DEBUG_DRAW_CLUSTER_REFLECTION_PROBES,	// 绘制反射探针聚类结果。
 		VIEWPORT_DEBUG_DRAW_OCCLUDERS,					// 绘制 CPU 生成的遮挡剔除缓冲，显示遮挡体光栅化结果。
 		VIEWPORT_DEBUG_DRAW_MOTION_VECTORS,				// 绘制运动向量缓冲，用于时域抗锯齿（TAA）运动补偿。
-		VIEWPORT_DEBUG_DRAW_INTERNAL_BUFFER,			// 绘制引擎内部后处理使用的缓冲区，以便调试中间输出。
+		VIEWPORT_DEBUG_DRAW_INTERNAL_BUFFER,			// 绘制引擎内部后处理使用的缓冲区，以便调试中间输出
 	};
 
 	// 设置调试绘制模式

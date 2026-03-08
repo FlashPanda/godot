@@ -2173,11 +2173,13 @@ void RenderDeferred::_render_scene(RenderDataRD *p_render_data, const Color &p_d
 					ce_needs_normal_roughness ||
 					get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_NORMAL_BUFFER ||
 					get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_GBUFFER_NORMAL ||
+					get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_LIGHT_COMPLEXITY ||
 					scene_state.used_normal_texture) {
 				depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS;
 			}
 		} else if (get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_NORMAL_BUFFER ||
 		get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_GBUFFER_NORMAL ||
+		get_debug_draw_mode() == RS::VIEWPORT_DEBUG_DRAW_LIGHT_COMPLEXITY ||
 			scene_state.used_normal_texture) {
 			depth_pass_mode = PASS_MODE_DEPTH_NORMAL_ROUGHNESS;
 		}
