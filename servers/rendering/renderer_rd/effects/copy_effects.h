@@ -121,6 +121,7 @@ private:
 		COPY_MODE_CUBE_TO_PANORAMA,
 		COPY_MODE_CUBE_ARRAY_TO_PANORAMA,
 		COPY_MODE_GBUFFER_ROUGHNESS,
+		COPY_MODE_LIGHT_COMPLEXITY,
 		COPY_MODE_MAX,
 
 	};
@@ -349,6 +350,7 @@ public:
 	void copy_to_drawlist(RD::DrawListID p_draw_list, RD::FramebufferFormatID p_fb_format, RID p_source_rd_texture, bool p_linear = false);
 	void copy_raster(RID p_source_texture, RID p_dest_framebuffer);
 	void copy_roughness_to_rect(RID p_source_rd_texture, RID p_dest_framebuffer, const Rect2i &p_rect, bool p_flip_y = false);
+	void copy_light_complexity_to_rect(RID p_source_rd_texture, RID p_dest_framebuffer, const Rect2i &p_rect, bool p_flip_y = false);
 
 	void gaussian_blur(RID p_source_rd_texture, RID p_texture, const Rect2i &p_region, const Size2i &p_size, bool p_8bit_dst = false);
 	void gaussian_blur_raster(RID p_source_rd_texture, RID p_dest_texture, const Rect2i &p_region, const Size2i &p_size);

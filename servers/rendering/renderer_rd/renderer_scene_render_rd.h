@@ -95,6 +95,7 @@ protected:
 	void _debug_sdfgi_probes(Ref<RenderSceneBuffersRD> p_render_buffers, RID p_framebuffer, uint32_t p_view_count, const Projection *p_camera_with_transforms);
 
 	virtual RID _render_buffers_get_normal_texture(Ref<RenderSceneBuffersRD> p_render_buffers) = 0;
+	virtual RID _render_buffers_get_light_complexity(Ref<RenderSceneBuffersRD> p_render_buffers) = 0;
 	virtual RID _render_buffers_get_velocity_texture(Ref<RenderSceneBuffersRD> p_render_buffers) = 0;
 
 	bool _needs_post_prepass_render(RenderDataRD *p_render_data, bool p_use_gi);

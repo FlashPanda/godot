@@ -4440,6 +4440,12 @@ RID RenderDeferred::_render_buffers_get_normal_texture(Ref<RenderSceneBuffersRD>
 	return rb_data->get_normal_roughness();
 }
 
+RID RenderDeferred::_render_buffers_get_light_complexity(Ref<RenderSceneBuffersRD> p_render_buffers) {
+	Ref<RenderBufferDataDeferred> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_DEFERRED);
+
+	return rb_data->get_light_complexity();
+}
+
 RID RenderDeferred::_render_buffers_get_velocity_texture(Ref<RenderSceneBuffersRD> p_render_buffers) {
 	return p_render_buffers->get_velocity_buffer(false);
 }

@@ -265,8 +265,46 @@ void main() {
 		pos.y = params.section.w - pos.y - 1;
 	}
 
-	imageStore(dest_buffer, pos + params.target, vec4(0.0, 0.0, color.a, 1.0));
+	imageStore(dest_buffer, pos + params.target, vec4(color.a, color.a, color.a, 1.0));
 #endif // MODE_GBUFFER_ROUGHNESS_COPY
+
+#ifdef  MODE_LIGHT_COMPLEXITY_COPY
+	vec4 color = texelFetch(source_color, pos + params.section.xy, 0);
+
+	if (bool(params.flags & FLAG_FLIP_Y)) {
+		pos.y = params.section.w - pos.y - 1;
+	}
+
+	float min_light_count = 0.0;
+	float max_light_count = 10.0;
+	float pixel_light_count = color.r;
+    vec3 color0(0.23137254902000001, 0.298039215686, 0.75294117647100001);
+    vec3 color1(0.86499999999999999, 0.86499999999999999, 0.86499999999999999);
+    vec3 color2(0.70588235294099999, 0.015686274509800001, 0.149019607843);
+
+    // 计算中间阈值（min + max 的一半）
+    float mid_light_count = (min_light_count + max_light_count) / 2.0; // 这里等于 5.0
+
+    // 将 pixel_light_count 限制在 [min, max] 范围内
+    float clamped_count = clamp(pixel_light_count, min_light_count, max_light_count);
+
+    // 归一化到 [0, 1] 范围
+    float normalized_count = (clamped_count - min_light_count) / (max_light_count - min_light_count);
+
+    // 分两段插值：0->0.5 对应 color0->color1，0.5->1 对应 color1->color2
+    vec3 final_color;
+    if (normalized_count <= 0.5) {
+        // 0 到 0.5 区间：映射到 0 到 1 的插值系数
+        float t = normalized_count * 2.0;
+        final_color = mix(color0, color1, t);
+    } else {
+        // 0.5 到 1 区间：映射到 0 到 1 的插值系数
+        float t = (normalized_count - 0.5) * 2.0;
+        final_color = mix(color1, color2, t);
+    }
+
+	imageStore(dest_buffer, pos + params.target, vec4(final_color, 1.0));
+#endif // MODE_LIGHT_COMPLEXITY_COPY
 
 #if defined(MODE_CUBEMAP_TO_PANORAMA) || defined(MODE_CUBEMAP_ARRAY_TO_PANORAMA)
 

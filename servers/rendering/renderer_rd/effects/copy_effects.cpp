@@ -89,6 +89,7 @@ CopyEffects::CopyEffects(bool p_prefer_raster_effects) {
 		copy_modes.push_back("\n#define MODE_CUBEMAP_TO_PANORAMA\n");
 		copy_modes.push_back("\n#define MODE_CUBEMAP_ARRAY_TO_PANORAMA\n");
 		copy_modes.push_back("\n#define MODE_GBUFFER_ROUGHNESS_COPY\n");	// rgba16f
+		copy_modes.push_back("\n#define MODE_LIGHT_COMPLEXITY_COPY\n");	// rgba32f
 
 
 		copy.shader.initialize(copy_modes);
@@ -704,6 +705,43 @@ void CopyEffects::copy_roughness_to_rect(RID p_source_rd_texture, RID p_dest_tex
 	RD::Uniform u_dest_texture(RD::UNIFORM_TYPE_IMAGE, 0, p_dest_texture);
 
 	CopyMode mode = COPY_MODE_GBUFFER_ROUGHNESS;
+	RID shader = copy.shader.version_get_shader(copy.shader_version, mode);
+	ERR_FAIL_COND(shader.is_null());
+
+	RD::ComputeListID compute_list = RD::get_singleton()->compute_list_begin();
+	RD::get_singleton()->compute_list_bind_compute_pipeline(compute_list, copy.pipelines[mode]);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 0, u_source_rd_texture), 0);
+	RD::get_singleton()->compute_list_bind_uniform_set(compute_list, uniform_set_cache->get_cache(shader, 3, u_dest_texture), 3);
+	RD::get_singleton()->compute_list_set_push_constant(compute_list, &copy.push_constant, sizeof(CopyPushConstant));
+	RD::get_singleton()->compute_list_dispatch_threads(compute_list, p_rect.size.width, p_rect.size.height, 1);
+	RD::get_singleton()->compute_list_end();
+}
+
+void CopyEffects::copy_light_complexity_to_rect(RID p_source_rd_texture, RID p_dest_texture, const Rect2i &p_rect, bool p_flip_y)
+{
+	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL(uniform_set_cache);
+	MaterialStorage *material_storage = MaterialStorage::get_singleton();
+	ERR_FAIL_NULL(material_storage);
+
+	memset(&copy.push_constant, 0, sizeof(CopyPushConstant));
+	if (p_flip_y) {
+		copy.push_constant.flags |= COPY_FLAG_FLIP_Y;
+	}
+
+	copy.push_constant.section[0] = p_rect.position.x;
+	copy.push_constant.section[1] = p_rect.position.y;
+	copy.push_constant.section[2] = p_rect.size.width;
+	copy.push_constant.section[3] = p_rect.size.height;
+	copy.push_constant.target[0] = p_rect.position.x;
+	copy.push_constant.target[1] = p_rect.position.y;
+
+	// setup our uniforms
+	RID default_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);
+	RD::Uniform u_source_rd_texture(RD::UNIFORM_TYPE_SAMPLER_WITH_TEXTURE, 0, Vector<RID>({default_sampler, p_source_rd_texture}));
+	RD::Uniform u_dest_texture(RD::UNIFORM_TYPE_IMAGE, 0, p_dest_texture);
+
+	CopyMode mode = COPY_MODE_LIGHT_COMPLEXITY;
 	RID shader = copy.shader.version_get_shader(copy.shader_version, mode);
 	ERR_FAIL_COND(shader.is_null());
 

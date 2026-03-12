@@ -1813,6 +1813,10 @@ RID RenderForwardMobile::_render_buffers_get_normal_texture(Ref<RenderSceneBuffe
 	return RID();
 }
 
+RID RenderForwardMobile::_render_buffers_get_light_complexity(Ref<RenderSceneBuffersRD> p_render_buffers) {
+	return RID();
+}
+
 RID RenderForwardMobile::_render_buffers_get_velocity_texture(Ref<RenderSceneBuffersRD> p_render_buffers) {
 	return RID();
 }
