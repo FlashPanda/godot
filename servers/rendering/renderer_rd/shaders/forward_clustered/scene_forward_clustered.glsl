@@ -2832,7 +2832,8 @@ void fragment_shader(in SceneData scene_data) {
 #endif //PREMUL_ALPHA_USED
 
 #ifdef MODE_RENDER_NORMAL_ROUGHNESS
-    light_complex_output_buffer = vec4(float(lightCount), 0.0, 0.0, 0.0);
+    //light_complex_output_buffer = vec4(float(lightCount), 0.0, 0.0, 0.0);
+    light_complex_output_buffer = vec4(5.0, 0.0, 0.0, 0.0);
 #endif
 }
 

@@ -278,9 +278,9 @@ void main() {
 	float min_light_count = 0.0;
 	float max_light_count = 10.0;
 	float pixel_light_count = color.r;
-    vec3 color0(0.23137254902000001, 0.298039215686, 0.75294117647100001);
-    vec3 color1(0.86499999999999999, 0.86499999999999999, 0.86499999999999999);
-    vec3 color2(0.70588235294099999, 0.015686274509800001, 0.149019607843);
+    vec3 color0 = vec3(0.23137254902000001, 0.298039215686, 0.75294117647100001);
+    vec3 color1 = vec3(0.86499999999999999, 0.86499999999999999, 0.86499999999999999);
+    vec3 color2 = vec3(0.70588235294099999, 0.015686274509800001, 0.149019607843);
 
     // 计算中间阈值（min + max 的一半）
     float mid_light_count = (min_light_count + max_light_count) / 2.0; // 这里等于 5.0
@@ -289,7 +289,8 @@ void main() {
     float clamped_count = clamp(pixel_light_count, min_light_count, max_light_count);
 
     // 归一化到 [0, 1] 范围
-    float normalized_count = (clamped_count - min_light_count) / (max_light_count - min_light_count);
+	float range = max(max_light_count - min_light_count, 0.0001);
+	float normalized_count = (clamped_count - min_light_count) / range;
 
     // 分两段插值：0->0.5 对应 color0->color1，0.5->1 对应 color1->color2
     vec3 final_color;

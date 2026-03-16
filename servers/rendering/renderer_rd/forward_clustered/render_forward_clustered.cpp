@@ -4218,7 +4218,7 @@ RID RenderForwardClustered::_render_buffers_get_normal_texture(Ref<RenderSceneBu
 }
 
 RID RenderForwardClustered::_render_buffers_get_light_complexity(Ref<RenderSceneBuffersRD> p_render_buffers) {
-	Ref<RenderBufferDataDeferred> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_DEFERRED);
+	Ref<RenderBufferDataForwardClustered> rb_data = p_render_buffers->get_custom_data(RB_SCOPE_FORWARD_CLUSTERED);
 
 	return rb_data->get_light_complexity();
 }

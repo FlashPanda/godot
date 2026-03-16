@@ -832,10 +832,10 @@ bool RendererSceneRenderRD::_debug_draw_can_use_effects(RS::ViewportDebugDraw p_
 		case RS::VIEWPORT_DEBUG_DRAW_GBUFFER_NORMAL:
 		case RS::VIEWPORT_DEBUG_DRAW_GBUFFER_DEPTH:
 		case RS::VIEWPORT_DEBUG_DRAW_GBUFFER_ROUGHNESS:
+		case RS::VIEWPORT_DEBUG_DRAW_LIGHT_COMPLEXITY:
 		case RS::VIEWPORT_DEBUG_DRAW_PSSM_SPLITS:
 		case RS::VIEWPORT_DEBUG_DRAW_SDFGI_PROBES:
 		case RS::VIEWPORT_DEBUG_DRAW_DISABLE_LOD:
-		case RS::VIEWPORT_DEBUG_DRAW_LIGHT_COMPLEXITY:
 			can_use_effects = true;
 			break;
 		default:
@@ -1056,9 +1056,34 @@ void RendererSceneRenderRD::_render_buffers_debug_draw(const RenderDataRD *p_ren
 		copy_effects->copy_to_fb_rect(gbuffer_roughness_texture_rid, texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize));
 	}
 
-	if (debug_draw == RS::VIEWPORT_DEBUG_DRAW_LIGHT_COMPLEXITY && _render_buffers_get_normal_texture(rb).is_valid()) {
+	if (debug_draw == RS::VIEWPORT_DEBUG_DRAW_LIGHT_COMPLEXITY && _render_buffers_get_light_complexity(rb).is_valid()) {
 		Size2 rtsize = texture_storage->render_target_get_size(render_target);
-		copy_effects->copy_to_fb_rect(_render_buffers_get_light_complexity(rb), texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize), false, false, false, false, RID(), false, false, false, false);
+		static const StringName context_name = SNAME("render_buffers");
+		static const StringName texture_name = SNAME("light_complexity_texture");
+
+		if (rb->has_texture(context_name, texture_name)) {
+			Vector2i old_sz = rb->get_texture_slice_size(context_name, texture_name, 0);
+			if (old_sz != rtsize) {
+				rb->clear_context(context_name); // 会释放该 context 下缓存
+			}
+		}
+
+		uint32_t usage_bits = RD::TEXTURE_USAGE_SAMPLING_BIT;
+		usage_bits |=  RD::TEXTURE_USAGE_STORAGE_BIT;
+
+		// Create our color buffer.
+		RID light_complexity_texture_rid = rb->create_texture(context_name,
+			texture_name,
+			RD::DATA_FORMAT_R32G32B32A32_SFLOAT,
+			usage_bits,
+			rb->get_texture_samples(),
+			Vector2i((int)rtsize.x, (int)rtsize.y),
+			1, 1, false, true);
+		if (!light_complexity_texture_rid.is_valid())
+			return;
+
+		copy_effects->copy_light_complexity_to_rect(_render_buffers_get_light_complexity(rb), light_complexity_texture_rid, Rect2(Vector2(), rtsize));
+		copy_effects->copy_to_fb_rect(light_complexity_texture_rid, texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize));
 	}
 }
 

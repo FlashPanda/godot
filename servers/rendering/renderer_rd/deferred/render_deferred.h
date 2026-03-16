@@ -51,6 +51,7 @@
 #define RB_TEX_SPECULAR_MSAA SNAME("specular_msaa")
 #define RB_TEX_NORMAL_ROUGHNESS SNAME("normal_roughness")
 #define RB_TEX_NORMAL_ROUGHNESS_MSAA SNAME("normal_roughness_msaa")
+#define RB_TEX_NORMAL_ROUGHNESS_LIGHT SNAME("normal_roughness_light")
 #define RB_TEX_VOXEL_GI SNAME("voxel_gi")
 #define RB_TEX_VOXEL_GI_MSAA SNAME("voxel_gi_msaa")
 
@@ -132,6 +133,7 @@ public:
 		RID get_normal_roughness(uint32_t p_layer) { return render_buffers->get_texture_slice(RB_SCOPE_DEFERRED, RB_TEX_NORMAL_ROUGHNESS, p_layer, 0); }
 		RID get_normal_roughness_msaa() const { return render_buffers->get_texture(RB_SCOPE_DEFERRED, RB_TEX_NORMAL_ROUGHNESS_MSAA); }
 		RID get_normal_roughness_msaa(uint32_t p_layer) { return render_buffers->get_texture_slice(RB_SCOPE_DEFERRED, RB_TEX_NORMAL_ROUGHNESS_MSAA, p_layer, 0); }
+		RID get_light_complexity() const { return render_buffers->get_texture(RB_SCOPE_DEFERRED, RB_TEX_NORMAL_ROUGHNESS_LIGHT); }
 
 		void ensure_voxelgi();
 		bool has_voxelgi() const { return render_buffers->has_texture(RB_SCOPE_DEFERRED, RB_TEX_VOXEL_GI); }
