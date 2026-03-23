@@ -2729,119 +2729,6 @@ void fragment_shader(in SceneData scene_data) {
 	emission_output_buffer.a = 0.0;
 #endif
 
-// cluster light 计数
-#ifdef MODE_RENDER_NORMAL_ROUGHNESS
-		// 重新统计当前像素受多少灯影响。
-		// 注意：这里不做真正的 BRDF 计算，只做 light list 遍历与基础过滤。
-		// 这样开销比调用 light_process_omni/light_process_spot 小很多。
-
-		lightCount = 0u;
-
-		// =========================================================
-		// 1. Directional Lights
-		// =========================================================
-		// 方向光不走 clustered mask，它通常是全局生效。
-		// 这里按 forward lighting 的过滤规则做最小复用。
-#ifndef USE_VERTEX_LIGHTING
-		for (uint i = 0u; i < scene_data.directional_light_count; i++) {
-			// 层过滤：对象不在灯的 layer mask 中，则跳过。
-			if (!bool(directional_lights.data[i].mask & instances.data[instance_index].layer_mask)) {
-				continue;
-			}
-
- 			// 已静态烘焙且当前对象使用 lightmap，则跳过。
-			if (directional_lights.data[i].bake_mode == LIGHT_BAKE_STATIC &&
-					bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
-				continue;
-			}
-
-			lightCount += 1u;
-		}
-
-		// =========================================================
-		// 2. Omni Lights
-		// =========================================================
-		{
-			uint cluster_omni_offset = cluster_offset;
-
-			uint item_min;
-			uint item_max;
-			uint item_from;
-			uint item_to;
-
-			cluster_get_item_range(
-					cluster_omni_offset + implementation_data.max_cluster_element_count_div_32 + cluster_z,
-					item_min, item_max, item_from, item_to);
-
-			for (uint i = item_from; i < item_to; i++) {
-				uint mask = cluster_buffer.data[cluster_omni_offset + i];
-				mask &= cluster_get_range_clip_mask(i, item_min, item_max);
-
-				while (mask != 0u) {
-					uint bit = findMSB(mask);
-					mask &= ~(1u << bit);
-
-					uint light_index = 32u * i + bit;
-
-					// layer mask 过滤。
-					if (!bool(omni_lights.data[light_index].mask & instances.data[instance_index].layer_mask)) {
-						continue;
-					}
-
-					// baked static + lightmap 过滤。
-					if (omni_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC &&
-							bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
-						continue;
-					}
-
-					lightCount += 1u;
-				}
-			}
-		}
-
-		// =========================================================
-		// 3. Spot Lights
-		// =========================================================
-		{
-			uint cluster_spot_offset = cluster_offset + implementation_data.cluster_type_size;
-
-			uint item_min;
-			uint item_max;
-			uint item_from;
-			uint item_to;
-
-			cluster_get_item_range(
-					cluster_spot_offset + implementation_data.max_cluster_element_count_div_32 + cluster_z,
-					item_min, item_max, item_from, item_to);
-
-			for (uint i = item_from; i < item_to; i++) {
-				uint mask = cluster_buffer.data[cluster_spot_offset + i];
-				mask &= cluster_get_range_clip_mask(i, item_min, item_max);
-
-				while (mask != 0u) {
-					uint bit = findMSB(mask);
-					mask &= ~(1u << bit);
-
-					uint light_index = 32u * i + bit;
-
-					// layer mask 过滤。
-					if (!bool(spot_lights.data[light_index].mask & instances.data[instance_index].layer_mask)) {
-						continue;
-					}
-
-					// baked static + lightmap 过滤。
-					if (spot_lights.data[light_index].bake_mode == LIGHT_BAKE_STATIC &&
-							bool(instances.data[instance_index].flags & INSTANCE_FLAGS_USE_LIGHTMAP)) {
-						continue;
-					}
-
-					lightCount += 1u;
-				}
-			}
-		}
-#endif // !USE_VERTEX_LIGHTING
-#endif
-
 #ifdef MODE_RENDER_NORMAL_ROUGHNESS
 	normal_roughness_output_buffer = vec4(encode24(normal) * 0.5 + 0.5, roughness);
 
@@ -2916,7 +2803,7 @@ void fragment_shader(in SceneData scene_data) {
 	frag_color = vec4(albedo, alpha);
 #else
 	frag_color = vec4(emission + ambient_light + diffuse_light + specular_light, alpha);
-//frag_color = vec4(1.0);
+//frag_color = vec4(1.0, 1.0, 0.0, 1.0);
 #endif //USE_NO_SHADING
 
 #ifndef FOG_DISABLED
