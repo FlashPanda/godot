@@ -35,7 +35,6 @@
 
 #include "servers/rendering/renderer_rd/forward_clustered/render_forward_clustered.h"
 #include "servers/rendering/renderer_rd/forward_mobile/render_forward_mobile.h"
-#include "servers/rendering/renderer_rd/deferred/render_deferred.h"
 
 void RendererCompositorRD::blit_render_targets_to_screen(DisplayServer::WindowID p_screen, const BlitToScreen *p_render_targets, int p_amount) {
 	Error err = RD::get_singleton()->screen_prepare_for_drawing(p_screen);
@@ -354,9 +353,6 @@ RendererCompositorRD::RendererCompositorRD() {
 		scene = memnew(RendererSceneRenderImplementation::RenderForwardMobile());
 	} else if (rendering_method == "forward_plus") {
 		scene = memnew(RendererSceneRenderImplementation::RenderForwardClustered());
-	}
-	else if (rendering_method == "deferred") {
-		scene = memnew(RendererSceneRenderImplementation::RenderDeferred());
 	}else {
 		// Fall back to our high end renderer.
 		ERR_PRINT(vformat("Cannot instantiate RenderingDevice-based renderer with renderer type '%s'. Defaulting to Forward+ renderer.", rendering_method));
